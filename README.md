@@ -7,23 +7,54 @@ system dependencies**. The C++ library is usable from CMake too.
 | module | status |
 | :--- | :--- |
 | `stb_image` (read) | done |
-| `stb_image_write` (write) | planned |
-| `stb_image_resize2` (resize) | planned |
-| `stb_truetype` (fonts) | planned |
+| `stb_image_write` (write: png, jpg, bmp, tga) | done |
+| `stb_image_resize2` (resize) | done |
+| `stb_truetype` (fonts: metrics, glyphs, text, atlas) | done |
+| `stb_rect_pack` | used internally by the atlas packer |
 
 ## Python
 
 ```python
+import numpy as np
 import libstb
 
-img = libstb.load("photo.png")               # uint8 ndarray, (H, W, C)
-rgba = libstb.load("photo.png", channels=4)  # force 4 channels
-libstb.info("photo.png")                     # ImageInfo(width, height, channels), header only
-libstb.load(data_bytes, flip=True)           # from memory, flipped vertically
+img = libstb.Image.open("photo.png")                # or bytes; also: channels=4, flip=True
+img.width, img.height, img.channels                 # 640, 480, 3
+img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
+libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
+libstb.Image(np.zeros((8, 8, 4), np.uint8))         # wrap your own uint8 array
+
+img.save("out.jpg")                                 # encoder picked from the extension
+img.save("out.jpg", libstb.JpegEncoder(quality=80)) # or choose and configure one
+data = img.encode(libstb.PngEncoder(compression=9)) # -> bytes
+
+small = img.resize(320, 240)                        # new Image; default Resizer()
+libstb.Resizer(libstb.Resizer.Filter.MITCHELL, libstb.Resizer.Edge.WRAP, srgb=False)
+
+font = libstb.Font.open("font.ttf")                 # trusted fonts only, see below
+text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
+text.bitmap.save("hello.png")
+font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measure("Hello", 32)
+font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_offset, advance)
+atlas = font.make_atlas("ABCabc123", 32, 256, 256)  # Atlas: .image and atlas["A"] -> AtlasGlyph
+
+libstb.load("photo.png")                            # shortcut: Image.open(...).array
+libstb.info("photo.png")                            # shortcut: ImageInfo.read(...)
 ```
 
-Errors: `ValueError` (bad arguments), `RuntimeError` (undecodable or oversized
-image), the usual `OSError` family for files. Images whose decoded size would
+Encoders form a class hierarchy: `Encoder` (abstract) -> `PngEncoder`,
+`JpegEncoder`, `BmpEncoder`, `TgaEncoder`. `Encoder.for_path("x.png")` returns
+the right default-configured one.
+
+**Fonts: trusted files only.** stb_truetype does no bounds checking; its
+author writes "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT
+FILES". Load your own or vetted system fonts, never user uploads. (Images are
+different: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
+
+Errors mirror the C++ hierarchy: `libstb.Error` (a `RuntimeError`) with
+`DecodeError`, `EncodeError`, `LimitError` below it, so a single
+`except libstb.Error` catches every libstb failure. Bad arguments raise
+`ValueError`, unreadable files `OSError`. Images whose decoded size would
 exceed `max_bytes` (default 512 MiB) are rejected from the header, before any
 pixel memory is allocated.
 
@@ -39,8 +70,32 @@ target_link_libraries(app PRIVATE libstb::core)
 
 ```cpp
 #include <libstb.h>
-libstb::image img = libstb::load(bytes.data(), bytes.size());  // throws on error
+
+libstb::image img = libstb::image::open("in.png");        // throws libstb::error subclasses
+img(0, 0, 1) = 255;                                       // unchecked pixel access
+img.save("out.jpg", libstb::jpeg_encoder(80));            // or img.save("out.png")
+
+std::unique_ptr<libstb::encoder> enc = libstb::encoder::for_path("x.bmp");
+std::vector<std::uint8_t> bytes = img.encode(*enc);       // virtual dispatch
+
+libstb::image small = libstb::resizer().resize(img, 320, 240);
+
+libstb::font f = libstb::font::open("font.ttf");          // cheap to copy, thread-safe
+libstb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
+libstb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 ```
+
+Design: stb never appears in a public header. Where a class would hold stb
+state, it is hidden behind a pimpl: `font` keeps the font bytes and the
+`stbtt_fontinfo` in an opaque `font::impl` (shared and immutable, so copies are
+cheap and threads can share one). `image`, `encoder` and `resizer` carry no stb
+state at all (plain ints/enums), so a pimpl there would only add indirection.
+`image` is a value type (rule of zero). `encoder` is an abstract base
+using the non-virtual-interface idiom (public `encode()` checks the image,
+subclasses implement a private `do_encode()`); `png_encoder`, `jpeg_encoder`,
+`bmp_encoder` and `tga_encoder` are `final`. Runtime failures derive from
+`libstb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
+programmer errors throw `std::invalid_argument`.
 
 Or `cmake --install build` and `find_package(libstb)` as usual.
 
@@ -48,12 +103,13 @@ Or `cmake --install build` and `find_package(libstb)` as usual.
 
 ```
 include/libstb.h            umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/libstb/*.hpp        public API; never includes stb
+include/libstb/*.hpp        public API (error, image, encoder, resizer, font, utf8); never includes stb
 src/core/*.cpp              implementation; the only place stb headers are compiled
 src/third_party/stb/        vendored stb headers (committed, no submodules)
-src/bindings/python/        nanobind module + the `libstb` Python package
+src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package
 cmake/                      DynamicVersion, Startup, Optimize, package config
 tests/{cpp,python,cmake}    unit tests + find_package consumer test, all run by ctest
+tests/data/                 synthetic test font (solid-rectangle glyphs) + the script that makes it
 ```
 
 Each stb header is compiled with `STB_*_STATIC`, so no `stbi_*` symbol leaks

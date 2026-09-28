@@ -7,6 +7,9 @@ add_executable(test_libstb_cpp
 target_include_directories(test_libstb_cpp PRIVATE ${LIBSTB_TEST_SOURCE_DIR})
 # Public API only: stb headers are never included by tests.
 target_link_libraries(test_libstb_cpp PRIVATE libstb::core)
+# Synthetic font with solid-rectangle glyphs (tests/data/make_test_font.py).
+target_compile_definitions(test_libstb_cpp PRIVATE
+    LIBSTB_TEST_DATA_DIR="${LIBSTB_TEST_SOURCE_DIR}/data")
 find_package(Threads REQUIRED)
 target_link_libraries(test_libstb_cpp PRIVATE Threads::Threads)
 

@@ -82,15 +82,20 @@ def test_result_owns_its_memory():
     np.testing.assert_array_equal(libstb.load(RGB), EXPECTED)
 
 
-def test_garbage_raises_runtime_error():
-    with pytest.raises(RuntimeError):
+def test_garbage_raises_decode_error():
+    with pytest.raises(libstb.DecodeError):
         libstb.load(b"definitely not an image")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(libstb.DecodeError):
         libstb.info(b"definitely not an image")
 
 
-def test_truncated_png_raises_runtime_error():
-    with pytest.raises(RuntimeError):
+def test_empty_input_raises_decode_error():
+    with pytest.raises(libstb.DecodeError, match="empty"):
+        libstb.load(b"")
+
+
+def test_truncated_png_raises_decode_error():
+    with pytest.raises(libstb.DecodeError):
         libstb.load(RGB[: len(RGB) // 2])
 
 
@@ -101,7 +106,7 @@ def test_bad_channels_raises_value_error(bad):
 
 
 def test_max_bytes():
-    with pytest.raises(RuntimeError, match="too large"):
+    with pytest.raises(libstb.LimitError, match="too large"):
         libstb.load(RGB, max_bytes=11)  # decodes to 12 bytes
     assert libstb.load(RGB, max_bytes=12).shape == (2, 2, 3)
 
@@ -110,7 +115,9 @@ def test_huge_declared_dimensions_rejected_fast():
     # Valid-looking PNG header that claims 60000x60000 (~10 GB), no pixel data.
     hdr = png(1, 1, [b"\x00\x00\x00"])
     hdr = hdr.replace(struct.pack(">II", 1, 1), struct.pack(">II", 60000, 60000), 1)
-    with pytest.raises(RuntimeError):
+    # stb itself may refuse such a header (DecodeError) or our max_bytes guard
+    # does (LimitError); either way nothing is allocated.
+    with pytest.raises(libstb.Error):
         libstb.load(hdr)
 
 

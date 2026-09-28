@@ -10,11 +10,16 @@
 #define LIBSTB_H
 
 #define LIBSTB_VERSION_MAJOR 0
-#define LIBSTB_VERSION_MINOR 1
+#define LIBSTB_VERSION_MINOR 3
 #define LIBSTB_VERSION_PATCH 0
 
 #ifdef __cplusplus
+#include "libstb/error.hpp"
+#include "libstb/utf8.hpp"
 #include "libstb/image.hpp"
+#include "libstb/encoder.hpp"
+#include "libstb/resizer.hpp"
+#include "libstb/font.hpp"
 #endif
 
 #endif  // LIBSTB_H

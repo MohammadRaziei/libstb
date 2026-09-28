@@ -8,7 +8,9 @@ find_package(Python COMPONENTS Interpreter Development.Module
 if(DEFINED SKBUILD)
     find_package(nanobind CONFIG REQUIRED)
 
-    nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${CMAKE_CURRENT_SOURCE_DIR}/binding.cpp)
+    file(GLOB LIBSTB_BINDING_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/binding.cpp ${CMAKE_CURRENT_SOURCE_DIR}/bind_*.cpp)
+    nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${LIBSTB_BINDING_SOURCES})
     target_link_libraries(libstb_py PRIVATE libstb::core)
 
     # .pyi stubs, generated from the freshly built module.
