@@ -87,10 +87,10 @@ UTEST(libstb_resizer_tests, test_errors) {
     ASSERT_THROWS(r.resize(gradient(2, 2, 3), 0, 4), std::invalid_argument);
     ASSERT_THROWS(r.resize(gradient(2, 2, 3), 4, -1), std::invalid_argument);
 
-    libstb::resize_options small;
-    small.max_bytes = 100;
-    ASSERT_THROWS(libstb::resizer(small).resize(gradient(2, 2, 3), 10, 10), libstb::limit_error);   // 300 bytes
-    ASSERT_EQ(100, libstb::resizer(small).resize(gradient(2, 2, 1), 10, 10).size_bytes());          // exactly 100
+    libstb::resize_options tiny;  // (not "small": <windows.h> #defines that as char)
+    tiny.max_bytes = 100;
+    ASSERT_THROWS(libstb::resizer(tiny).resize(gradient(2, 2, 3), 10, 10), libstb::limit_error);   // 300 bytes
+    ASSERT_EQ(100, libstb::resizer(tiny).resize(gradient(2, 2, 1), 10, 10).size_bytes());          // exactly 100
 
     libstb::resize_options bad;
     bad.filter = static_cast<libstb::resize_filter>(99);

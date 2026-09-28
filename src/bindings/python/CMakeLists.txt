@@ -53,7 +53,6 @@ ExternalProject_Add(build_python
     BINARY_DIR ${CMAKE_BINARY_DIR}/python/build
     INSTALL_DIR ${PYTHON_INSTALL_DIR}
     CMAKE_ARGS
-        --no-warn-unused-cli
         -DSKBUILD=2
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX=${PYTHON_INSTALL_DIR}
