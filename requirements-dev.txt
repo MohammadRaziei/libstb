@@ -1,0 +1,13 @@
+# build dependencies
+scikit-build-core
+nanobind
+cmake
+ninja
+
+# development dependencies
+build
+twine
+
+# testing dependencies
+pytest
+numpy

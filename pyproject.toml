@@ -1,0 +1,68 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.0.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "libstb"
+dynamic = ["version"]
+description = "Python bindings for the stb single-header libraries (image io, resize, fonts). Zero system dependencies."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Mohammad Raziei", email = "mohammadraziei1375@gmail.com"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/MohammadRaziei/libstb"
+"Bug Tracker" = "https://github.com/MohammadRaziei/libstb/issues"
+
+[tool.scikit-build]
+build.verbose = true
+cmake.build-type = "Release"
+cmake.define.LIBSTB_BUILD_PYTHON = "ON"
+cmake.define.LIBSTB_BUILD_TESTS = "OFF"
+
+# NOTE: wheel.py-api (abi3 tag) is intentionally NOT set here. nanobind's
+# STABLE_ABI only takes effect on Python >= 3.12 (below that it silently
+# builds a normal per-version extension), so a global py-api would mistag the
+# 3.9-3.11 wheels as abi3. It is set per-build instead: CIBW_ENVIRONMENT_CP312
+# in .github/workflows/wheels.yml enables it for the 3.12 build only, and that
+# single cp312-abi3 wheel covers 3.12+.
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "include/libstb.h"
+regex = '''(?sx)
+\#define \s+ LIBSTB_VERSION_MAJOR \s+ (?P<major>\d+) .*?
+\#define \s+ LIBSTB_VERSION_MINOR \s+ (?P<minor>\d+) .*?
+\#define \s+ LIBSTB_VERSION_PATCH \s+ (?P<patch>\d+) .*?
+'''
+result = "{major}.{minor}.{patch}"
+
+[tool.cibuildwheel]
+test-command = "pytest {project}/tests/python"
+test-extras = ["test"]
+test-skip = ["*universal2:arm64"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
+testpaths = ["tests/python"]

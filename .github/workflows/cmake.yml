@@ -1,0 +1,39 @@
+name: cmake stuff
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.11"
+        cache: "pip"
+
+    - name: Install python deps
+      run: pip install -r requirements-dev.txt
+
+    - name: Configure Project
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLIBSTB_BUILD_TESTS=ON -DLIBSTB_BUILD_PYTHON=ON
+
+    - name: Build
+      run: cmake --build build -j4 --config Release
+
+    # C++ tests, Python tests (pytest against the freshly built package) and
+    # the find_package consumer test all run under ctest.
+    - name: Run tests
+      run: ctest --test-dir build -C Release --output-on-failure
