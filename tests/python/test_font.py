@@ -73,7 +73,7 @@ def test_render_multiline(font):
 
 def test_render_result_can_be_saved(font, tmp_path):
     p = tmp_path / "text.png"
-    font.render("AB", 100).bitmap.save(p)
+    font.render("AB", 100).bitmap.write(p)
     back = libstb.Image.open(p)
     assert back.shape == (100, 100, 1)
 

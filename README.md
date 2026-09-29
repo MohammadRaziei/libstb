@@ -24,7 +24,7 @@ img.numpy()                                         # uint8 pixels (H, W, C), no
 libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
 libstb.Image(np.zeros((8, 8, 4), np.uint8))         # wrap your own uint8 array
 
-img.save("out.jpg")                                 # format from the extension, default settings
+img.write("out.jpg")                                 # format from the extension, default settings
 img.write_jpg("out.jpg", quality=80)                # or pick the format and its settings
 data = img.to_png(compression=9)                    # -> bytes (to_png / to_jpg / to_bmp / to_tga)
 
@@ -36,7 +36,7 @@ img.resize(320, 240, libstb.Resizer("linear", srgb=False))  # name + other optio
 
 font = libstb.Font.open("font.ttf")                 # trusted fonts only, see below
 text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
-text.bitmap.save("hello.png")
+text.bitmap.write("hello.png")
 font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measure("Hello", 32)
 font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_offset, advance)
 atlas = font.make_atlas("ABCabc123", 32, 256, 256)  # Atlas: .image and atlas["A"] -> AtlasGlyph
@@ -50,7 +50,7 @@ defaulted: `to_png(compression=8)`, `to_jpg(quality=90)`, `to_bmp()`,
 `to_tga(rle=True)` return the file's bytes, and `write_png(path, ...)`,
 `write_jpg(path, ...)`, `write_bmp(path)`, `write_tga(path, ...)` do the same
 and write it (only after encoding succeeded, so a failure never leaves a
-truncated file). `save(path)` is the shortcut: it picks the format from the
+truncated file). `write(path)` is the shortcut: it picks the format from the
 extension (`.png .jpg .jpeg .bmp .tga`, case-insensitive; `ValueError` for
 anything else) and uses the defaults. For other settings call `write_*`.
 
@@ -102,7 +102,7 @@ target (`libstb::core`) and the Python package (`libstb`) keep the project name.
 
 stb::image img = stb::image::open("in.png");        // throws stb::error subclasses
 img(0, 0, 1) = 255;                                       // unchecked pixel access
-img.save("out.jpg");                                      // format from the extension, default settings
+img.write("out.jpg");                                      // format from the extension, default settings
 img.write_jpg("out.jpg", 80);                             // or pick the format and its settings
 std::vector<std::uint8_t> bytes = img.to_png(9);          // to_png / to_jpg / to_bmp / to_tga -> file bytes
 
@@ -127,8 +127,8 @@ cheap and threads can share one). `image` and `resizer` carry no stb state at
 all (plain ints/enums), so a pimpl there would only add indirection. `image` is
 a value type (rule of zero). The four output formats are a closed set, so there
 is no encoder class hierarchy: each format is a `to_*` / `write_*` pair on
-`image` with its own defaulted settings, implemented in `src/core/encode.cpp`
-(the one place `stb_image_write` is compiled). Runtime failures derive from
+`image` with its own defaulted settings, next to decoding in `src/core/image.cpp`.
+Runtime failures derive from
 `stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
 programmer errors throw `std::invalid_argument`.
 

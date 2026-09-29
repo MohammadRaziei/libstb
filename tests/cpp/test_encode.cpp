@@ -131,44 +131,44 @@ UTEST(libstb_encode_tests, test_write_with_a_bad_argument_writes_nothing) {
     ASSERT_FALSE(std::filesystem::exists(path));
 }
 
-// ---- save ----------------------------------------------------------------
+// ---- write ----------------------------------------------------------------
 
-UTEST(libstb_encode_tests, test_save_by_extension_and_open_back) {
+UTEST(libstb_encode_tests, test_write_by_extension_and_open_back) {
     const auto path = tmp("libstb_test_save.png");
     const stb::image src = gradient(10, 10, 4);
-    src.save(path);
+    src.write(path);
     ASSERT_TRUE(same(src, stb::image::open(path)));
     std::filesystem::remove(path);
 }
 
-UTEST(libstb_encode_tests, test_save_picks_the_format_case_insensitively) {
+UTEST(libstb_encode_tests, test_write_picks_the_format_case_insensitively) {
     const stb::image src = gradient(8, 8, 3);
     for (const char* name : {"libstb_test_a.PNG", "libstb_test_a.bmp", "libstb_test_a.Tga"}) {
         const auto path = tmp(name);
-        src.save(path);
+        src.write(path);
         ASSERT_TRUE(same(src, stb::image::open(path)));  // lossless => the right format was chosen
         std::filesystem::remove(path);
     }
     for (const char* name : {"libstb_test_a.jpg", "libstb_test_a.JPEG"}) {
         const auto path = tmp(name);
-        src.save(path);
+        src.write(path);
         ASSERT_EQ(8, stb::image::open(path).width());
         ASSERT_TRUE(stb::image::open(path).pixels() != src.pixels());  // lossy => it really is a JPEG
         std::filesystem::remove(path);
     }
 }
 
-UTEST(libstb_encode_tests, test_save_with_unknown_extension_writes_nothing) {
+UTEST(libstb_encode_tests, test_write_with_unknown_extension_writes_nothing) {
     const auto path = tmp("libstb_test_save.gif");
     std::filesystem::remove(path);
-    ASSERT_THROWS(gradient(4, 4, 3).save(path), std::invalid_argument);
+    ASSERT_THROWS(gradient(4, 4, 3).write(path), std::invalid_argument);
     ASSERT_FALSE(std::filesystem::exists(path));
-    ASSERT_THROWS(gradient(4, 4, 3).save(tmp("libstb_noext")), std::invalid_argument);
+    ASSERT_THROWS(gradient(4, 4, 3).write(tmp("libstb_noext")), std::invalid_argument);
 }
 
-UTEST(libstb_encode_tests, test_save_to_unwritable_path_throws_io_error) {
+UTEST(libstb_encode_tests, test_write_to_unwritable_path_throws_io_error) {
     const auto path = tmp("libstb_no_such_dir") / "x.png";
-    ASSERT_THROWS(gradient(4, 4, 3).save(path), stb::io_error);
+    ASSERT_THROWS(gradient(4, 4, 3).write(path), stb::io_error);
     ASSERT_THROWS(gradient(4, 4, 3).write_png(path), stb::io_error);
 }
 

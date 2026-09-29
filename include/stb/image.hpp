@@ -63,7 +63,7 @@ public:
     // Also throws io_error.
     static image open(const std::filesystem::path& path, const load_options& opt = {});
 
-    // --- encoding (implemented in encode.cpp) ---
+    // --- encoding ---
     // to_*: the bytes of a whole file in that format. Throw invalid_argument
     // (empty image, or an argument out of range), encode_error, limit_error.
     // Each format takes its own settings, all defaulted.
@@ -82,7 +82,7 @@ public:
     // The format comes from the extension (.png .jpg .jpeg .bmp .tga,
     // case-insensitive; invalid_argument for anything else), with default
     // settings. For other settings call write_* (or to_*) directly.
-    void save(const std::filesystem::path& path) const;
+    void write(const std::filesystem::path& path) const;
 
     // --- resizing (implemented in resizer.cpp; include stb/resizer.hpp to pass a resizer) ---
     // A new image of the given size; this one is not modified. `r` == nullptr

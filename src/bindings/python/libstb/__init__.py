@@ -3,10 +3,10 @@
 No system dependencies: `pip install libstb` is all you need.
 
     img = libstb.Image.open("photo.png")   # object API
-    img.save("photo.jpg")                  # format from the extension
+    img.write("photo.jpg")                  # format from the extension
     img.write_jpg("photo.jpg", quality=80) # or pick the format and its settings
     small = img.resize(320, 240)
-    libstb.Font.open("font.ttf").render("Hi", 32).bitmap.save("hi.png")
+    libstb.Font.open("font.ttf").render("Hi", 32).bitmap.write("hi.png")
     pixels = libstb.load("photo.png")      # or: just the ndarray
 """
 

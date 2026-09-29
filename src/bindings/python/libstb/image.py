@@ -15,7 +15,7 @@ Source = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 
 DEFAULT_MAX_BYTES = 1 << 29  # 512 MiB, mirrors stb::load_options
 
-# Extension -> the format save() writes (mirrors stb::image::save).
+# Extension -> the format write() writes (mirrors stb::image::write).
 _EXTENSIONS = {".png": "png", ".jpg": "jpg", ".jpeg": "jpg", ".bmp": "bmp", ".tga": "tga"}
 
 
@@ -144,7 +144,7 @@ class Image:
     def write_tga(self, path, rle: bool = True) -> None:
         _write(path, self.to_tga(rle))
 
-    def save(self, path) -> None:
+    def write(self, path) -> None:
         """Write to `path` in the format its extension names (.png .jpg
         .jpeg .bmp .tga, case-insensitive; ValueError otherwise), with
         default settings. For other settings call write_* directly."""

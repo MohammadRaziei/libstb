@@ -91,7 +91,7 @@ class Font:
     """A TrueType/OpenType font (immutable; safe to share between threads).
 
     >>> font = Font.open("DejaVuSans.ttf")
-    >>> font.render("Hello", 32).bitmap.save("hello.png")
+    >>> font.render("Hello", 32).bitmap.write("hello.png")
     """
 
     __slots__ = ("_f",)

@@ -90,31 +90,31 @@ def test_write_with_a_bad_setting_writes_nothing(tmp_path):
     assert not p.exists()
 
 
-def test_save_picks_the_format_from_the_extension(tmp_path):
+def test_write_picks_the_format_from_the_extension(tmp_path):
     src = Image(gradient(10, 10, 4))
     p = tmp_path / "x.png"
-    src.save(p)
+    src.write(p)
     np.testing.assert_array_equal(Image.open(p).array, src.array)
     for name, magic in [("a.PNG", b"\x89PNG"), ("a.bmp", b"BM"), ("a.Tga", None),
                         ("a.jpg", b"\xff\xd8"), ("a.JPEG", b"\xff\xd8")]:
         q = tmp_path / name
-        src.save(str(q))
+        src.write(str(q))
         assert q.read_bytes()[: len(magic or b"")] == (magic or b"")
     assert (tmp_path / "a.Tga").read_bytes() == src.to_tga()
 
 
-def test_save_unknown_extension_writes_nothing(tmp_path):
+def test_write_unknown_extension_writes_nothing(tmp_path):
     p = tmp_path / "x.gif"
     with pytest.raises(ValueError, match="unsupported"):
-        Image(gradient(4, 4, 3)).save(p)
+        Image(gradient(4, 4, 3)).write(p)
     assert not p.exists()
     with pytest.raises(ValueError):
-        Image(gradient(4, 4, 3)).save(tmp_path / "noext")
+        Image(gradient(4, 4, 3)).write(tmp_path / "noext")
 
 
-def test_save_to_missing_directory_raises_oserror(tmp_path):
+def test_write_to_missing_directory_raises_oserror(tmp_path):
     with pytest.raises(FileNotFoundError):
-        Image(gradient(4, 4, 3)).save(tmp_path / "nope" / "x.png")
+        Image(gradient(4, 4, 3)).write(tmp_path / "nope" / "x.png")
     with pytest.raises(FileNotFoundError):
         Image(gradient(4, 4, 3)).write_png(tmp_path / "nope" / "x.png")
 
