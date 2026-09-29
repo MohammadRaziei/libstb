@@ -1,4 +1,4 @@
-#include "libstb/font.hpp"
+#include "stb/font.hpp"
 
 #include <algorithm>
 #include <climits>
@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "file.hpp"
-#include "libstb/utf8.hpp"
+#include "stb/utf8.hpp"
 
 // STATIC: internal linkage for every stbtt_* / stbrp_* function (see image.cpp).
 // stb_rect_pack must be compiled first: stb_truetype detects it and uses it
@@ -23,7 +23,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-namespace libstb {
+namespace stb {
 
 // ------------------------------------------------------------------ pimpl
 
@@ -271,4 +271,4 @@ atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int 
     return atlas(image(width, height, 1, std::move(pixels)), std::move(glyphs));
 }
 
-}  // namespace libstb
+}  // namespace stb

@@ -1,8 +1,8 @@
-#include "libstb/utf8.hpp"
+#include "stb/utf8.hpp"
 
 #include <stdexcept>
 
-namespace libstb {
+namespace stb {
 
 std::u32string utf8_decode(std::string_view s) {
     static const char32_t kMin[5] = {0, 0, 0x80, 0x800, 0x10000};  // smallest value per length
@@ -39,4 +39,4 @@ std::u32string utf8_decode(std::string_view s) {
     return out;
 }
 
-}  // namespace libstb
+}  // namespace stb

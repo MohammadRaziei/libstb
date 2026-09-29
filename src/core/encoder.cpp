@@ -1,4 +1,4 @@
-#include "libstb/encoder.hpp"
+#include "stb/encoder.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "libstb/image.hpp"
+#include "stb/image.hpp"
 
 // STATIC: internal linkage for every stbi_write_* function (see image.cpp).
 // NO_STDIO: we only encode to memory; files are written by detail::write_file.
@@ -16,7 +16,7 @@
 #define STBI_WRITE_NO_STDIO
 #include "stb_image_write.h"
 
-namespace libstb {
+namespace stb {
 namespace {
 
 // stb_image_write configures PNG compression level and TGA RLE through
@@ -110,4 +110,4 @@ std::vector<std::uint8_t> tga_encoder::do_encode(const image& img) const {
     });
 }
 
-}  // namespace libstb
+}  // namespace stb

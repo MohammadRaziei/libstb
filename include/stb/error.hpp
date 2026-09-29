@@ -2,10 +2,10 @@
 
 #include <stdexcept>
 
-namespace libstb {
+namespace stb {
 
-// Everything libstb can fail at *at runtime* derives from libstb::error, so
-// `catch (const libstb::error&)` handles all of it:
+// Everything libstb can fail at *at runtime* derives from stb::error, so
+// `catch (const stb::error&)` handles all of it:
 //
 //   error                     (std::runtime_error)
 //   |- decode_error           input is corrupt, truncated, empty or an unsupported format
@@ -14,7 +14,7 @@ namespace libstb {
 //   `- io_error               a file could not be opened, read or written
 //
 // Programmer errors (null pointer, channels outside 1..4, unknown file
-// extension, quality outside 1..100 ...) are NOT libstb::error: they throw
+// extension, quality outside 1..100 ...) are NOT stb::error: they throw
 // std::invalid_argument, following the std convention that logic errors and
 // runtime errors are different families.
 class error : public std::runtime_error {
@@ -42,4 +42,4 @@ public:
     using error::error;
 };
 
-}  // namespace libstb
+}  // namespace stb

@@ -1,4 +1,4 @@
-#include "libstb/image.hpp"
+#include "stb/image.hpp"
 
 #include <climits>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "file.hpp"
-#include "libstb/encoder.hpp"
+#include "stb/encoder.hpp"
 
 // STATIC: every stbi_* function gets internal linkage in this TU.
 // NO_STDIO: we only decode from memory (files are read by detail::read_file),
@@ -23,7 +23,7 @@
 #define STBI_MAX_DIMENSIONS (1 << 16)
 #include "stb_image.h"
 
-namespace libstb {
+namespace stb {
 namespace {
 
 void check_input(const void* data, std::size_t size) {
@@ -121,4 +121,4 @@ void image::save(const std::filesystem::path& path, const encoder& enc) const {
 
 void image::save(const std::filesystem::path& path) const { save(path, *encoder::for_path(path)); }
 
-}  // namespace libstb
+}  // namespace stb

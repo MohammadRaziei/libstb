@@ -13,7 +13,7 @@ from .libstb_py import Encoder, Resizer
 # Path, or the encoded image itself.
 Source = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 
-DEFAULT_MAX_BYTES = 1 << 29  # 512 MiB, mirrors libstb::load_options
+DEFAULT_MAX_BYTES = 1 << 29  # 512 MiB, mirrors stb::load_options
 
 
 def _read(source: Source) -> bytes:
@@ -87,13 +87,20 @@ class Image:
         """
         return cls(_native.load_bytes(_read(source), channels, flip, max_bytes))
 
-    def resize(self, width: int, height: int, resizer: "Resizer | None" = None) -> "Image":
+    def resize(self, width: int, height: int, resizer: "Resizer | Resizer.Filter | str | None" = None) -> "Image":
         """A new Image of the given size (this one is not modified).
 
-        Uses a default Resizer() unless one is given. Raises ValueError (bad
-        size), LimitError (result too large).
+        resizer : None (default Resizer()), a Resizer, a Resizer.Filter, or a
+                  filter name: "nearest", "linear", "cubic", "bspline",
+                  "mitchell", "box", "auto". A name or Filter is shorthand for
+                  Resizer(name); use a Resizer to also set edge/srgb/max_bytes.
+
+        Raises ValueError (bad size or unknown filter name), LimitError
+        (result too large).
         """
-        return Image((resizer if resizer is not None else Resizer()).resize(self._a, width, height))
+        if not isinstance(resizer, Resizer):
+            resizer = Resizer() if resizer is None else Resizer(resizer)
+        return Image(resizer.resize(self._a, width, height))
 
     def encode(self, encoder: Encoder) -> bytes:
         """Encode to bytes with the given encoder (PngEncoder, JpegEncoder, ...)."""

@@ -47,7 +47,7 @@ cmake.define.LIBSTB_BUILD_TESTS = "OFF"
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
-input = "include/libstb.h"
+input = "include/stb.h"
 regex = '''(?sx)
 \#define \s+ LIBSTB_VERSION_MAJOR \s+ (?P<major>\d+) .*?
 \#define \s+ LIBSTB_VERSION_MINOR \s+ (?P<minor>\d+) .*?

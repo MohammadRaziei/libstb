@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "libstb.h"
+#include "stb.h"
 #include "utest/utest.h"
 
 // utest.h has no exception macro: check the exact (base-or-derived) type.
@@ -33,8 +33,8 @@ inline std::string ppm(int w, int h, const std::vector<std::uint8_t>& rgb) {
 inline std::string red_over_green() { return ppm(1, 2, {255, 0, 0, 0, 255, 0}); }
 
 // Deterministic, non-flat pixels (defeats trivially-passing round trips).
-inline libstb::image gradient(int w, int h, int c) {
-    libstb::image img(w, h, c);
+inline stb::image gradient(int w, int h, int c) {
+    stb::image img(w, h, c);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
             for (int k = 0; k < c; ++k)
@@ -42,11 +42,11 @@ inline libstb::image gradient(int w, int h, int c) {
     return img;
 }
 
-inline libstb::image solid(int w, int h, int c, std::uint8_t v) {
-    return libstb::image(w, h, c, std::vector<std::uint8_t>(std::size_t(w) * h * c, v));
+inline stb::image solid(int w, int h, int c, std::uint8_t v) {
+    return stb::image(w, h, c, std::vector<std::uint8_t>(std::size_t(w) * h * c, v));
 }
 
-inline bool same(const libstb::image& a, const libstb::image& b) {
+inline bool same(const stb::image& a, const stb::image& b) {
     return a.width() == b.width() && a.height() == b.height() && a.channels() == b.channels() &&
            a.pixels() == b.pixels();
 }

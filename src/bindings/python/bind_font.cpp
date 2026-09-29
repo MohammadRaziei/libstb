@@ -12,7 +12,7 @@ namespace {
 
 // Python passes single characters as 1-char str (UTF-8 over the wire).
 char32_t one_char(const std::string& s) {
-    const std::u32string cps = libstb::utf8_decode(s);
+    const std::u32string cps = stb::utf8_decode(s);
     if (cps.size() != 1) throw std::invalid_argument("expected exactly one character");
     return cps[0];
 }
@@ -42,7 +42,7 @@ std::string to_utf8(char32_t cp) {
 // Native tuples here; the Python package (font.py) wraps them in NamedTuples
 // and Image objects.
 void bind_font(nb::module_& m) {
-    using libstb::font;
+    using stb::font;
 
     nb::class_<font>(m, "Font", "A TrueType/OpenType font. Only load fonts you trust.")
         .def_static(
@@ -70,7 +70,7 @@ void bind_font(nb::module_& m) {
              "left"_a, "right"_a, "pixel_height"_a)
         .def("render_glyph",
              [](const font& f, const std::string& ch, float px) {
-                 libstb::glyph g = f.render_glyph(one_char(ch), px);
+                 stb::glyph g = f.render_glyph(one_char(ch), px);
                  nb::object bitmap = nb::none();  // blank glyphs (space) have no bitmap
                  if (!g.bitmap.empty()) bitmap = nb::cast(to_array(std::move(g.bitmap)));
                  return std::make_tuple(bitmap, g.x_offset, g.y_offset, g.advance);
@@ -84,7 +84,7 @@ void bind_font(nb::module_& m) {
              "text"_a, "pixel_height"_a)
         .def("render",
              [](const font& f, const std::string& text, float px, std::size_t max_bytes) {
-                 libstb::text_bitmap t;
+                 stb::text_bitmap t;
                  {
                      nb::gil_scoped_release release;
                      t = f.render(text, px, max_bytes);
@@ -94,8 +94,8 @@ void bind_font(nb::module_& m) {
              "text"_a, "pixel_height"_a, "max_bytes"_a = std::size_t(1) << 28)
         .def("make_atlas",
              [](const font& f, const std::string& chars, float px, int width, int height, int padding) {
-                 libstb::atlas a = [&] {
-                     const std::u32string cps = libstb::utf8_decode(chars);
+                 stb::atlas a = [&] {
+                     const std::u32string cps = stb::utf8_decode(chars);
                      nb::gil_scoped_release release;
                      return f.make_atlas(cps, px, width, height, padding);
                  }();
@@ -104,7 +104,7 @@ void bind_font(nb::module_& m) {
                  for (const auto& g : a.glyphs())
                      glyphs.emplace_back(to_utf8(g.codepoint), g.x0, g.y0, g.x1, g.y1, g.xoff, g.yoff,
                                          g.xoff2, g.yoff2, g.advance);
-                 libstb::image bitmap = a.bitmap();  // copy: the atlas dies with this lambda
+                 stb::image bitmap = a.bitmap();  // copy: the atlas dies with this lambda
                  return std::make_tuple(to_array(std::move(bitmap)), std::move(glyphs));
              },
              "chars"_a, "pixel_height"_a, "width"_a, "height"_a, "padding"_a = 1);

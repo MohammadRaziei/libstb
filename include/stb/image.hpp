@@ -7,13 +7,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <string_view>
 #include <vector>
 
-#include "libstb/error.hpp"
+#include "stb/error.hpp"
 
-namespace libstb {
+namespace stb {
 
 class encoder;
+class resizer;
+enum class resize_filter;  // opaque declaration; defined in resizer.hpp
 
 // Header-only facts about an encoded image (no pixel decoding).
 struct image_info {
@@ -66,6 +69,16 @@ public:
     // (invalid_argument for anything else).
     void save(const std::filesystem::path& path) const;
 
+    // --- resizing (implemented in resizer.cpp; include stb/resizer.hpp to pass a resizer) ---
+    // A new image of the given size; this one is not modified. `r` == nullptr
+    // means a default-constructed resizer. Throws invalid_argument (empty
+    // image, width/height < 1), limit_error, error - see resizer::resize.
+    image resize(int width, int height, const resizer* r = nullptr) const;
+    // Default options with just this filter, by enum or by name
+    // ("cubic", "linear", "nearest", ... see resize_filter_from_name).
+    image resize(int width, int height, resize_filter filter) const;
+    image resize(int width, int height, std::string_view filter_name) const;
+
     // --- accessors ---
     int width() const noexcept { return width_; }
     int height() const noexcept { return height_; }
@@ -95,4 +108,4 @@ private:
     std::vector<std::uint8_t> pixels_;
 };
 
-}  // namespace libstb
+}  // namespace stb

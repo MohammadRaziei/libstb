@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "libstb/error.hpp"
+#include "stb/error.hpp"
 
-namespace libstb::detail {
+namespace stb::detail {
 
 // Reads the whole file. Refuses files stb could never decode (> INT_MAX)
 // BEFORE reading them, so a huge file cannot exhaust memory.
@@ -36,4 +36,4 @@ inline void write_file(const std::filesystem::path& path, const std::vector<std:
     if (!f) throw io_error("cannot write file: " + path.string());
 }
 
-}  // namespace libstb::detail
+}  // namespace stb::detail

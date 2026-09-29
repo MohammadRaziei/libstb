@@ -29,7 +29,10 @@ img.save("out.jpg", libstb.JpegEncoder(quality=80)) # or choose and configure on
 data = img.encode(libstb.PngEncoder(compression=9)) # -> bytes
 
 small = img.resize(320, 240)                        # new Image; default Resizer()
+small = img.resize(320, 240, "cubic")               # filter by name (see the table below)
+libstb.Resizer("cubic")                             # same name works on Resizer itself
 libstb.Resizer(libstb.Resizer.Filter.MITCHELL, libstb.Resizer.Edge.WRAP, srgb=False)
+img.resize(320, 240, libstb.Resizer("linear", srgb=False))  # name + other options
 
 font = libstb.Font.open("font.ttf")                 # trusted fonts only, see below
 text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
@@ -45,6 +48,24 @@ libstb.info("photo.png")                            # shortcut: ImageInfo.read(.
 Encoders form a class hierarchy: `Encoder` (abstract) -> `PngEncoder`,
 `JpegEncoder`, `BmpEncoder`, `TgaEncoder`. `Encoder.for_path("x.png")` returns
 the right default-configured one.
+
+**Resize filters by name.** `Image.resize(w, h, x)` and `Resizer(x)` accept a
+`Resizer.Filter`, or a case-insensitive name (`-` and space count as `_`). Any
+other option (`edge`, `srgb`, `max_bytes`) is a keyword of `Resizer(...)`.
+`Image.resize` also takes a ready-made `Resizer`, or `None` for the default.
+
+| name | filter | note |
+| :--- | :--- | :--- |
+| `auto`, `automatic`, `default` | `DEFAULT` | Catmull-Rom when enlarging, Mitchell when shrinking |
+| `nearest`, `point` | `POINT` | nearest neighbour |
+| `linear`, `bilinear`, `triangle` | `TRIANGLE` | |
+| `cubic`, `bicubic`, `catmull_rom` | `CATMULL_ROM` | sharp; the PIL/OpenCV meaning of "cubic" |
+| `bspline`, `cubic_bspline` | `CUBIC_BSPLINE` | smooth, slightly blurry; scipy's meaning of "cubic" |
+| `mitchell` | `MITCHELL` | good all-round compromise |
+| `box`, `area` | `BOX` | |
+
+An unknown name raises `ValueError` listing the valid ones. There is no
+`lanczos`: stb_image_resize2 does not have it.
 
 **Fonts: trusted files only.** stb_truetype does no bounds checking; its
 author writes "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT
@@ -68,21 +89,31 @@ find_package(libstb CONFIG REQUIRED)
 target_link_libraries(app PRIVATE libstb::core)
 ```
 
+The C++ namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake
+target (`libstb::core`) and the Python package (`libstb`) keep the project name.
+
 ```cpp
-#include <libstb.h>
+#include <stb.h>
 
-libstb::image img = libstb::image::open("in.png");        // throws libstb::error subclasses
+stb::image img = stb::image::open("in.png");        // throws stb::error subclasses
 img(0, 0, 1) = 255;                                       // unchecked pixel access
-img.save("out.jpg", libstb::jpeg_encoder(80));            // or img.save("out.png")
+img.save("out.jpg", stb::jpeg_encoder(80));            // or img.save("out.png")
 
-std::unique_ptr<libstb::encoder> enc = libstb::encoder::for_path("x.bmp");
+std::unique_ptr<stb::encoder> enc = stb::encoder::for_path("x.bmp");
 std::vector<std::uint8_t> bytes = img.encode(*enc);       // virtual dispatch
 
-libstb::image small = libstb::resizer().resize(img, 320, 240);
+stb::image small = img.resize(320, 240);              // default resizer
+stb::image crisp = img.resize(320, 240, "cubic");      // filter by name, or by enum:
+stb::image soft  = img.resize(320, 240, stb::resize_filter::mitchell);
 
-libstb::font f = libstb::font::open("font.ttf");          // cheap to copy, thread-safe
-libstb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
-libstb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
+stb::resize_options o;                                 // full control: filter, edge, srgb, max_bytes
+o.edge = stb::resize_edge::wrap;
+stb::resizer r(o);                                     // also: resizer("cubic"), resizer(resize_filter::box)
+stb::image tile = img.resize(320, 240, &r);            // nullptr = default resizer; r.resize(img, w, h) works too
+
+stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-safe
+stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
+stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 ```
 
 Design: stb never appears in a public header. Where a class would hold stb
@@ -94,7 +125,7 @@ state at all (plain ints/enums), so a pimpl there would only add indirection.
 using the non-virtual-interface idiom (public `encode()` checks the image,
 subclasses implement a private `do_encode()`); `png_encoder`, `jpeg_encoder`,
 `bmp_encoder` and `tga_encoder` are `final`. Runtime failures derive from
-`libstb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
+`stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
 programmer errors throw `std::invalid_argument`.
 
 Or `cmake --install build` and `find_package(libstb)` as usual.
@@ -102,8 +133,8 @@ Or `cmake --install build` and `find_package(libstb)` as usual.
 ## Layout (mirrors httpp / ctoon)
 
 ```
-include/libstb.h            umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/libstb/*.hpp        public API (error, image, encoder, resizer, font, utf8); never includes stb
+include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single source of truth)
+include/stb/*.hpp           public API (error, image, encoder, resizer, font, utf8); never includes stb
 src/core/*.cpp              implementation; the only place stb headers are compiled
 src/third_party/stb/        vendored stb headers (committed, no submodules)
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package

@@ -1,5 +1,6 @@
-#include "libstb/resizer.hpp"
+#include "stb/resizer.hpp"
 
+#include <cctype>
 #include <climits>
 #include <cstdint>
 #include <stdexcept>
@@ -10,7 +11,7 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image_resize2.h"
 
-namespace libstb {
+namespace stb {
 namespace {
 
 stbir_filter to_stb(resize_filter f) {
@@ -46,12 +47,64 @@ stbir_pixel_layout layout_for(int channels) {
     }
 }
 
+struct filter_name {
+    const char* name;
+    resize_filter filter;
+};
+
+// Keep in sync with the table in resizer.hpp and the README.
+constexpr filter_name kFilterNames[] = {
+    {"auto", resize_filter::automatic},
+    {"automatic", resize_filter::automatic},
+    {"default", resize_filter::automatic},
+    {"nearest", resize_filter::point},
+    {"point", resize_filter::point},
+    {"linear", resize_filter::triangle},
+    {"bilinear", resize_filter::triangle},
+    {"triangle", resize_filter::triangle},
+    {"cubic", resize_filter::catmull_rom},
+    {"bicubic", resize_filter::catmull_rom},
+    {"catmull_rom", resize_filter::catmull_rom},
+    {"bspline", resize_filter::cubic_bspline},
+    {"cubic_bspline", resize_filter::cubic_bspline},
+    {"mitchell", resize_filter::mitchell},
+    {"box", resize_filter::box},
+    {"area", resize_filter::box},
+};
+
 }  // namespace
+
+resize_filter resize_filter_from_name(std::string_view name) {
+    std::string key;
+    key.reserve(name.size());
+    for (char ch : name) {
+        if (ch == '-' || ch == ' ') ch = '_';
+        key.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    for (const filter_name& e : kFilterNames)
+        if (key == e.name) return e.filter;
+
+    std::string msg = "unknown resize filter \"" + std::string(name) + "\" (expected one of:";
+    for (const filter_name& e : kFilterNames) {
+        msg += ' ';
+        msg += e.name;
+    }
+    msg += ')';
+    throw std::invalid_argument(msg);
+}
 
 resizer::resizer(const resize_options& options) : options_(options) {
     (void)to_stb(options.filter);  // reject out-of-range enum values up front
     (void)to_stb(options.edge);
 }
+
+resizer::resizer(resize_filter filter) : resizer([&] {
+          resize_options o;
+          o.filter = filter;
+          return o;
+      }()) {}
+
+resizer::resizer(std::string_view filter_name) : resizer(resize_filter_from_name(filter_name)) {}
 
 image resizer::resize(const image& src, int width, int height) const {
     if (src.empty()) throw std::invalid_argument("cannot resize an empty image");
@@ -78,4 +131,19 @@ image resizer::resize(const image& src, int width, int height) const {
     return out;
 }
 
-}  // namespace libstb
+// image::resize lives here, not in image.cpp: this is the one place that
+// knows the resizer, and it keeps stb_image_resize2 out of image.cpp.
+image image::resize(int width, int height, const resizer* r) const {
+    if (r) return r->resize(*this, width, height);
+    return resizer{}.resize(*this, width, height);
+}
+
+image image::resize(int width, int height, resize_filter filter) const {
+    return resizer(filter).resize(*this, width, height);
+}
+
+image image::resize(int width, int height, std::string_view filter_name) const {
+    return resizer(filter_name).resize(*this, width, height);
+}
+
+}  // namespace stb

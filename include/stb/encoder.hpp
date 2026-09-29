@@ -5,15 +5,15 @@
 #include <memory>
 #include <vector>
 
-#include "libstb/error.hpp"
+#include "stb/error.hpp"
 
-namespace libstb {
+namespace stb {
 
 class image;
 
 // Abstract base of all image encoders (stb_image_write).
 //
-//   libstb::png_encoder png(6);
+//   stb::png_encoder png(6);
 //   auto bytes = img.encode(png);           // or img.save("out.png", png)
 //
 // Uses the non-virtual-interface idiom: encode() is the one public entry
@@ -92,4 +92,4 @@ private:
     bool rle_;
 };
 
-}  // namespace libstb
+}  // namespace stb

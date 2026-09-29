@@ -15,10 +15,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "libstb/error.hpp"
-#include "libstb/image.hpp"
+#include "stb/error.hpp"
+#include "stb/image.hpp"
 
-namespace libstb {
+namespace stb {
 
 // Vertical metrics in pixels at a given pixel height.
 struct font_metrics {
@@ -128,4 +128,4 @@ private:
     std::shared_ptr<const impl> impl_;
 };
 
-}  // namespace libstb
+}  // namespace stb

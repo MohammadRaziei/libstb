@@ -12,7 +12,7 @@ No system dependencies: `pip install libstb` is all you need.
 import os as _os
 
 try:
-    # Version is derived from include/libstb.h at build time - never
+    # Version is derived from include/stb.h at build time - never
     # hardcoded here, so it cannot drift from the real release.
     from importlib.metadata import version as _pkg_version
 
@@ -49,7 +49,7 @@ def load(source, **kwargs):
 
 
 def get_include_dir():
-    """Directory containing libstb.h and libstb/*.hpp."""
+    """Directory containing stb.h and stb/*.hpp."""
     return _os.path.join(_pkg_dir, "include")
 
 

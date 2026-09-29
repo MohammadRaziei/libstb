@@ -94,3 +94,58 @@ def test_concurrent_resizes():
     for t in ts:
         t.join()
     assert not bad
+
+
+# --- filters by name -------------------------------------------------------
+
+@pytest.mark.parametrize("name, filt", [
+    ("auto", Resizer.Filter.DEFAULT),
+    ("default", Resizer.Filter.DEFAULT),
+    ("nearest", Resizer.Filter.POINT),
+    ("linear", Resizer.Filter.TRIANGLE),
+    ("bilinear", Resizer.Filter.TRIANGLE),
+    ("cubic", Resizer.Filter.CATMULL_ROM),
+    ("bicubic", Resizer.Filter.CATMULL_ROM),
+    ("bspline", Resizer.Filter.CUBIC_BSPLINE),
+    ("mitchell", Resizer.Filter.MITCHELL),
+    ("box", Resizer.Filter.BOX),
+    ("area", Resizer.Filter.BOX),
+    ("Catmull-Rom", Resizer.Filter.CATMULL_ROM),  # case and separators are forgiving
+])
+def test_resizer_by_name(name, filt):
+    r = Resizer(name)
+    assert r.filter == filt
+    assert r.edge == Resizer.Edge.CLAMP and r.srgb is True  # other options keep their defaults
+
+
+def test_resizer_by_name_still_takes_the_other_options():
+    r = Resizer("cubic", Resizer.Edge.WRAP, srgb=False, max_bytes=1000)
+    assert (r.filter, r.edge, r.srgb, r.max_bytes) == (
+        Resizer.Filter.CATMULL_ROM, Resizer.Edge.WRAP, False, 1000)
+    r = Resizer("mitchell", edge=Resizer.Edge.ZERO)
+    assert r.edge == Resizer.Edge.ZERO
+
+
+def test_unknown_filter_name_raises_value_error_listing_valid_names():
+    with pytest.raises(ValueError, match="lanczos") as e:
+        Resizer("lanczos")
+    assert "cubic" in str(e.value)
+    with pytest.raises(ValueError):
+        Image(gradient(4, 4, 3)).resize(2, 2, "nope")
+
+
+def test_image_resize_accepts_name_filter_resizer_or_none():
+    src = Image(gradient(16, 12, 3))
+    ref = src.resize(8, 6, Resizer("cubic")).array
+    np.testing.assert_array_equal(src.resize(8, 6, "cubic").array, ref)
+    np.testing.assert_array_equal(src.resize(8, 6, Resizer.Filter.CATMULL_ROM).array, ref)
+    np.testing.assert_array_equal(src.resize(8, 6, None).array, src.resize(8, 6).array)
+    np.testing.assert_array_equal(src.resize(8, 6).array, src.resize(8, 6, Resizer()).array)
+
+
+def test_nearest_by_name_duplicates_pixels():
+    src = gradient(2, 2, 3)
+    out = Image(src).resize(4, 4, "nearest").array
+    for y in range(4):
+        for x in range(4):
+            np.testing.assert_array_equal(out[y, x], src[y // 2, x // 2])

@@ -4,7 +4,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(DynamicVersion)
 
 extract_version_string(
-    HEADER_FILE ${CMAKE_CURRENT_LIST_DIR}/include/libstb.h
+    HEADER_FILE ${CMAKE_CURRENT_LIST_DIR}/include/stb.h
     VERSION_PREFIX LIBSTB_
     OUTPUT_VAR PROJECT_VERSION
 )

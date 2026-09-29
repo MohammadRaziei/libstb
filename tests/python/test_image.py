@@ -145,4 +145,4 @@ def test_cmake_dir_layout():
     import os
 
     assert os.path.isfile(os.path.join(libstb.get_cmake_dir(), "libstbConfig.cmake"))
-    assert os.path.isfile(os.path.join(libstb.get_include_dir(), "libstb.h"))
+    assert os.path.isfile(os.path.join(libstb.get_include_dir(), "stb.h"))

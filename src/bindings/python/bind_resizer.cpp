@@ -5,11 +5,15 @@
 using namespace nb::literals;
 
 void bind_resizer(nb::module_& m) {
-    using libstb::resize_edge;
-    using libstb::resize_filter;
-    using libstb::resizer;
+    using stb::resize_edge;
+    using stb::resize_filter;
+    using stb::resizer;
 
-    nb::class_<resizer> cls(m, "Resizer", "Resizes uint8 images of 1..4 channels.");
+    nb::class_<resizer> cls(
+        m, "Resizer",
+        "Resizes uint8 images of 1..4 channels.\n\n"
+        "Resizer(filter, edge, srgb, max_bytes): `filter` is a Resizer.Filter or a name such as\n"
+        "\"nearest\", \"linear\", \"cubic\", \"bspline\", \"mitchell\", \"box\", \"auto\".");
 
     // Nested enums (libstb.Resizer.Filter / .Edge); they must exist before
     // __init__ uses them as default arguments.
@@ -30,7 +34,7 @@ void bind_resizer(nb::module_& m) {
     cls.def(
            "__init__",
            [](resizer* self, resize_filter filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
-               libstb::resize_options o;
+               stb::resize_options o;
                o.filter = filter;
                o.edge = edge;
                o.srgb = srgb;
@@ -38,7 +42,21 @@ void bind_resizer(nb::module_& m) {
                new (self) resizer(o);
            },
            "filter"_a = resize_filter::automatic, "edge"_a = resize_edge::clamp, "srgb"_a = true,
-           "max_bytes"_a = libstb::resize_options{}.max_bytes)
+           "max_bytes"_a = stb::resize_options{}.max_bytes)
+        // Resizer("cubic", ...): the filter by name (see resize_filter_from_name).
+        // An unknown name raises ValueError listing the valid ones.
+        .def(
+            "__init__",
+            [](resizer* self, const std::string& filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
+                stb::resize_options o;
+                o.filter = stb::resize_filter_from_name(filter);
+                o.edge = edge;
+                o.srgb = srgb;
+                o.max_bytes = max_bytes;
+                new (self) resizer(o);
+            },
+            "filter"_a, "edge"_a = resize_edge::clamp, "srgb"_a = true,
+            "max_bytes"_a = stb::resize_options{}.max_bytes)
         .def_prop_ro("filter", [](const resizer& r) { return r.options().filter; })
         .def_prop_ro("edge", [](const resizer& r) { return r.options().edge; })
         .def_prop_ro("srgb", [](const resizer& r) { return r.options().srgb; })
@@ -46,8 +64,8 @@ void bind_resizer(nb::module_& m) {
         .def(
             "resize",
             [](const resizer& self, const image_in& pixels, int width, int height) {
-                const libstb::image src = to_image(pixels);
-                libstb::image out;
+                const stb::image src = to_image(pixels);
+                stb::image out;
                 {
                     nb::gil_scoped_release release;
                     out = self.resize(src, width, height);
