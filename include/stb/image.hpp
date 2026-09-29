@@ -14,7 +14,6 @@
 
 namespace stb {
 
-class encoder;
 class resizer;
 enum class resize_filter;  // opaque declaration; defined in resizer.hpp
 
@@ -38,13 +37,17 @@ struct load_options {
     std::size_t max_bytes = std::size_t(1) << 29;  // 512 MiB
 };
 
+// Defaults of to_png / write_png and to_jpg / write_jpg.
+inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower
+inline constexpr int default_jpg_quality = 90;     // 1..100
+
 // An 8-bit image: row-major, interleaved channels, no padding, so
 // size_bytes() == width * height * channels. A value type: copy, move and
 // destroy as usual (rule of zero). A default-constructed image is empty.
 //
 // Thread-safety: like std::vector - const members are safe to call
 // concurrently, mutation needs external synchronisation. The static
-// factories and encoders are safe to call from any number of threads.
+// factories are safe to call from any number of threads.
 class image {
 public:
     image() = default;
@@ -60,13 +63,25 @@ public:
     // Also throws io_error.
     static image open(const std::filesystem::path& path, const load_options& opt = {});
 
-    // --- encoding ---
-    // Throws invalid_argument (empty image), encode_error, limit_error.
-    std::vector<std::uint8_t> encode(const encoder& enc) const;
-    // Also throws io_error. The file is written only after encoding succeeded.
-    void save(const std::filesystem::path& path, const encoder& enc) const;
-    // Encoder chosen from the extension: .png .jpg/.jpeg .bmp .tga
-    // (invalid_argument for anything else).
+    // --- encoding (implemented in encode.cpp) ---
+    // to_*: the bytes of a whole file in that format. Throw invalid_argument
+    // (empty image, or an argument out of range), encode_error, limit_error.
+    // Each format takes its own settings, all defaulted.
+    std::vector<std::uint8_t> to_png(int compression = default_png_compression) const;  // 1..9
+    std::vector<std::uint8_t> to_jpg(int quality = default_jpg_quality) const;          // 1..100; alpha is dropped
+    std::vector<std::uint8_t> to_bmp() const;
+    std::vector<std::uint8_t> to_tga(bool rle = true) const;
+
+    // write_*: the matching to_* plus writing the file (also throws io_error).
+    // The file is written only after encoding succeeded.
+    void write_png(const std::filesystem::path& path, int compression = default_png_compression) const;
+    void write_jpg(const std::filesystem::path& path, int quality = default_jpg_quality) const;
+    void write_bmp(const std::filesystem::path& path) const;
+    void write_tga(const std::filesystem::path& path, bool rle = true) const;
+
+    // The format comes from the extension (.png .jpg .jpeg .bmp .tga,
+    // case-insensitive; invalid_argument for anything else), with default
+    // settings. For other settings call write_* (or to_*) directly.
     void save(const std::filesystem::path& path) const;
 
     // --- resizing (implemented in resizer.cpp; include stb/resizer.hpp to pass a resizer) ---

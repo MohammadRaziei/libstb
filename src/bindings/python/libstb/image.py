@@ -8,12 +8,20 @@ from typing import NamedTuple, Union
 import numpy as np
 
 from . import libstb_py as _native
-from .libstb_py import Encoder, Resizer
+from .libstb_py import DEFAULT_JPG_QUALITY, DEFAULT_PNG_COMPRESSION, Resizer
 
 # Path, or the encoded image itself.
 Source = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 
 DEFAULT_MAX_BYTES = 1 << 29  # 512 MiB, mirrors stb::load_options
+
+# Extension -> the format save() writes (mirrors stb::image::save).
+_EXTENSIONS = {".png": "png", ".jpg": "jpg", ".jpeg": "jpg", ".bmp": "bmp", ".tga": "tga"}
+
+
+def _write(path, data: bytes) -> None:
+    with open(os.fsdecode(path), "wb") as f:
+        f.write(data)
 
 
 def _read(source: Source) -> bytes:
@@ -102,23 +110,49 @@ class Image:
             resizer = Resizer() if resizer is None else Resizer(resizer)
         return Image(resizer.resize(self._a, width, height))
 
-    def encode(self, encoder: Encoder) -> bytes:
-        """Encode to bytes with the given encoder (PngEncoder, JpegEncoder, ...)."""
-        if not isinstance(encoder, Encoder):  # else "png".encode(...) would "work" by duck typing
-            raise TypeError(f"expected a libstb.Encoder, got {type(encoder).__name__}")
-        return encoder.encode(self._a)
+    # --- encoding -----------------------------------------------------
+    # to_*: the bytes of a whole file. write_*: the same, written to `path`
+    # (only after encoding succeeded, so a failure never leaves a truncated
+    # file). Each format has its own settings, all defaulted. ValueError for
+    # a setting out of range, EncodeError / LimitError from the encoding itself.
 
-    def save(self, path, encoder: "Encoder | None" = None) -> None:
-        """Encode and write to `path`.
+    def to_png(self, compression: int = DEFAULT_PNG_COMPRESSION) -> bytes:
+        """PNG bytes. compression 1..9: higher is smaller and slower."""
+        return _native.to_png(self._a, compression)
 
-        Without an encoder, one is chosen from the extension (.png .jpg .jpeg
-        .bmp .tga; ValueError otherwise). The file is written only after
-        encoding succeeded, so a failure never leaves a truncated file.
-        """
-        path = os.fsdecode(path)
-        data = self.encode(encoder if encoder is not None else Encoder.for_path(path))
-        with open(path, "wb") as f:
-            f.write(data)
+    def to_jpg(self, quality: int = DEFAULT_JPG_QUALITY) -> bytes:
+        """JPEG bytes. quality 1..100; alpha, if any, is dropped."""
+        return _native.to_jpg(self._a, quality)
+
+    def to_bmp(self) -> bytes:
+        """BMP bytes."""
+        return _native.to_bmp(self._a)
+
+    def to_tga(self, rle: bool = True) -> bytes:
+        """TGA bytes, run-length encoded unless rle=False."""
+        return _native.to_tga(self._a, rle)
+
+    def write_png(self, path, compression: int = DEFAULT_PNG_COMPRESSION) -> None:
+        _write(path, self.to_png(compression))
+
+    def write_jpg(self, path, quality: int = DEFAULT_JPG_QUALITY) -> None:
+        _write(path, self.to_jpg(quality))
+
+    def write_bmp(self, path) -> None:
+        _write(path, self.to_bmp())
+
+    def write_tga(self, path, rle: bool = True) -> None:
+        _write(path, self.to_tga(rle))
+
+    def save(self, path) -> None:
+        """Write to `path` in the format its extension names (.png .jpg
+        .jpeg .bmp .tga, case-insensitive; ValueError otherwise), with
+        default settings. For other settings call write_* directly."""
+        ext = os.path.splitext(os.fsdecode(path))[1].lower()
+        fmt = _EXTENSIONS.get(ext)
+        if fmt is None:
+            raise ValueError(f"unsupported image extension {ext!r} (supported: .png .jpg .jpeg .bmp .tga)")
+        getattr(self, "write_" + fmt)(path)
 
     @property
     def array(self) -> np.ndarray:

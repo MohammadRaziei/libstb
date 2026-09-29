@@ -15,7 +15,7 @@ NB_MODULE(libstb_py, m) {
     nb::exception<stb::limit_error>(m, "LimitError", py_error);
 
     bind_image(m);
-    bind_encoder(m);
+    bind_encode(m);
     bind_resizer(m);
     bind_font(m);
 }

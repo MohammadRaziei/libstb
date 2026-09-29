@@ -24,9 +24,9 @@ img.numpy()                                         # uint8 pixels (H, W, C), no
 libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
 libstb.Image(np.zeros((8, 8, 4), np.uint8))         # wrap your own uint8 array
 
-img.save("out.jpg")                                 # encoder picked from the extension
-img.save("out.jpg", libstb.JpegEncoder(quality=80)) # or choose and configure one
-data = img.encode(libstb.PngEncoder(compression=9)) # -> bytes
+img.save("out.jpg")                                 # format from the extension, default settings
+img.write_jpg("out.jpg", quality=80)                # or pick the format and its settings
+data = img.to_png(compression=9)                    # -> bytes (to_png / to_jpg / to_bmp / to_tga)
 
 small = img.resize(320, 240)                        # new Image; default Resizer()
 small = img.resize(320, 240, "cubic")               # filter by name (see the table below)
@@ -45,9 +45,14 @@ libstb.load("photo.png")                            # shortcut: Image.open(...).
 libstb.info("photo.png")                            # shortcut: ImageInfo.read(...)
 ```
 
-Encoders form a class hierarchy: `Encoder` (abstract) -> `PngEncoder`,
-`JpegEncoder`, `BmpEncoder`, `TgaEncoder`. `Encoder.for_path("x.png")` returns
-the right default-configured one.
+**Encoding.** Every format has a pair of methods with its own settings, all
+defaulted: `to_png(compression=8)`, `to_jpg(quality=90)`, `to_bmp()`,
+`to_tga(rle=True)` return the file's bytes, and `write_png(path, ...)`,
+`write_jpg(path, ...)`, `write_bmp(path)`, `write_tga(path, ...)` do the same
+and write it (only after encoding succeeded, so a failure never leaves a
+truncated file). `save(path)` is the shortcut: it picks the format from the
+extension (`.png .jpg .jpeg .bmp .tga`, case-insensitive; `ValueError` for
+anything else) and uses the defaults. For other settings call `write_*`.
 
 **Resize filters by name.** `Image.resize(w, h, x)` and `Resizer(x)` accept a
 `Resizer.Filter`, or a case-insensitive name (`-` and space count as `_`). Any
@@ -97,10 +102,9 @@ target (`libstb::core`) and the Python package (`libstb`) keep the project name.
 
 stb::image img = stb::image::open("in.png");        // throws stb::error subclasses
 img(0, 0, 1) = 255;                                       // unchecked pixel access
-img.save("out.jpg", stb::jpeg_encoder(80));            // or img.save("out.png")
-
-std::unique_ptr<stb::encoder> enc = stb::encoder::for_path("x.bmp");
-std::vector<std::uint8_t> bytes = img.encode(*enc);       // virtual dispatch
+img.save("out.jpg");                                      // format from the extension, default settings
+img.write_jpg("out.jpg", 80);                             // or pick the format and its settings
+std::vector<std::uint8_t> bytes = img.to_png(9);          // to_png / to_jpg / to_bmp / to_tga -> file bytes
 
 stb::image small = img.resize(320, 240);              // default resizer
 stb::image crisp = img.resize(320, 240, "cubic");      // filter by name, or by enum:
@@ -119,12 +123,12 @@ stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 Design: stb never appears in a public header. Where a class would hold stb
 state, it is hidden behind a pimpl: `font` keeps the font bytes and the
 `stbtt_fontinfo` in an opaque `font::impl` (shared and immutable, so copies are
-cheap and threads can share one). `image`, `encoder` and `resizer` carry no stb
-state at all (plain ints/enums), so a pimpl there would only add indirection.
-`image` is a value type (rule of zero). `encoder` is an abstract base
-using the non-virtual-interface idiom (public `encode()` checks the image,
-subclasses implement a private `do_encode()`); `png_encoder`, `jpeg_encoder`,
-`bmp_encoder` and `tga_encoder` are `final`. Runtime failures derive from
+cheap and threads can share one). `image` and `resizer` carry no stb state at
+all (plain ints/enums), so a pimpl there would only add indirection. `image` is
+a value type (rule of zero). The four output formats are a closed set, so there
+is no encoder class hierarchy: each format is a `to_*` / `write_*` pair on
+`image` with its own defaulted settings, implemented in `src/core/encode.cpp`
+(the one place `stb_image_write` is compiled). Runtime failures derive from
 `stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
 programmer errors throw `std::invalid_argument`.
 
@@ -134,7 +138,7 @@ Or `cmake --install build` and `find_package(libstb)` as usual.
 
 ```
 include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/stb/*.hpp           public API (error, image, encoder, resizer, font, utf8); never includes stb
+include/stb/*.hpp           public API (error, image, resizer, font, utf8); never includes stb
 src/core/*.cpp              implementation; the only place stb headers are compiled
 src/third_party/stb/        vendored stb headers (committed, no submodules)
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package

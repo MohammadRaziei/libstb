@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "file.hpp"
-#include "stb/encoder.hpp"
 
 // STATIC: every stbi_* function gets internal linkage in this TU.
 // NO_STDIO: we only decode from memory (files are read by detail::read_file),
@@ -112,13 +111,5 @@ image image::open(const std::filesystem::path& path, const load_options& opt) {
     const auto bytes = detail::read_file(path);
     return decode(bytes.data(), bytes.size(), opt);
 }
-
-std::vector<std::uint8_t> image::encode(const encoder& enc) const { return enc.encode(*this); }
-
-void image::save(const std::filesystem::path& path, const encoder& enc) const {
-    detail::write_file(path, encode(enc));  // encode first: a failure leaves no half-written file
-}
-
-void image::save(const std::filesystem::path& path) const { save(path, *encoder::for_path(path)); }
 
 }  // namespace stb

@@ -17,7 +17,6 @@
 #include "stb/error.hpp"
 #include "stb/utf8.hpp"
 #include "stb/image.hpp"
-#include "stb/encoder.hpp"
 #include "stb/resizer.hpp"
 #include "stb/font.hpp"
 #endif

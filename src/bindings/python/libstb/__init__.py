@@ -3,7 +3,8 @@
 No system dependencies: `pip install libstb` is all you need.
 
     img = libstb.Image.open("photo.png")   # object API
-    img.save("photo.jpg", libstb.JpegEncoder(quality=80))
+    img.save("photo.jpg")                  # format from the extension
+    img.write_jpg("photo.jpg", quality=80) # or pick the format and its settings
     small = img.resize(320, 240)
     libstb.Font.open("font.ttf").render("Hi", 32).bitmap.save("hi.png")
     pixels = libstb.load("photo.png")      # or: just the ndarray
@@ -22,18 +23,7 @@ except Exception:  # pragma: no cover
 
 from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
 from .font import Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize
-from .libstb_py import (
-    BmpEncoder,
-    DecodeError,
-    EncodeError,
-    Encoder,
-    Error,
-    JpegEncoder,
-    LimitError,
-    PngEncoder,
-    Resizer,
-    TgaEncoder,
-)
+from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
 
 _pkg_dir = _os.path.dirname(__file__)
 
@@ -65,7 +55,6 @@ def get_cmake_dir():
 
 __all__ = [
     "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "info", "load",
-    "Encoder", "PngEncoder", "JpegEncoder", "BmpEncoder", "TgaEncoder",
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "Error", "DecodeError", "EncodeError", "LimitError",

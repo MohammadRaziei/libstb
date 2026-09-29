@@ -9,7 +9,7 @@ namespace stb {
 //
 //   error                     (std::runtime_error)
 //   |- decode_error           input is corrupt, truncated, empty or an unsupported format
-//   |- encode_error           an encoder failed to produce output
+//   |- encode_error           encoding failed to produce output
 //   |- limit_error            a size limit was hit (max_bytes, 2 GiB stb ceiling)
 //   `- io_error               a file could not be opened, read or written
 //

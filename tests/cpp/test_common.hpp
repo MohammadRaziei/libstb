@@ -22,7 +22,7 @@
 namespace testutil {
 
 // Binary PPM (P6): the simplest format stb_image reads, so decode tests need
-// no encoder (and no binary fixtures).
+// no encoding step (and no binary fixtures).
 inline std::string ppm(int w, int h, const std::vector<std::uint8_t>& rgb) {
     std::string s = "P6\n" + std::to_string(w) + " " + std::to_string(h) + "\n255\n";
     s.append(reinterpret_cast<const char*>(rgb.data()), rgb.size());

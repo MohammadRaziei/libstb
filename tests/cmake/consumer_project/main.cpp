@@ -14,10 +14,8 @@ int main() {
         return 1;
     }
 
-    // encode -> decode through the encoder hierarchy
-    stb::png_encoder png;
-    const stb::encoder& base = png;
-    const auto bytes = img.encode(base);
+    // encode -> decode
+    const auto bytes = img.to_png();
     stb::image back = stb::image::decode(bytes.data(), bytes.size());
     if (back.pixels() != img.pixels()) {
         std::puts("png round trip mismatch");

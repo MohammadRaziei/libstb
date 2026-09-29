@@ -39,6 +39,6 @@ inline stb::image to_image(const image_in& a) {
 }
 
 void bind_image(nb::module_& m);
-void bind_encoder(nb::module_& m);
+void bind_encode(nb::module_& m);
 void bind_resizer(nb::module_& m);
 void bind_font(nb::module_& m);
