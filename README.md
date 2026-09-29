@@ -22,7 +22,7 @@ img = libstb.Image.open("photo.png")                # or bytes; also: channels=4
 img.width, img.height, img.channels                 # 640, 480, 3
 img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
 libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
-libstb.Image(np.zeros((8, 8, 4), np.uint8))         # wrap your own uint8 array
+libstb.Image(np.zeros((8, 8, 4), np.uint8))         # from your own uint8 array (copied)
 
 img.write("out.jpg")                                 # format from the extension, default settings
 img.write_jpg("out.jpg", quality=80)                # or pick the format and its settings
@@ -80,9 +80,15 @@ different: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
 Errors mirror the C++ hierarchy: `libstb.Error` (a `RuntimeError`) with
 `DecodeError`, `EncodeError`, `LimitError` below it, so a single
 `except libstb.Error` catches every libstb failure. Bad arguments raise
-`ValueError`, unreadable files `OSError`. Images whose decoded size would
+`ValueError`, unreadable files `OSError` (`FileNotFoundError`, `PermissionError`,
+... as the OS says). Images whose decoded size would
 exceed `max_bytes` (default 512 MiB) are rejected from the header, before any
 pixel memory is allocated.
+
+`libstb.Image` is `stb::image` itself, not a wrapper: `open`, `resize`, `to_*` and
+`write*` are the C++ members, run without the GIL. `img.array` / `np.asarray(img)`
+are numpy views of its pixels (kept alive by the view), while `Image(array)`
+copies the array, so later changes to yours do not touch the image.
 
 ## C++ / CMake
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Dict, NamedTuple, Optional
 
-import numpy as np
 
 from . import libstb_py as _native
 from .image import Image, Source, _read
@@ -121,8 +120,8 @@ class Font:
         return self._f.kerning(left, right, pixel_height)
 
     def render_glyph(self, char: str, pixel_height: float) -> Glyph:
-        arr, xo, yo, adv = self._f.render_glyph(char, pixel_height)
-        return Glyph(None if arr is None else Image(arr), xo, yo, adv)
+        bitmap, xo, yo, adv = self._f.render_glyph(char, pixel_height)
+        return Glyph(bitmap, xo, yo, adv)
 
     def measure(self, text: str, pixel_height: float) -> TextSize:
         return TextSize(*self._f.measure(text, pixel_height))
@@ -132,8 +131,8 @@ class Font:
 
         Raises ValueError (empty text, bad pixel_height), LimitError.
         """
-        arr, ox, oy = self._f.render(text, pixel_height, max_bytes)
-        return RenderedText(Image(arr), ox, oy)
+        bitmap, ox, oy = self._f.render(text, pixel_height, max_bytes)
+        return RenderedText(bitmap, ox, oy)
 
     def make_atlas(self, chars: str, pixel_height: float, width: int, height: int,
                    *, padding: int = 1) -> Atlas:
@@ -141,5 +140,5 @@ class Font:
 
         Raises LimitError if they do not all fit.
         """
-        arr, entries = self._f.make_atlas(chars, pixel_height, width, height, padding)
-        return Atlas(Image(arr), {e[0]: AtlasGlyph(*e) for e in entries})
+        bitmap, entries = self._f.make_atlas(chars, pixel_height, width, height, padding)
+        return Atlas(bitmap, {e[0]: AtlasGlyph(*e) for e in entries})

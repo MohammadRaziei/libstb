@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdexcept>
+#include <string>
 
 namespace stb {
 
@@ -39,7 +40,13 @@ public:
 
 class io_error : public error {
 public:
-    using error::error;
+    explicit io_error(const std::string& what, int code = 0) : error(what), code_(code) {}
+    // errno at the failure, 0 if unknown. Lets a binding raise the matching
+    // error (Python: FileNotFoundError, PermissionError, ...).
+    int code() const noexcept { return code_; }
+
+private:
+    int code_ = 0;
 };
 
 }  // namespace stb

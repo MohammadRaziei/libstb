@@ -61,17 +61,7 @@ void bind_resizer(nb::module_& m) {
         .def_prop_ro("edge", [](const resizer& r) { return r.options().edge; })
         .def_prop_ro("srgb", [](const resizer& r) { return r.options().srgb; })
         .def_prop_ro("max_bytes", [](const resizer& r) { return r.options().max_bytes; })
-        .def(
-            "resize",
-            [](const resizer& self, const image_in& pixels, int width, int height) {
-                const stb::image src = to_image(pixels);
-                stb::image out;
-                {
-                    nb::gil_scoped_release release;
-                    out = self.resize(src, width, height);
-                }
-                return to_array(std::move(out));
-            },
-            "pixels"_a, "width"_a, "height"_a,
-            "Resize a (H, W, C) uint8 array; returns a new (height, width, C) array.");
+        .def("resize", &resizer::resize, "image"_a, "width"_a, "height"_a,
+             nb::call_guard<nb::gil_scoped_release>(),
+             "A new Image of the given size (same as image.resize(width, height, resizer)).");
 }

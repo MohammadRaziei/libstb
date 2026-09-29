@@ -54,9 +54,6 @@ def test_jpg_roundtrip_is_close_and_quality_matters():
 
 
 def test_defaults_are_the_documented_ones():
-    from libstb import libstb_py
-
-    assert libstb_py.DEFAULT_PNG_COMPRESSION == 8 and libstb_py.DEFAULT_JPG_QUALITY == 90
     src = Image(gradient(20, 20, 3))
     assert src.to_png() == src.to_png(8)
     assert src.to_jpg() == src.to_jpg(90)

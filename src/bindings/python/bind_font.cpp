@@ -72,7 +72,7 @@ void bind_font(nb::module_& m) {
              [](const font& f, const std::string& ch, float px) {
                  stb::glyph g = f.render_glyph(one_char(ch), px);
                  nb::object bitmap = nb::none();  // blank glyphs (space) have no bitmap
-                 if (!g.bitmap.empty()) bitmap = nb::cast(to_array(std::move(g.bitmap)));
+                 if (!g.bitmap.empty()) bitmap = nb::cast(std::move(g.bitmap));
                  return std::make_tuple(bitmap, g.x_offset, g.y_offset, g.advance);
              },
              "char"_a, "pixel_height"_a)
@@ -89,7 +89,7 @@ void bind_font(nb::module_& m) {
                      nb::gil_scoped_release release;
                      t = f.render(text, px, max_bytes);
                  }
-                 return std::make_tuple(to_array(std::move(t.bitmap)), t.origin_x, t.origin_y);
+                 return std::make_tuple(std::move(t.bitmap), t.origin_x, t.origin_y);
              },
              "text"_a, "pixel_height"_a, "max_bytes"_a = std::size_t(1) << 28)
         .def("make_atlas",
@@ -105,7 +105,7 @@ void bind_font(nb::module_& m) {
                      glyphs.emplace_back(to_utf8(g.codepoint), g.x0, g.y0, g.x1, g.y1, g.xoff, g.yoff,
                                          g.xoff2, g.yoff2, g.advance);
                  stb::image bitmap = a.bitmap();  // copy: the atlas dies with this lambda
-                 return std::make_tuple(to_array(std::move(bitmap)), std::move(glyphs));
+                 return std::make_tuple(std::move(bitmap), std::move(glyphs));
              },
              "chars"_a, "pixel_height"_a, "width"_a, "height"_a, "padding"_a = 1);
 }

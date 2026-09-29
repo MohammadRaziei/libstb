@@ -149,3 +149,17 @@ def test_nearest_by_name_duplicates_pixels():
     for y in range(4):
         for x in range(4):
             np.testing.assert_array_equal(out[y, x], src[y // 2, x // 2])
+
+
+def test_resizer_resize_takes_an_image_and_matches_image_resize():
+    src = Image(gradient(16, 12, 3))
+    r = Resizer("mitchell")
+    out = r.resize(src, 8, 6)
+    assert isinstance(out, Image) and (out.width, out.height) == (8, 6)
+    np.testing.assert_array_equal(out.array, src.resize(8, 6, r).array)
+    np.testing.assert_array_equal(out.array, src.resize(8, 6, resizer="mitchell").array)
+
+
+def test_resize_rejects_a_bad_filter_argument_type():
+    with pytest.raises(TypeError):
+        Image(gradient(4, 4, 3)).resize(2, 2, 3.5)

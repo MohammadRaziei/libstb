@@ -1,4 +1,5 @@
 #include <atomic>
+#include <cerrno>
 #include <filesystem>
 #include <thread>
 
@@ -186,4 +187,15 @@ UTEST(libstb_image_tests, test_flip_is_per_call_and_thread_safe) {
     }
     for (auto& th : ts) th.join();
     ASSERT_EQ(0, bad.load());
+}
+
+UTEST(libstb_image_tests, test_io_error_carries_the_errno) {
+    const auto missing = std::filesystem::temp_directory_path() / "libstb_definitely_missing.png";
+    std::filesystem::remove(missing);
+    try {
+        stb::image::open(missing);
+        ASSERT_TRUE(false);  // must have thrown
+    } catch (const stb::io_error& e) {
+        ASSERT_EQ(ENOENT, e.code());
+    }
 }
