@@ -1,0 +1,11 @@
+# Competitors benchmarked against libstb
+numpy
+Pillow
+opencv-python-headless
+imageio
+scikit-image          # resize only (see runners.py for why it is capped at 1 MP)
+
+# Benchmark tooling
+pip-size              # github.com/MohammadRaziei/pip-size: real install-size comparison
+jinja2                # renders the standalone HTML report
+tqdm                  # progress bars for the longer-running sweeps

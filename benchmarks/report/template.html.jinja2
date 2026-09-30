@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>libstb Benchmarks</title>
+<style>
+:root {
+  --bg: #0b0e14;
+  --bg-panel: #12161f;
+  --bg-panel-2: #171c28;
+  --border: #232938;
+  --text: #e6e9ef;
+  --text-dim: #8b93a7;
+  --accent: #4c8dff;
+  --accent-2: #35d0ba;
+  --warn: #ffb454;
+  --bad: #ff6b81;
+  --good: #35d0ba;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* ---- Hero ---- */
+/* ---- Navbar ---- */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(11, 14, 20, 0.85);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.navbar-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 24px;
+}
+.navbar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.navbar-brand img { height: 22px; width: auto; }
+.navbar-links { display: flex; align-items: center; gap: 22px; }
+.navbar-link {
+  font-size: 14px;
+  text-decoration: none;
+  color: var(--text-dim);
+  transition: color 150ms ease;
+}
+.navbar-link:hover { color: var(--text); }
+.navbar-link.current { color: var(--accent); font-weight: 600; }
+.navbar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 7px;
+  text-decoration: none;
+  transition: opacity 150ms ease;
+}
+.navbar-cta:hover { opacity: 0.85; }
+.navbar-cta svg { width: 14px; height: 14px; }
+@media (max-width: 480px) {
+  .navbar-cta-text { display: none; }
+  .navbar-cta { padding: 7px 9px; }
+}
+
+.hero {
+  padding: 90px 24px 70px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(76,141,255,0.20), transparent 60%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+  border-bottom: 1px solid var(--border);
+}
+.hero .eyebrow {
+  font-size: 13px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+.hero h1 {
+  font-size: clamp(28px, 4.4vw, 48px);
+  line-height: 1.18;
+  margin: 0 auto 20px;
+  max-width: 880px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.hero h1 .hl { color: var(--accent); }
+.hero p.sub {
+  color: var(--text-dim);
+  font-size: 17px;
+  max-width: 660px;
+  margin: 0 auto;
+}
+.hero .meta {
+  margin-top: 28px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* ---- Sections ---- */
+section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+section:last-of-type { border-bottom: none; }
+.kicker {
+  font-size: 12.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+h2 { font-size: 27px; margin: 0 0 12px; letter-spacing: -0.01em; }
+h3.op-title { font-size: 18px; margin: 44px 0 6px; }
+h3.op-title:first-of-type { margin-top: 8px; }
+.lede { color: var(--text-dim); font-size: 16px; max-width: 740px; margin: 0 0 32px; }
+.lede strong { color: var(--text); font-weight: 650; }
+.op-note { color: var(--text-dim); font-size: 13.5px; max-width: 740px; margin: 0 0 12px; }
+.op-winner { font-size: 15px; margin: 0 0 20px; color: var(--text); }
+.op-winner strong { color: var(--accent-2); font-weight: 700; }
+
+.mini-details { margin-bottom: 8px; }
+.mini-details summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 10px 4px;
+  list-style: none;
+}
+.mini-details summary::-webkit-details-marker { display: none; }
+.mini-details summary::before {
+  content: '\25B8';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 150ms ease;
+}
+.mini-details[open] summary::before { transform: rotate(90deg); }
+.mini-details summary:hover { color: var(--accent-2); }
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+  margin-top: 4px;
+}
+.mini-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 14px 16px;
+}
+.mini-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.mini-chart-box { position: relative; height: 96px; }
+.mini-values {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.mini-subhead {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  margin: 4px 0 4px;
+}
+.mini-mem-subhead { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 10px; }
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 26px;
+  margin-bottom: 22px;
+}
+.panel h4 { margin: 0 0 4px; font-size: 14px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.chart-box { position: relative; height: 320px; }
+.chart-box.tall { height: 420px; }
+.chart-pair { display: grid; grid-template-columns: 1fr; gap: 18px; }
+
+/* ---- Tables ---- */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-dim); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+tr:last-child td { border-bottom: none; }
+
+/* ---- Section-local download ---- */
+.section-download { margin-top: 22px; }
+.dl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-family: var(--mono);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.dl-btn:hover { border-color: var(--accent); background: #1a2030; }
+.dl-btn svg { width: 14px; height: 14px; flex: none; }
+
+footer {
+  padding: 40px 0 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+footer .sysline { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+.env-table { max-width: 480px; margin: 0 auto; }
+.env-table td:first-child { color: var(--text-dim); width: 40%; }
+.env-table td:last-child { font-family: var(--mono); color: var(--text); text-align: right; }
+.env-table tr:last-child td { border-bottom: none; }
+
+.legend-note { font-size: 12.5px; color: var(--text-dim); margin-top: 10px; }
+code { font-family: var(--mono); background: var(--bg-panel-2); padding: 1px 6px; border-radius: 5px; font-size: 0.92em; }
+
+/* ---- Major sections vs. subsections ---- */
+/* A visible rule + accent tick before every top-level section title is
+   the "where does a new topic start" cue; subsections nest under it
+   with an indent + left rail instead of a second hline, so the two
+   never read as the same level. */
+section.major { padding-top: 56px; }
+.section-rule {
+  width: 56px; height: 3px; border-radius: 2px;
+  background: var(--accent); margin-bottom: 22px;
+}
+.subsection {
+  margin: 36px 0 0 2px;
+  padding: 4px 0 4px 20px;
+  border-left: 2px solid var(--border);
+}
+.subsection:first-of-type { margin-top: 20px; }
+.subsection > h3.op-title { margin-top: 0; }
+.subsection-label {
+  font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--accent-2); font-weight: 700; margin-bottom: 6px;
+}
+.size-table { margin-top: 20px; }
+.size-table tr.self-row td { color: var(--text); font-weight: 600; }
+.size-table tr.self-row { background: rgba(76, 141, 255, 0.08); }
+.size-table td.cap { color: var(--text-dim); font-size: 13px; font-weight: 400; }
+
+/* ---- libstb additions ---- */
+.size-rows { width: auto; margin: 0 0 18px; font-size: 13.5px; }
+.size-rows th, .size-rows td { padding: 6px 16px 6px 0; }
+.navbar-brand .brand-text { font-family: var(--mono); font-weight: 700; font-size: 17px; color: var(--text); }
+.navbar-brand .brand-text b { color: var(--accent); }
+.dl-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.verify-note { font-size: 13px; color: var(--text-dim); margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<header class="navbar">
+  <div class="navbar-inner">
+    <a class="navbar-brand" href="https://github.com/MohammadRaziei/libstb">
+      <span class="brand-text">lib<b>stb</b></span>
+    </a>
+    <div class="navbar-links">
+      <a class="navbar-link current" href="#">Benchmarks</a>
+      <a class="navbar-cta" href="https://github.com/MohammadRaziei/libstb" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.1.83-.27.83-.58v-2c-3.34.72-4.04-1.6-4.04-1.6-.55-1.37-1.33-1.74-1.33-1.74-1.09-.74.08-.72.08-.72 1.2.09 1.84 1.24 1.84 1.24 1.07 1.82 2.8 1.3 3.49 1 .1-.77.42-1.3.76-1.6-2.66-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.6-2.81 5.63-5.49 5.92.43.37.81 1.1.81 2.22v3.29c0 .31.22.69.83.57A12 12 0 0 0 12 .3Z"/></svg>
+        <span class="navbar-cta-text">GitHub</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="eyebrow">libstb benchmark report &middot; generated {{ generated_at }}</div>
+  <h1>{{ headline | safe }}</h1>
+  <p class="sub">{{ subhead | safe }}</p>
+  <div class="meta">{{ meta_line }}</div>
+</div>
+
+<div class="wrap">
+
+{% macro download(names) %}
+<div class="dl-row">
+  {% for name in names %}
+  <button class="dl-btn" onclick="downloadJSON('{{ name }}')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+    download {{ name }}.json
+  </button>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro op_body(op) %}
+  {% if op.winner_summary %}<p class="op-winner">{{ op.winner_summary | safe }}</p>{% endif %}
+  {% if op.memory_summary %}<p class="op-winner">{{ op.memory_summary | safe }}</p>{% endif %}
+
+  {% if op.size_rows %}
+  <table class="size-rows">
+    <thead><tr><th>Output size</th><th class="num">E[size / {{ op.size_rows[0].ref }}'s]</th><th class="num">entries</th></tr></thead>
+    <tbody>
+    {% for row in op.size_rows %}
+      <tr><td>{{ row.lib }}</td><td class="num">{{ row.ratio }}</td><td class="num">{{ row.n }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if op.has_tp %}
+  <div class="panel">
+    <h4>Throughput vs. image size (each dot is one corpus entry)</h4>
+    <div class="chart-box"><canvas id="chart-tp-{{ op.key }}"></canvas></div>
+  </div>
+  {% endif %}
+
+  {% if op.has_time or op.has_mem %}
+  <div class="chart-pair">
+    {% if op.has_time %}
+    <div class="panel">
+      <h4>Time vs. image size</h4>
+      <div class="chart-box"><canvas id="chart-time-trend-{{ op.key }}"></canvas></div>
+    </div>
+    {% endif %}
+    {% if op.has_mem %}
+    <div class="panel">
+      <h4>Extra peak memory vs. image size</h4>
+      <div class="chart-box"><canvas id="chart-mem-trend-{{ op.key }}"></canvas></div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <details class="mini-details">
+    <summary>See per-entry detail ({{ op.n_entries }} corpus entries)</summary>
+    <div class="mini-grid">
+      {% for entry in op.entries %}
+      <div class="mini-panel">
+        <div class="mini-label">{{ entry.label }}</div>
+        <div class="mini-subhead">time</div>
+        <div class="mini-chart-box"><canvas id="{{ entry.id }}"></canvas></div>
+        <div class="mini-values">{{ entry.values_text }}</div>
+        {% if entry.mem_id %}
+        <div class="mini-subhead mini-mem-subhead">extra peak memory</div>
+        <div class="mini-chart-box"><canvas id="{{ entry.mem_id }}"></canvas></div>
+        <div class="mini-values">{{ entry.mem_text }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+{% endmacro %}
+
+{% if has_sizes %}
+<section class="major" id="install-size">
+  <div class="section-rule"></div>
+  <div class="kicker">Install footprint</div>
+  <h2>What <code>pip install</code> pulls in</h2>
+  <p class="lede">Download size of the wheel for this platform plus every dependency, resolved from PyPI by
+    <a href="https://github.com/MohammadRaziei/pip-size" style="color:var(--accent)">pip-size</a>.
+    Capability is not the same thing as size: a bigger package is usually doing far more, which is why the
+    last column is here.</p>
+  <table class="size-table">
+    <thead><tr><th>Package</th><th class="num">Version</th><th class="num">Total</th><th class="num">Deps</th><th>What it is</th></tr></thead>
+    <tbody>
+    {% for row in size_rows %}
+      <tr{% if row.is_self %} class="self-row"{% endif %}>
+        <td>{{ row.label }}{% if row.is_self %} &#9733;{% endif %}</td>
+        <td class="num">{{ row.version }}</td>
+        <td class="num">{{ row.total }}</td>
+        <td class="num">{{ row.n_deps }}</td>
+        <td class="cap">{{ row.capability }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {{ download(['sizes']) }}
+</section>
+{% endif %}
+
+{% for sec in sections %}
+<section class="major" id="{{ sec.id }}">
+  <div class="section-rule"></div>
+  <div class="kicker">{{ sec.kicker }}</div>
+  <h2>{{ sec.title }}</h2>
+  <p class="lede">{{ sec.lede }} Speed is the best of {{ repeats }} runs;
+    memory{% if has_throughput_memory %} is the extra peak RSS of one isolated process per measurement{% else %} was not measured{% endif %}.</p>
+  {% for op in sec.ops_built %}
+  <div class="subsection">
+    <h3 class="op-title">{{ op.title }}</h3>
+    <p class="op-note">{{ op.note | safe }}</p>
+    {{ op_body(op) }}
+  </div>
+  {% endfor %}
+  {% if loop.last %}{{ download(['throughput', 'throughput_memory']) }}{% endif %}
+</section>
+{% endfor %}
+
+{% if has_scaling %}
+<section class="major" id="scaling">
+  <div class="section-rule"></div>
+  <div class="kicker">Scaling</div>
+  <h2>Does the slope change with image size?</h2>
+  <p class="lede">One photo-like image at each side length from {{ scaling.sides[0] }} to {{ scaling.sides[-1] }}
+    pixels, one representative operation of each kind, libstb against Pillow and OpenCV. A flat line means the
+    cost per pixel stays constant; a falling line means it grows with the image.</p>
+  {% for panel in scaling.panels %}
+  <div class="panel">
+    <h4>{{ panel.title }}</h4>
+    <div class="chart-box"><canvas id="{{ panel.id }}"></canvas></div>
+  </div>
+  {% endfor %}
+  {{ download(['scaling']) }}
+</section>
+{% endif %}
+
+{% if has_fonts %}
+<section class="major" id="fonts">
+  <div class="section-rule"></div>
+  <div class="kicker">Text</div>
+  <h2>stb_truetype vs. FreeType</h2>
+  <p class="lede">{{ fonts.font }}, libstb's <code>Font</code> against Pillow's FreeType binding on its basic
+    layout engine (so Pillow is not charged for shaping, which stb_truetype does not do). The two rasterize
+    differently, so this compares speed only. stb_truetype has no security guarantee on untrusted fonts;
+    FreeType is hardened. No speed number captures that.</p>
+  {% for op in fonts.ops %}
+  <div class="subsection">
+    <h3 class="op-title">{{ op.title }}</h3>
+    {% if op.summary %}<p class="op-winner">{{ op.summary | safe }}</p>{% endif %}
+    <div class="panel"><div class="chart-box"><canvas id="{{ op.id }}"></canvas></div></div>
+    <details class="mini-details">
+      <summary>See the numbers</summary>
+      <table>
+        <thead><tr><th>Case</th><th class="num">libstb</th><th class="num">Pillow</th><th class="num">libstb / Pillow</th></tr></thead>
+        <tbody>
+        {% for row in op.rows %}
+          <tr><td>{{ row.label }}</td><td class="num">{{ row.libstb }}</td><td class="num">{{ row.pillow }}</td><td class="num">{{ row.ratio }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  </div>
+  {% endfor %}
+  {{ download(['fonts']) }}
+</section>
+{% endif %}
+
+{% if verify or system_info %}
+<section class="major" id="environment">
+  <div class="section-rule"></div>
+  <div class="kicker">Environment</div>
+  <h2>Where these numbers came from</h2>
+  {% if verify %}
+  <p class="verify-note">Before anything was timed, every operation and library was run on small non-square images
+    and its output checked (exact pixels for lossless formats, close for JPEG and resizing):
+    {{ verify.passed }} checks passed, {{ verify.failed }} failed, {{ verify.unavailable }} library/operation
+    pairs unavailable (formats a library cannot handle at all).</p>
+  {% endif %}
+  {% if system_info %}
+  <div class="panel">
+    <table class="env-table">
+      <tr><td>CPU</td><td>{{ system_info.cpu_model }}</td></tr>
+      <tr><td>Logical cores</td><td>{{ system_info.logical_cores }}</td></tr>
+      {% if system_info.ram_gib %}<tr><td>RAM</td><td>{{ system_info.ram_gib }} GiB</td></tr>{% endif %}
+      <tr><td>Architecture</td><td>{{ system_info.architecture }}</td></tr>
+      <tr><td>OS</td><td>{{ system_info.os }}</td></tr>
+      <tr><td>Python</td><td>{{ system_info.python_implementation }} {{ system_info.python_version }}</td></tr>
+    </table>
+  </div>
+  {{ download(['system_info', 'verify']) }}
+  {% endif %}
+</section>
+{% endif %}
+
+</div>
+
+<footer>
+  For how the corpus was built, why timing uses best-of-N, and the memory-measurement
+  gotcha this suite works around, see
+  <a href="https://github.com/MohammadRaziei/libstb/blob/main/benchmarks/README.md">benchmarks/README.md</a>.
+  <br>
+  Generated by <code>benchmarks/report/generate_report.py</code> &middot;
+  <a href="https://github.com/MohammadRaziei/libstb">github.com/MohammadRaziei/libstb</a>
+</footer>
+
+<script>
+{{ chartjs_source | safe }}
+</script>
+
+<script id="libstb-data" type="application/json">
+{{ embedded_json | safe }}
+</script>
+
+<script>
+const DATA = JSON.parse(document.getElementById('libstb-data').textContent);
+
+// Two runtimes can load this exact HTML file: a published page
+// (window.claude.use('downloads') handles saves, and a plain anchor+Blob
+// click is inert there) or a plain browser tab, opened straight from
+// disk, where window.claude.use does not exist and the classic
+// anchor+Blob trick is what actually works. Feature-detect once.
+let _downloadsApi = undefined; // undefined = not checked yet, null = checked, unavailable
+(async () => {
+  if (window.claude && typeof window.claude.use === 'function') {
+    try { _downloadsApi = await window.claude.use('downloads'); }
+    catch (e) { _downloadsApi = null; }
+  } else {
+    _downloadsApi = null;
+  }
+})();
+
+async function downloadJSON(name) {
+  const text = JSON.stringify(DATA[name], null, 2);
+  const filename = name + '.json';
+  if (_downloadsApi) {
+    try {
+      await _downloadsApi.save({ filename, data: new Blob([text], { type: 'application/json' }) });
+    } catch (e) { /* viewer declined, or a transient error: no-op */ }
+    return;
+  }
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+Chart.defaults.color = '#8b93a7';
+Chart.defaults.borderColor = '#232938';
+Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
+
+{{ chart_scripts | safe }}
+
+// Charts inside a collapsed <details> are built against a hidden (0x0)
+// canvas and can come out mis-sized; force a resize the first time each
+// block is actually opened, as a safety net alongside Chart.js's own
+// ResizeObserver.
+document.querySelectorAll('.mini-details').forEach(function (el) {
+  el.addEventListener('toggle', function () {
+    if (!el.open) return;
+    el.querySelectorAll('canvas').forEach(function (canvas) {
+      const chart = Chart.getChart(canvas);
+      if (chart) chart.resize();
+    });
+  });
+});
+</script>
+</body>
+</html>
