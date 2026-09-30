@@ -1,5 +1,6 @@
 #include <stb.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -17,7 +18,7 @@ int main() {
     // encode -> decode
     const auto bytes = img.to_png();
     stb::image back = stb::image::decode(bytes.data(), bytes.size());
-    if (back.pixels() != img.pixels()) {
+    if (!std::equal(back.begin(), back.end(), img.begin())) {
         std::puts("png round trip mismatch");
         return 1;
     }

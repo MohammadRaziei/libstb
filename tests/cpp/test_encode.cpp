@@ -153,7 +153,7 @@ UTEST(libstb_encode_tests, test_write_picks_the_format_case_insensitively) {
         const auto path = tmp(name);
         src.write(path);
         ASSERT_EQ(8, stb::image::open(path).width());
-        ASSERT_TRUE(stb::image::open(path).pixels() != src.pixels());  // lossy => it really is a JPEG
+        ASSERT_FALSE(same(stb::image::open(path), src));  // lossy => it really is a JPEG
         std::filesystem::remove(path);
     }
 }

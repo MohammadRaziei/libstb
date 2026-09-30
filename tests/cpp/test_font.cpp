@@ -16,7 +16,7 @@ namespace {
 stb::font load() { return stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-test.ttf"); }
 
 bool all_255(const stb::image& img) {
-    for (auto v : img.pixels())
+    for (auto v : img)
         if (v != 255) return false;
     return true;
 }
@@ -183,7 +183,7 @@ UTEST(libstb_font_tests, test_concurrent_rendering) {
     for (int t = 0; t < 8; ++t)
         ts.emplace_back([&] {
             for (int i = 0; i < 200; ++i)
-                if (f.render("AB\nBA", 100).bitmap.pixels() != ref.bitmap.pixels()) ++bad;
+                if (!testutil::same(f.render("AB\nBA", 100).bitmap, ref.bitmap)) ++bad;
         });
     for (auto& th : ts) th.join();
     ASSERT_EQ(0, bad.load());

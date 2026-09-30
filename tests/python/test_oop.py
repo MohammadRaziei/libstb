@@ -81,16 +81,76 @@ def test_array_is_a_writable_view_that_keeps_the_image_alive():
     assert img.array[0, 0, 0] == 7
 
 
-def test_constructor_copies_and_accepts_strided_arrays():
+def test_constructor_views_a_writable_contiguous_array_without_copying():
     src = EXPECTED.copy()
     img = Image(src)
-    src[0, 0, 0] = 99  # the Image owns its pixels
-    assert img.array[0, 0, 0] == 255
+    assert np.shares_memory(img.array, src)
+    src[0, 0, 0] = 99  # the image sees changes to the array...
+    assert img.array[0, 0, 0] == 99
+    img.array[0, 0, 1] = 5  # ...and the array sees changes to the image
+    assert src[0, 0, 1] == 5
+
+
+def test_the_view_keeps_the_array_alive():
+    import gc
+
+    def make():
+        a = np.full((4, 5, 3), 9, np.uint8)
+        return Image(a)  # `a` is unreachable except through the image
+
+    img = make()
+    gc.collect()
+    assert (img.array == 9).all()
+    view = img.array
+    del img
+    gc.collect()
+    assert (view == 9).all()  # and the view keeps the image alive
+
+
+def test_constructor_copies_arrays_it_cannot_view():
     flipped = Image(EXPECTED[::-1])  # negative stride
+    assert not np.shares_memory(flipped.array, EXPECTED)
     np.testing.assert_array_equal(flipped.array, EXPECTED[::-1])
     transposed = Image(np.ascontiguousarray(EXPECTED).transpose(1, 0, 2))
     np.testing.assert_array_equal(transposed.array, EXPECTED.transpose(1, 0, 2))
     assert Image(np.zeros((3, 4), np.uint8)[:, ::2]).shape == (3, 2, 1)
+
+    ro = EXPECTED.copy()
+    ro.flags.writeable = False  # read-only memory must never be written through
+    img = Image(ro)
+    assert not np.shares_memory(img.array, ro)
+    img.array[0, 0, 0] = 1  # allowed: it is the image's own copy
+    assert ro[0, 0, 0] == 255
+
+
+def test_copy_is_explicit_and_independent():
+    import copy as copy_module
+
+    src = EXPECTED.copy()
+    img = Image(src)
+    for dup in (img.copy(), copy_module.copy(img), copy_module.deepcopy(img)):
+        assert isinstance(dup, Image)
+        assert not np.shares_memory(dup.array, img.array)
+        np.testing.assert_array_equal(dup.array, img.array)
+        dup.array[0, 0, 0] = 1
+        assert src[0, 0, 0] == 255  # neither the original image nor the array changed
+
+
+def test_decoded_images_own_their_pixels_and_copy_detaches():
+    img = Image.open(RGB)
+    dup = img.copy()
+    dup.array[0, 0, 0] = 0
+    np.testing.assert_array_equal(img.array, EXPECTED)
+
+
+def test_writes_from_a_viewing_image_reach_the_array(tmp_path):
+    src = np.zeros((4, 4, 3), np.uint8)
+    img = Image(src)
+    src[:] = 200
+    p = tmp_path / "x.png"
+    img.write(p)  # encodes what the array holds now
+    np.testing.assert_array_equal(Image.open(p).array, src)
+    assert img.resize(2, 2).array.shape == (2, 2, 3)
 
 
 def test_open_sources_bytes_bytearray_memoryview_ndarray_and_paths(tmp_path):

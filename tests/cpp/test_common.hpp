@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -48,7 +49,7 @@ inline stb::image solid(int w, int h, int c, std::uint8_t v) {
 
 inline bool same(const stb::image& a, const stb::image& b) {
     return a.width() == b.width() && a.height() == b.height() && a.channels() == b.channels() &&
-           a.pixels() == b.pixels();
+           std::equal(a.begin(), a.end(), b.begin());
 }
 
 }  // namespace testutil

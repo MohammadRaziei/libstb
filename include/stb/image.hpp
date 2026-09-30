@@ -7,7 +7,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "stb/error.hpp"
@@ -42,8 +44,13 @@ inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and
 inline constexpr int default_jpg_quality = 90;     // 1..100
 
 // An 8-bit image: row-major, interleaved channels, no padding, so
-// size_bytes() == width * height * channels. A value type: copy, move and
-// destroy as usual (rule of zero). A default-constructed image is empty.
+// size_bytes() == width * height * channels. A default-constructed image is
+// empty.
+//
+// Move-only: an image never copies its pixels behind your back. Say so with
+// copy(). The pixels may be memory the image owns (constructors, decode) or
+// memory someone else owns (wrap), which is how a numpy array becomes an
+// image without a copy.
 //
 // Thread-safety: like std::vector - const members are safe to call
 // concurrently, mutation needs external synchronisation. The static
@@ -57,6 +64,24 @@ public:
     image(int width, int height, int channels);
     // Takes ownership of `pixels`; throws invalid_argument on a size mismatch.
     image(int width, int height, int channels, std::vector<std::uint8_t> pixels);
+
+    // Views memory that someone else owns, without copying it. `data` must
+    // hold width * height * channels bytes and stay valid while the image
+    // (or anything moved from it) lives; `keep_alive` is released when that
+    // image dies, so put whatever owns or frees the memory in it (a deleter,
+    // a Python reference, ...). Throws invalid_argument on a null `data` or
+    // bad dimensions.
+    static image wrap(int width, int height, int channels, std::uint8_t* data,
+                      std::shared_ptr<void> keep_alive = {});
+
+    image(image&& other) noexcept;
+    image& operator=(image&& other) noexcept;
+    image(const image&) = delete;             // copies are explicit:
+    image& operator=(const image&) = delete;  // see copy()
+    ~image() = default;
+
+    // A deep copy that owns its own pixels (also when this image is a wrap).
+    image copy() const;
 
     // --- decoding (throws invalid_argument, decode_error, limit_error) ---
     static image decode(const void* data, std::size_t size, const load_options& opt = {});
@@ -98,18 +123,22 @@ public:
     int width() const noexcept { return width_; }
     int height() const noexcept { return height_; }
     int channels() const noexcept { return channels_; }
-    bool empty() const noexcept { return pixels_.empty(); }
+    bool empty() const noexcept { return !data_; }
     std::size_t stride() const noexcept { return std::size_t(width_) * std::size_t(channels_); }
-    std::size_t size_bytes() const noexcept { return pixels_.size(); }
+    std::size_t size_bytes() const noexcept { return stride() * std::size_t(height_); }
 
-    std::uint8_t* data() noexcept { return pixels_.data(); }
-    const std::uint8_t* data() const noexcept { return pixels_.data(); }
-    const std::vector<std::uint8_t>& pixels() const noexcept { return pixels_; }
+    std::uint8_t* data() noexcept { return data_.get(); }
+    const std::uint8_t* data() const noexcept { return data_.get(); }
+    // All bytes, for range-for and <algorithm> (empty range for an empty image).
+    std::uint8_t* begin() noexcept { return data(); }
+    std::uint8_t* end() noexcept { return data() + size_bytes(); }
+    const std::uint8_t* begin() const noexcept { return data(); }
+    const std::uint8_t* end() const noexcept { return data() + size_bytes(); }
 
     // Unchecked element access (x < width, y < height, c < channels).
-    std::uint8_t& operator()(int x, int y, int c = 0) noexcept { return pixels_[index(x, y, c)]; }
+    std::uint8_t& operator()(int x, int y, int c = 0) noexcept { return data_.get()[index(x, y, c)]; }
     const std::uint8_t& operator()(int x, int y, int c = 0) const noexcept {
-        return pixels_[index(x, y, c)];
+        return data_.get()[index(x, y, c)];
     }
 
 private:
@@ -120,7 +149,9 @@ private:
     int width_ = 0;
     int height_ = 0;
     int channels_ = 0;
-    std::vector<std::uint8_t> pixels_;
+    // Owner + pointer in one: the deleter (or aliased owner) is what frees, or
+    // keeps alive, the memory. Null for an empty image.
+    std::shared_ptr<std::uint8_t> data_;
 };
 
 }  // namespace stb

@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -33,11 +34,29 @@ using namespace nb::literals;
 
 namespace {
 
-using array_in = nb::ndarray<nb::device::cpu>;  // any dtype, any strides: checked below
+using array_rw = nb::ndarray<nb::device::cpu>;          // only writable arrays match
+using array_ro = nb::ndarray<nb::ro, nb::device::cpu>;  // read-only ones too
 using bytes_in = nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
-// Image(array): a uint8 array of shape (H, W) or (H, W, 1..4), copied.
-stb::image image_from_array(const array_in& a) {
+// Keeps a Python object alive for as long as an image views its memory. The
+// last reference may be dropped from any thread, hence the GIL.
+std::shared_ptr<void> keep_alive(nb::handle obj) {
+    auto* ref = new nb::object(nb::borrow(obj));
+    return std::shared_ptr<void>(ref, [](nb::object* p) {
+        if (Py_IsInitialized()) {  // otherwise the interpreter is gone: leak, do not touch it
+            nb::gil_scoped_acquire gil;
+            delete p;
+        }
+    });
+}
+
+// Image(array): a uint8 array of shape (H, W) or (H, W, 1..4).
+//  - writable and C-contiguous: the image views the array's memory (no copy);
+//  - anything else (read-only, strided, e.g. arr[::-1]): copied.
+stb::image image_from_array(nb::handle obj) {
+    array_ro a;
+    if (!nb::try_cast(obj, a, /*convert=*/false))
+        throw nb::type_error("Image needs a uint8 array");
     if (a.dtype() != nb::dtype<std::uint8_t>())
         throw nb::type_error("Image needs a uint8 array");
     if (a.ndim() != 2 && a.ndim() != 3)
@@ -46,11 +65,18 @@ stb::image image_from_array(const array_in& a) {
     if (c < 1 || c > 4) throw std::invalid_argument("expected shape (H, W) or (H, W, 1..4)");
     if (h > INT_MAX || w > INT_MAX) throw std::invalid_argument("image dimensions too large");
 
-    const auto* src = static_cast<const std::uint8_t*>(a.data());
     const std::int64_t s0 = a.stride(0), s1 = a.stride(1), s2 = a.ndim() == 3 ? a.stride(2) : 1;
+    const bool contiguous = s2 == 1 && s1 == std::int64_t(c) && s0 == std::int64_t(w * c);
+
+    array_rw rw;
+    if (contiguous && nb::try_cast(obj, rw, /*convert=*/false))
+        return stb::image::wrap(int(w), int(h), int(c), static_cast<std::uint8_t*>(rw.data()),
+                                keep_alive(obj));
+
+    const auto* src = static_cast<const std::uint8_t*>(a.data());
     std::vector<std::uint8_t> px(h * w * c);
-    if (s2 == 1 && s1 == std::int64_t(c) && s0 == std::int64_t(w * c)) {
-        if (!px.empty()) std::memcpy(px.data(), src, px.size());  // C-contiguous
+    if (contiguous) {
+        if (!px.empty()) std::memcpy(px.data(), src, px.size());  // read-only but contiguous
     } else {
         for (std::size_t y = 0; y < h; ++y)  // strided, e.g. arr[::-1] or a transposed view
             for (std::size_t x = 0; x < w; ++x)
@@ -104,12 +130,21 @@ void bind_image(nb::module_& m) {
     // The native Image *is* stb::image: every method below is the C++ member.
     nb::class_<image>(m, "Image",
                       "An 8-bit image: height x width x channels (1..4) uint8 pixels.\n\n"
-                      "Image(array) copies a uint8 array of shape (H, W) or (H, W, 1..4).\n"
-                      "Image.open(source) decodes a path or encoded bytes. `.array` is a\n"
-                      "numpy view of the pixels (no copy); np.asarray(img) works too.")
+                      "Image(array) takes a uint8 array of shape (H, W) or (H, W, 1..4). A writable,\n"
+                      "C-contiguous array is used in place, not copied (the image and the array then\n"
+                      "share their pixels); any other array (read-only, strided) is copied. Call\n"
+                      "img.copy() for an independent image.\n"
+                      "Image.open(source) decodes a path or encoded bytes. `.array` is a numpy view\n"
+                      "of the pixels (no copy); np.asarray(img) works too.")
         .def(
-            "__init__", [](image* self, const array_in& a) { new (self) image(image_from_array(a)); },
+            "__init__", [](image* self, nb::handle array) { new (self) image(image_from_array(array)); },
             "array"_a)
+
+        // --- copying is explicit ---
+        .def("copy", &image::copy, release(),
+             "An independent image that owns its own pixels (a deep copy).")
+        .def("__copy__", &image::copy, release())
+        .def("__deepcopy__", [](const image& i, nb::handle) { return i.copy(); }, "memo"_a)
 
         // --- decoding: open(bytes-like | path, *, channels, flip, max_bytes) ---
         .def_static(

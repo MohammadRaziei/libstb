@@ -76,7 +76,7 @@ UTEST(libstb_resizer_tests, test_alpha_weighting_stops_transparent_pixels_bleedi
 
 UTEST(libstb_resizer_tests, test_source_is_not_modified) {
     const stb::image src = gradient(6, 6, 3);
-    const stb::image copy = src;
+    const stb::image copy = src.copy();
     stb::resizer().resize(src, 3, 3);
     ASSERT_TRUE(same(src, copy));
 }

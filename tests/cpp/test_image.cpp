@@ -27,7 +27,7 @@ UTEST(libstb_image_tests, test_decode_and_accessors) {
     ASSERT_EQ(255, img(0, 0, 0));  // top: red
     ASSERT_EQ(255, img(0, 1, 1));  // bottom: green
     ASSERT_EQ(0, img(0, 1, 0));
-    ASSERT_TRUE(img.data() == img.pixels().data());
+    ASSERT_TRUE(img.data() == &img(0, 0, 0));
 }
 
 UTEST(libstb_image_tests, test_decode_converts_to_rgba_with_opaque_alpha) {
@@ -137,7 +137,7 @@ UTEST(libstb_image_tests, test_constructors_validate) {
 
 UTEST(libstb_image_tests, test_copy_is_deep_and_move_transfers) {
     stb::image a = testutil::gradient(4, 3, 3);
-    stb::image b = a;
+    stb::image b = a.copy();
     b(0, 0, 0) = static_cast<std::uint8_t>(a(0, 0, 0) + 1);
     ASSERT_FALSE(testutil::same(a, b));
     stb::image c = std::move(b);
@@ -198,4 +198,85 @@ UTEST(libstb_image_tests, test_io_error_carries_the_errno) {
     } catch (const stb::io_error& e) {
         ASSERT_EQ(ENOENT, e.code());
     }
+}
+
+// ---- ownership: move-only, explicit copy(), wrap() -----------------------
+
+#include <memory>
+#include <type_traits>
+
+UTEST(libstb_image_tests, test_image_is_move_only_and_copies_are_explicit) {
+    static_assert(!std::is_copy_constructible<stb::image>::value, "copies must be explicit");
+    static_assert(!std::is_copy_assignable<stb::image>::value, "copies must be explicit");
+    static_assert(std::is_nothrow_move_constructible<stb::image>::value, "");
+    static_assert(std::is_nothrow_move_assignable<stb::image>::value, "");
+    ASSERT_TRUE(true);
+}
+
+UTEST(libstb_image_tests, test_copy_is_deep_and_independent) {
+    stb::image a(2, 2, 3);
+    a(0, 0, 0) = 10;
+    stb::image b = a.copy();
+    ASSERT_TRUE(a.data() != b.data());
+    ASSERT_EQ(10, b(0, 0, 0));
+    b(0, 0, 0) = 99;
+    ASSERT_EQ(10, a(0, 0, 0));
+    ASSERT_TRUE(stb::image().copy().empty());
+}
+
+UTEST(libstb_image_tests, test_moved_from_image_is_empty) {
+    stb::image a(2, 2, 3);
+    const std::uint8_t* p = a.data();
+    stb::image b = std::move(a);
+    ASSERT_TRUE(a.empty());
+    ASSERT_EQ(0, a.width());
+    ASSERT_EQ(0u, a.size_bytes());
+    ASSERT_TRUE(b.data() == p);  // the pixels moved, they were not copied
+    stb::image c;
+    c = std::move(b);
+    ASSERT_TRUE(b.empty());
+    ASSERT_TRUE(c.data() == p);
+}
+
+UTEST(libstb_image_tests, test_wrap_views_foreign_memory_without_copying) {
+    std::vector<std::uint8_t> buf(2 * 2 * 3, 7);
+    stb::image img = stb::image::wrap(2, 2, 3, buf.data());
+    ASSERT_TRUE(img.data() == buf.data());
+    img(1, 1, 2) = 9;
+    ASSERT_EQ(9, buf[buf.size() - 1]);  // it is the same memory
+    stb::image owned = img.copy();      // copy() detaches
+    owned(0, 0, 0) = 1;
+    ASSERT_EQ(7, buf[0]);
+}
+
+UTEST(libstb_image_tests, test_wrap_keeps_its_owner_alive_until_the_image_dies) {
+    static bool freed;
+    freed = false;
+    static std::uint8_t px[4 * 4 * 1] = {};
+    {
+        stb::image moved;
+        {
+            std::shared_ptr<void> keep(px, [](void*) { freed = true; });
+            stb::image img = stb::image::wrap(4, 4, 1, px, std::move(keep));
+            ASSERT_FALSE(freed);
+            moved = std::move(img);  // the owner travels with the pixels
+        }
+        ASSERT_FALSE(freed);
+    }
+    ASSERT_TRUE(freed);
+}
+
+UTEST(libstb_image_tests, test_wrap_validates_its_arguments) {
+    std::uint8_t px[4] = {};
+    ASSERT_THROWS(stb::image::wrap(2, 2, 1, nullptr), std::invalid_argument);
+    ASSERT_THROWS(stb::image::wrap(0, 2, 1, px), std::invalid_argument);
+    ASSERT_THROWS(stb::image::wrap(2, 2, 5, px), std::invalid_argument);
+}
+
+UTEST(libstb_image_tests, test_decoded_image_owns_stbs_buffer_and_survives_moves) {
+    const std::string d = red_over_green();
+    stb::image a = stb::image::decode(d.data(), d.size());
+    stb::image b = std::move(a);
+    ASSERT_EQ(255, b(0, 0, 0));
+    ASSERT_TRUE(testutil::same(b, b.copy()));
 }

@@ -104,7 +104,7 @@ void bind_font(nb::module_& m) {
                  for (const auto& g : a.glyphs())
                      glyphs.emplace_back(to_utf8(g.codepoint), g.x0, g.y0, g.x1, g.y1, g.xoff, g.yoff,
                                          g.xoff2, g.yoff2, g.advance);
-                 stb::image bitmap = a.bitmap();  // copy: the atlas dies with this lambda
+                 stb::image bitmap = a.bitmap().copy();  // explicit copy: the atlas dies with this lambda
                  return std::make_tuple(std::move(bitmap), std::move(glyphs));
              },
              "chars"_a, "pixel_height"_a, "width"_a, "height"_a, "padding"_a = 1);

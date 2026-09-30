@@ -107,13 +107,50 @@ image_info image_info::read_file(const std::filesystem::path& path) {
 
 // --------------------------------------------------------------------- image
 
-image::image(int width, int height, int channels)
-    : width_(width), height_(height), channels_(channels), pixels_(checked_bytes(width, height, channels)) {}
+image::image(int width, int height, int channels) : width_(width), height_(height), channels_(channels) {
+    const std::size_t n = checked_bytes(width, height, channels);
+    data_ = std::shared_ptr<std::uint8_t>(new std::uint8_t[n](), std::default_delete<std::uint8_t[]>());
+}
 
 image::image(int width, int height, int channels, std::vector<std::uint8_t> pixels)
-    : width_(width), height_(height), channels_(channels), pixels_(std::move(pixels)) {
-    if (pixels_.size() != checked_bytes(width, height, channels))
+    : width_(width), height_(height), channels_(channels) {
+    if (pixels.size() != checked_bytes(width, height, channels))
         throw std::invalid_argument("pixel buffer size does not match width * height * channels");
+    auto holder = std::make_shared<std::vector<std::uint8_t>>(std::move(pixels));
+    data_ = std::shared_ptr<std::uint8_t>(holder, holder->data());  // one block: vector + pointer
+}
+
+image image::wrap(int width, int height, int channels, std::uint8_t* data, std::shared_ptr<void> keep_alive) {
+    checked_bytes(width, height, channels);  // validates the dimensions
+    if (!data) throw std::invalid_argument("wrap needs a non-null pointer");
+    image img;
+    img.width_ = width;
+    img.height_ = height;
+    img.channels_ = channels;
+    img.data_ = std::shared_ptr<std::uint8_t>(std::move(keep_alive), data);  // aliasing: keeps `keep_alive`
+    return img;
+}
+
+// A moved-from image is empty (not just "valid but unspecified").
+image::image(image&& o) noexcept
+    : width_(std::exchange(o.width_, 0)),
+      height_(std::exchange(o.height_, 0)),
+      channels_(std::exchange(o.channels_, 0)),
+      data_(std::move(o.data_)) {}
+
+image& image::operator=(image&& o) noexcept {
+    if (this != &o) {
+        width_ = std::exchange(o.width_, 0);
+        height_ = std::exchange(o.height_, 0);
+        channels_ = std::exchange(o.channels_, 0);
+        data_ = std::move(o.data_);
+    }
+    return *this;
+}
+
+image image::copy() const {
+    if (empty()) return image();
+    return image(width_, height_, channels_, std::vector<std::uint8_t>(begin(), end()));
 }
 
 image image::decode(const void* data, std::size_t size, const load_options& opt) {
@@ -138,11 +175,11 @@ image image::decode(const void* data, std::size_t size, const load_options& opt)
         static_cast<const stbi_uc*>(data), static_cast<int>(size), &w, &h, &c, opt.channels));
     if (!px) fail_decode("cannot decode image");
 
-    // ponytail: one memcpy into a vector so the image owns plain C++ memory
-    // and stb never leaks out. Zero-copy (custom deleter) is the upgrade path
-    // if profiling ever shows this copy matters.
-    const std::size_t n = std::size_t(w) * std::size_t(h) * std::size_t(want);
-    return image(w, h, want, std::vector<std::uint8_t>(px.get(), px.get() + n));
+    // No copy: the image takes stb's buffer as is and frees it with stbi_image_free.
+    // The shared_ptr owns the buffer from here on, so it is freed on any later throw too.
+    stbi_uc* raw = px.get();
+    std::shared_ptr<void> owner(px.release(), [](void* p) { stbi_image_free(p); });
+    return image::wrap(w, h, want, raw, std::move(owner));
 }
 
 image image::open(const std::filesystem::path& path, const load_options& opt) {

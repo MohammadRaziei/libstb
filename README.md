@@ -22,7 +22,8 @@ img = libstb.Image.open("photo.png")                # or bytes; also: channels=4
 img.width, img.height, img.channels                 # 640, 480, 3
 img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
 libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
-libstb.Image(np.zeros((8, 8, 4), np.uint8))         # from your own uint8 array (copied)
+libstb.Image(np.zeros((8, 8, 4), np.uint8))         # from your own uint8 array (no copy, see below)
+img.copy()                                          # an independent image (deep copy)
 
 img.write("out.jpg")                                 # format from the extension, default settings
 img.write_jpg("out.jpg", quality=80)                # or pick the format and its settings
@@ -87,8 +88,15 @@ pixel memory is allocated.
 
 `libstb.Image` is `stb::image` itself, not a wrapper: `open`, `resize`, `to_*` and
 `write*` are the C++ members, run without the GIL. `img.array` / `np.asarray(img)`
-are numpy views of its pixels (kept alive by the view), while `Image(array)`
-copies the array, so later changes to yours do not touch the image.
+are numpy views of its pixels (kept alive by the view).
+
+Pixels are never copied behind your back. `Image(array)` uses a writable,
+C-contiguous uint8 array in place, so the image and the array share their
+pixels (changes show on both sides, and the image keeps the array alive). Any
+other array (read-only, or strided like `arr[::-1]`) cannot be shared and is
+copied. `Image.open` takes ownership of stb's own buffer, no copy either. When
+you want an independent image, say so: `img.copy()` (also `copy.copy` and
+`copy.deepcopy`).
 
 ## C++ / CMake
 
@@ -108,6 +116,7 @@ target (`libstb::core`) and the Python package (`libstb`) keep the project name.
 
 stb::image img = stb::image::open("in.png");        // throws stb::error subclasses
 img(0, 0, 1) = 255;                                       // unchecked pixel access
+stb::image dup = img.copy();                              // image is move-only: copies are explicit
 img.write("out.jpg");                                      // format from the extension, default settings
 img.write_jpg("out.jpg", 80);                             // or pick the format and its settings
 std::vector<std::uint8_t> bytes = img.to_png(9);          // to_png / to_jpg / to_bmp / to_tga -> file bytes
@@ -131,7 +140,11 @@ state, it is hidden behind a pimpl: `font` keeps the font bytes and the
 `stbtt_fontinfo` in an opaque `font::impl` (shared and immutable, so copies are
 cheap and threads can share one). `image` and `resizer` carry no stb state at
 all (plain ints/enums), so a pimpl there would only add indirection. `image` is
-a value type (rule of zero). The four output formats are a closed set, so there
+move-only: its pixels are a `shared_ptr<uint8_t>` whose deleter (or aliased
+owner) decides who frees them, so the same class holds memory it allocated,
+stb's decode buffer (adopted, not copied) or memory somebody else owns
+(`image::wrap`, which is how a numpy array becomes an image without a copy).
+A copy is always spelled `copy()`. The four output formats are a closed set, so there
 is no encoder class hierarchy: each format is a `to_*` / `write_*` pair on
 `image` with its own defaulted settings, next to decoding in `src/core/image.cpp`.
 Runtime failures derive from
