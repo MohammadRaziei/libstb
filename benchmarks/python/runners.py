@@ -33,7 +33,7 @@ Operations, and what each one is fair to compare:
   encode_*      Raw pixels in, the encoded file's bytes out, for png,
                 jpg, bmp and tga. Settings are fixed and matched, never
                 left to each library's own default (defaults differ on
-                purpose: stb 8, Pillow 6, OpenCV 1 for the PNG level),
+                purpose: libstb and Pillow 6, OpenCV 1 for the PNG level),
                 and the output size is recorded next to the time,
                 because a faster encoder that writes a bigger file is a
                 trade, not a win.

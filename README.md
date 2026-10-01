@@ -2,7 +2,15 @@
 
 Python bindings for the [stb](https://github.com/nothings/stb) single-header
 libraries. `pip install libstb` and you have image/font processing with **no
-system dependencies**. The C++ library is usable from CMake too.
+system dependencies and no Python dependencies**. The C++ library is usable from
+CMake too.
+
+numpy is optional: `pip install "libstb[numpy]"` if you want `img.array` /
+`img.numpy()` / `libstb.load()`. It is imported only when one of those is first
+used, never by `import libstb`, and without it they raise an `ImportError` that
+says so. Everything else works without numpy, including `Image(array)` from any
+buffer (a `memoryview`, `array.array`, a `bytearray`, a PIL-exported buffer...),
+and `img.tobytes()` and `memoryview(img)` give you the pixels with no numpy at all.
 
 | module | status |
 | :--- | :--- |
@@ -47,7 +55,7 @@ libstb.info("photo.png")                            # shortcut: ImageInfo.read(.
 ```
 
 **Encoding.** Every format has a pair of methods with its own settings, all
-defaulted: `to_png(compression=8)`, `to_jpg(quality=90)`, `to_bmp()`,
+defaulted: `to_png(compression=6)`, `to_jpg(quality=90)`, `to_bmp()`,
 `to_tga(rle=True)` return the file's bytes, and `write_png(path, ...)`,
 `write_jpg(path, ...)`, `write_bmp(path)`, `write_tga(path, ...)` do the same
 and write it (only after encoding succeeded, so a failure never leaves a
@@ -88,7 +96,9 @@ pixel memory is allocated.
 
 `libstb.Image` is `stb::image` itself, not a wrapper: `open`, `resize`, `to_*` and
 `write*` are the C++ members, run without the GIL. `img.array` / `np.asarray(img)`
-are numpy views of its pixels (kept alive by the view).
+are numpy views of its pixels (kept alive by the view); `memoryview(img)` is the
+same zero-copy view as a plain 3-D `memoryview` (numpy reads it too), and
+`img.tobytes()` is a copy, both without numpy.
 
 Pixels are never copied behind your back. `Image(array)` uses a writable,
 C-contiguous uint8 array in place, so the image and the array share their

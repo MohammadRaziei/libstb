@@ -4,6 +4,7 @@
 #include <cctype>
 #include <climits>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,29 @@
 #define STBI_FAILURE_USERMSG
 #define STBI_MAX_DIMENSIONS (1 << 16)
 #include "stb_image.h"
+
+// PNG's deflate: stb_image_write's own is small but slow and compresses poorly.
+// STBIW_ZLIB_COMPRESS is its official hook for a replacement, and the vendored
+// libdeflate (no dependencies, see src/third_party/README.md) is one: zlib-format
+// output, levels 1..9 map straight across. The result must be malloc'ed: stb
+// frees it with free().
+#include "libdeflate.h"
+
+static unsigned char* libstb_zlib_compress(unsigned char* data, int data_len, int* out_len, int level) {
+    libdeflate_compressor* c = libdeflate_alloc_compressor(level);
+    if (!c) return nullptr;
+    const std::size_t cap = libdeflate_zlib_compress_bound(c, static_cast<std::size_t>(data_len));
+    auto* out = static_cast<unsigned char*>(std::malloc(cap));
+    const std::size_t n = out ? libdeflate_zlib_compress(c, data, static_cast<std::size_t>(data_len), out, cap) : 0;
+    libdeflate_free_compressor(c);
+    if (n == 0 || n > static_cast<std::size_t>(INT_MAX)) {
+        std::free(out);
+        return nullptr;
+    }
+    *out_len = static_cast<int>(n);
+    return out;
+}
+#define STBIW_ZLIB_COMPRESS libstb_zlib_compress
 
 // Same rules for the write side. NO_STDIO: we only encode to memory; files are
 // written by detail::write_file.

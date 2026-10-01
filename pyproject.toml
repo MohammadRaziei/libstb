@@ -23,10 +23,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-dependencies = ["numpy"]
+dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest"]
+numpy = ["numpy"]
+test = ["pytest", "numpy"]
 
 [project.urls]
 Homepage = "https://github.com/MohammadRaziei/libstb"

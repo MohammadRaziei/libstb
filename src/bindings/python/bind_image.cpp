@@ -94,8 +94,75 @@ stb::load_options make_options(int channels, bool flip, std::size_t max_bytes) {
     return o;
 }
 
+// Buffer protocol: memoryview(img) is a writable 3-D (height, width, channels)
+// uint8 view of the pixels, no copy, no numpy. The view holds a reference to the
+// image (view->obj), so the pixels cannot be freed under it. numpy also reads
+// this, so np.asarray(img) stays zero-copy.
+struct buffer_meta {
+    Py_ssize_t shape[3];
+    Py_ssize_t strides[3];
+};
+
+int image_getbuffer(PyObject* exporter, Py_buffer* view, int flags) {
+    if (!view) {
+        PyErr_SetString(PyExc_BufferError, "no buffer requested");
+        return -1;
+    }
+    auto* img = nb::inst_ptr<stb::image>(nb::handle(exporter));
+    const auto h = Py_ssize_t(img->height()), w = Py_ssize_t(img->width()), c = Py_ssize_t(img->channels());
+
+    auto* meta = new buffer_meta{{h, w, c}, {w * c, c, 1}};
+    Py_INCREF(exporter);
+    view->obj = exporter;
+    view->buf = img->data();
+    view->len = h * w * c;
+    view->readonly = 0;
+    view->itemsize = 1;
+    view->format = (flags & PyBUF_FORMAT) ? const_cast<char*>("B") : nullptr;
+    view->suboffsets = nullptr;
+    view->internal = meta;
+    if (flags & PyBUF_ND) {  // asked for a shape: give the real 3-D one
+        view->ndim = 3;
+        view->shape = meta->shape;
+        view->strides = (flags & PyBUF_STRIDES) == PyBUF_STRIDES ? meta->strides : nullptr;
+    } else {  // a plain byte buffer, as the protocol requires when no shape is asked for
+        view->ndim = 1;
+        view->shape = nullptr;
+        view->strides = nullptr;
+    }
+    return 0;
+}
+
+void image_releasebuffer(PyObject*, Py_buffer* view) { delete static_cast<buffer_meta*>(view->internal); }
+
+const PyType_Slot image_slots[] = {
+    {Py_bf_getbuffer, reinterpret_cast<void*>(image_getbuffer)},
+    {Py_bf_releasebuffer, reinterpret_cast<void*>(image_releasebuffer)},
+    {0, nullptr},
+};
+
+// numpy is an optional extra (`pip install "libstb[numpy]"`), imported only when
+// a numpy object is actually asked for, never at `import libstb`. Everything
+// else (open, resize, to_*, write*, fonts, Image(array) from any buffer) works
+// without it. Checked once per process: after the first success this is a
+// single bool test, so `.array` stays as cheap as before.
+void require_numpy() {
+    static bool available = false;
+    if (available) return;
+    try {
+        nb::module_::import_("numpy");
+        available = true;
+    } catch (nb::python_error&) {
+        throw nb::import_error(
+            "this needs numpy, which libstb does not install by default: "
+            "pip install \"libstb[numpy]\". Image.tobytes() and memoryview(img) "
+            "give you the pixels without it.");
+    }
+}
+
 // The pixels as an ndarray sharing the image's memory; `self` owns it.
 nb::ndarray<nb::numpy, std::uint8_t, nb::ndim<3>> pixels_of(nb::handle self) {
+    require_numpy();
     auto& img = nb::cast<stb::image&>(self);
     const std::size_t shape[3] = {std::size_t(img.height()), std::size_t(img.width()),
                                   std::size_t(img.channels())};
@@ -128,14 +195,14 @@ void bind_image(nb::module_& m) {
         "data"_a);
 
     // The native Image *is* stb::image: every method below is the C++ member.
-    nb::class_<image>(m, "Image",
+    nb::class_<image>(m, "Image", nb::type_slots(image_slots),
                       "An 8-bit image: height x width x channels (1..4) uint8 pixels.\n\n"
                       "Image(array) takes a uint8 array of shape (H, W) or (H, W, 1..4). A writable,\n"
                       "C-contiguous array is used in place, not copied (the image and the array then\n"
                       "share their pixels); any other array (read-only, strided) is copied. Call\n"
                       "img.copy() for an independent image.\n"
-                      "Image.open(source) decodes a path or encoded bytes. `.array` is a numpy view\n"
-                      "of the pixels (no copy); np.asarray(img) works too.")
+                      "Image.open(source) decodes a path or encoded bytes. memoryview(img) is a no-copy\n"
+                      "3-D view of the pixels; `.array` is the same as a numpy ndarray (needs numpy).")
         .def(
             "__init__", [](image* self, nb::handle array) { new (self) image(image_from_array(array)); },
             "array"_a)
@@ -207,7 +274,16 @@ void bind_image(nb::module_& m) {
         .def_prop_ro("channels", &image::channels)
         .def_prop_ro("shape",
                      [](const image& i) { return std::make_tuple(i.height(), i.width(), i.channels()); })
-        .def_prop_ro("array", &pixels_of, "The pixels as a uint8 ndarray (height, width, channels), no copy.")
+        .def_prop_ro("array", &pixels_of,
+                     "The pixels as a uint8 numpy ndarray (height, width, channels), no copy.\n"
+                     "Needs numpy (pip install \"libstb[numpy]\"); imported here, on first use.")
+        .def(
+            "tobytes",
+            [](const image& i) {
+                return nb::bytes(reinterpret_cast<const char*>(i.data()),
+                                 std::size_t(i.height()) * std::size_t(i.width()) * std::size_t(i.channels()));
+            },
+            "The pixels as bytes, row-major (height, width, channels). A copy; needs no numpy.")
         .def("__array__",
              [](nb::handle self, nb::object dtype, nb::object copy) -> nb::object {
                  nb::object a = self.attr("array");

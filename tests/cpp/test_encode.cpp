@@ -83,7 +83,7 @@ UTEST(libstb_encode_tests, test_jpg_quality_trades_size) {
 // ---- arguments -----------------------------------------------------------
 
 UTEST(libstb_encode_tests, test_default_arguments_are_the_documented_ones) {
-    ASSERT_EQ(8, stb::default_png_compression);
+    ASSERT_EQ(6, stb::default_png_compression);
     ASSERT_EQ(90, stb::default_jpg_quality);
     const stb::image src = gradient(20, 20, 3);
     ASSERT_TRUE(src.to_png() == src.to_png(stb::default_png_compression));

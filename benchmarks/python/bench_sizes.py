@@ -7,10 +7,10 @@ either: it resolves the real wheel for the current platform/Python
 straight from PyPI's JSON API and sums sizes without downloading or
 installing anything.
 
-numpy is listed on its own, because it is a dependency of most of the
-others (libstb included: it is what Image.array returns), so the
-"total" column is not double-counted magic: it is what `pip install`
-of that one package pulls in.
+numpy is listed on its own for context: OpenCV, imageio and scikit-image
+depend on it (so it is inside their totals), Pillow and libstb do not. libstb
+only imports it when you ask for `img.array`, and then only if you installed
+`libstb[numpy]`, so its total here is just its own wheel.
 """
 import argparse
 import asyncio
@@ -24,7 +24,7 @@ PACKAGES = {
     "opencv":      ("opencv-python-headless", "image io, resize, and a large computer-vision toolkit"),
     "imageio":     ("imageio",                "many-format image io (delegates to Pillow and friends)"),
     "skimage":     ("scikit-image",           "image processing algorithms (io + resize + far more)"),
-    "numpy":       ("numpy",                  "arrays only (a dependency of everything above except Pillow)"),
+    "numpy":       ("numpy",                  "arrays only (a dependency of OpenCV, imageio and scikit-image; optional for libstb, not used by Pillow)"),
 }
 
 
