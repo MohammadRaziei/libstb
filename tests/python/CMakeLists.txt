@@ -1,12 +1,12 @@
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import pytest, numpy"
+    COMMAND ${Python3_EXECUTABLE} -c "import pytest, numpy, PIL"
     OUTPUT_QUIET ERROR_QUIET
     RESULT_VARIABLE LIBSTB_PYDEPS_RESULT
 )
 if(NOT LIBSTB_PYDEPS_RESULT EQUAL 0)
-    message(WARNING "pytest/numpy not installed: Python tests skipped (pip install pytest numpy)")
+    message(WARNING "pytest/numpy/Pillow not installed: Python tests skipped (pip install pytest numpy pillow)")
     return()
 endif()
 

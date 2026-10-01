@@ -11,3 +11,4 @@ twine
 # testing dependencies
 pytest
 numpy
+pillow

@@ -27,7 +27,7 @@ dependencies = []
 
 [project.optional-dependencies]
 numpy = ["numpy"]
-test = ["pytest", "numpy"]
+test = ["pytest", "numpy", "pillow"]
 
 [project.urls]
 Homepage = "https://github.com/MohammadRaziei/libstb"
