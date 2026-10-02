@@ -22,12 +22,22 @@ from PIL import Image as PILImage
 
 import libstb
 from libstb import Image, Resizer
+from tolerances import JPEG_MAX_DIFF, JPEG_NMAE
 
 
-def rmse(a, b):
+# Pixel-wise comparison. nmae is the mean absolute difference per value divided by 255, so
+# 1e-4 is 0.0255 of one 8-bit level; max_diff is the worst single value, in levels.
+def diff(a, b):
     assert a.shape == b.shape, f"shape {a.shape} != {b.shape}"
-    d = a.astype(np.float64) - b.astype(np.float64)
-    return float(np.sqrt(np.mean(d * d)))
+    return np.abs(a.astype(np.int64) - b.astype(np.int64))
+
+
+def nmae(a, b):
+    return float(diff(a, b).mean()) / 255
+
+
+def max_diff(a, b):
+    return int(diff(a, b).max())
 
 
 def _smooth(rng, h, w, c):
@@ -117,15 +127,16 @@ def test_palette_and_one_bit_pngs_expand_like_pillow():
 def test_jpeg_decode_matches_pillow(quality, subsampling):
     data = pil_bytes(photo(3), "JPEG", quality=quality, subsampling=subsampling)
     mine, ref = Image.open(data).array, pil_array(data)
-    assert rmse(mine, ref) < 1.0
-    assert np.abs(mine.astype(int) - ref.astype(int)).max() <= 8
+    assert nmae(mine, ref) < JPEG_NMAE
+    assert max_diff(mine, ref) <= JPEG_MAX_DIFF
 
 
 def test_grayscale_jpeg_decode_matches_pillow():
     data = pil_bytes(photo(1), "JPEG", quality=90)
     mine = Image.open(data)
     assert mine.channels == 1
-    assert rmse(mine.array, pil_array(data)) < 0.5
+    assert nmae(mine.array, pil_array(data)) < JPEG_NMAE
+    assert max_diff(mine.array, pil_array(data)) <= JPEG_MAX_DIFF
 
 
 @pytest.mark.parametrize("fmt,c", [("PNG", 4), ("PNG", 1), ("BMP", 3), ("TGA", 4), ("JPEG", 3)])
@@ -170,8 +181,9 @@ def test_jpeg_quality_matches_pillows_at_the_same_setting(quality):
     src = photo(3, 160, 120)
     mine = pil_array(Image(src).to_jpg(quality=quality))
     theirs = pil_array(pil_bytes(src, "JPEG", quality=quality))
-    assert abs(rmse(mine, src) - rmse(theirs, src)) < 0.3
-    assert rmse(mine, theirs) < 2.5
+    # Two encoders never agree pixel for pixel (up to 100 levels apart at hard edges), so what is
+    # compared is how far each lands from the source.
+    assert abs(nmae(mine, src) - nmae(theirs, src)) < JPEG_NMAE
 
 
 def test_jpeg_above_90_is_never_worse_than_pillow():
@@ -179,7 +191,7 @@ def test_jpeg_above_90_is_never_worse_than_pillow():
     src = photo(3, 160, 120)
     mine = pil_array(Image(src).to_jpg(quality=95))
     theirs = pil_array(pil_bytes(src, "JPEG", quality=95))
-    assert rmse(mine, src) <= rmse(theirs, src) + 0.1
+    assert nmae(mine, src) <= nmae(theirs, src) + JPEG_NMAE  # measured 6.8e-3 against 1.1e-2
 
 
 def test_jpeg_grayscale_encode_matches_pillows_loss():
@@ -189,14 +201,15 @@ def test_jpeg_grayscale_encode_matches_pillows_loss():
     data = Image(src).to_jpg(quality=90)
     assert libstb.info(data).channels == 3
     mine = pil_array(data)
-    assert np.abs(mine.astype(int) - mine[..., :1].astype(int)).max() <= 2
+    assert max_diff(mine, np.repeat(mine[..., :1], 3, axis=2)) == 0  # the three planes are identical
     theirs = pil_array(pil_bytes(src, "JPEG", quality=90))
-    assert abs(rmse(mine[..., :1], src) - rmse(theirs, src)) < 0.3
+    assert abs(nmae(mine[..., :1], src) - nmae(theirs, src)) < JPEG_NMAE
 
 
 def test_both_decoders_agree_on_libstbs_own_jpeg():
     data = Image(photo(3)).to_jpg(quality=90)
-    assert rmse(Image.open(data).array, pil_array(data)) < 1.0
+    assert nmae(Image.open(data).array, pil_array(data)) < JPEG_NMAE
+    assert max_diff(Image.open(data).array, pil_array(data)) <= JPEG_MAX_DIFF
 
 
 # ------------------------------------------------------------------ resize --
@@ -220,14 +233,20 @@ def libstb_resize(arr, w, h, filt):
                          ids=["half", "third", "up2", "up1.5", "same"])
 def test_resize_matches_pillow(filt, size):
     src = photo(3, 131, 97)
-    assert rmse(libstb_resize(src, *size, filt), pil_resize(src, *size, filt)) < 1.2
+    # Pillow rounds to 8 bits between its two passes; test_lossy_tolerance.py holds libstb to
+    # an exact float reference instead. Measured worst: nmae 9.0e-4, max 3.
+    mine, theirs = libstb_resize(src, *size, filt), pil_resize(src, *size, filt)
+    assert nmae(mine, theirs) < 2e-3
+    assert max_diff(mine, theirs) <= 4
 
 
 def test_box_resize_matches_pillow_on_whole_number_ratios():
     # Box windows only line up between the two libraries when the ratio is a whole number.
     src = photo(3, 128, 96)
     for size in ((64, 48), (32, 24), (256, 192)):
-        assert rmse(libstb_resize(src, *size, "box"), pil_resize(src, *size, "box")) < 1.2
+        mine, theirs = libstb_resize(src, *size, "box"), pil_resize(src, *size, "box")
+        assert nmae(mine, theirs) < 2e-3  # measured 1.4e-3: Pillow's own 8-bit rounding between passes
+        assert max_diff(mine, theirs) <= 1
 
 
 @pytest.mark.parametrize("c", [1, 2, 3, 4])
@@ -239,14 +258,18 @@ def test_resize_matches_pillow_for_every_channel_count(c, filt):
     if c in (2, 4):
         src[..., -1] = 255
         src[10:50, 20:70, -1] = 90
-    assert rmse(libstb_resize(src, 60, 45, filt), pil_resize(src, 60, 45, filt)) < 1.2
+    mine, theirs = libstb_resize(src, 60, 45, filt), pil_resize(src, 60, 45, filt)
+    assert nmae(mine, theirs) < 2e-3  # measured 9.4e-4
+    assert max_diff(mine, theirs) <= 4
 
 
 def test_resize_does_not_swap_width_and_height():
     src = photo(3, 131, 97)
     out = Image(src).resize(40, 90, Resizer("linear", srgb=False))
     assert (out.width, out.height) == (40, 90)
-    assert rmse(out.array, pil_resize(src, 40, 90, "linear")) < 1.2
+    theirs = pil_resize(src, 40, 90, "linear")
+    assert nmae(out.array, theirs) < 2e-3  # measured 8.6e-4
+    assert max_diff(out.array, theirs) <= 5
 
 
 def test_the_srgb_default_differs_from_pillow_and_the_flag_fixes_it():
@@ -254,5 +277,5 @@ def test_the_srgb_default_differs_from_pillow_and_the_flag_fixes_it():
     src = np.zeros((64, 64, 3), np.uint8)
     src[:, ::2] = 255                                    # fine black and white stripes
     ref = pil_resize(src, 16, 16, "box")
-    assert rmse(libstb_resize(src, 16, 16, "box"), ref) < 1.2
-    assert rmse(Image(src).resize(16, 16, Resizer("box")).array, ref) > 20
+    assert max_diff(libstb_resize(src, 16, 16, "box"), ref) == 0  # a whole-number box: exact
+    assert nmae(Image(src).resize(16, 16, Resizer("box")).array, ref) > 0.05  # measured 0.235
