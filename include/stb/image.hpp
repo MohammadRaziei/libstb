@@ -40,7 +40,7 @@ struct load_options {
 };
 
 // Defaults of to_png / write_png and to_jpg / write_jpg.
-inline constexpr int default_png_compression = 6;  // 1..9, higher = smaller and slower (6: libdeflate's sweet spot, same as zlib's default)
+inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower
 inline constexpr int default_jpg_quality = 90;     // 1..100
 
 // An 8-bit image: row-major, interleaved channels, no padding, so

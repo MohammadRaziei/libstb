@@ -84,9 +84,8 @@ OP_META = {
     },
     "encode_png": {
         "title": "encode PNG: raw pixels in, file bytes out",
-        "note": "Level 6 on every side. libstb deflates with a vendored libdeflate, Pillow and OpenCV with zlib, "
-                "so the same level does not produce the same bytes: read the speed together with the "
-                "output-size table below.",
+        "note": "zlib level 6 on every side. stb bundles its own small deflate instead of zlib, so the same level "
+                "does not produce the same bytes: read the speed together with the output-size table below.",
     },
     "encode_jpg": {
         "title": "encode JPEG: raw pixels in, file bytes out",

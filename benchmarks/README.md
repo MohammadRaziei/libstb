@@ -157,17 +157,16 @@ either.
 ### Matched settings, and why output size is reported
 
 Encoders are run at explicitly matched settings, never at each
-library's default (the defaults differ on purpose: the PNG level
-is 6 in libstb and Pillow, 1 in OpenCV):
+library's default (the defaults differ on purpose: the PNG zlib level
+is 8 in stb, 6 in Pillow, 1 in OpenCV):
 
-- PNG: level 6 everywhere (libstb's default too).
+- PNG: level 6 everywhere.
 - JPEG: quality 90 everywhere.
 - TGA: uncompressed everywhere (libstb with `rle=False`).
 
-Matching the *setting* does not match the *output*. libstb deflates PNG
-with a vendored libdeflate while Pillow and OpenCV use zlib, and its JPEG
-encoder is stb's (a simple baseline encoder, vectorized but not SIMD-tuned)
-against libjpeg-turbo's hand-written SIMD. So each encode operation also records the output size in
+Matching the *setting* does not match the *output*. stb ships a small
+deflate and a simple JPEG encoder; zlib and libjpeg-turbo are more
+elaborate. So each encode operation also records the output size in
 bytes, and the report shows E[size / Pillow's size] next to the speed:
 a faster encoder that writes a bigger file is making a trade, not
 winning.

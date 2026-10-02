@@ -147,12 +147,6 @@ LICENSE
   See end of file for license information.
 
 */
-/* LIBSTB LOCAL PATCHES: this vendored copy differs from upstream v1.16 only in the
-   JPEG encoder: the DCT, the quantization/zigzag step and the bit-count helper were
-   rewritten so compilers can vectorize them (stbiw__jpg_dct_cols, stbiw__jpg_calcBits
-   and one block in stbiw__jpg_processDU, each marked "libstb patch"). The bytes it
-   writes are identical to upstream's. See src/third_party/README.md. */
-
 
 #ifndef INCLUDE_STB_IMAGE_WRITE_H
 #define INCLUDE_STB_IMAGE_WRITE_H
@@ -1321,61 +1315,13 @@ static void stbiw__jpg_DCT(float *d0p, float *d1p, float *d2p, float *d3p, float
    *d0p = d0;  *d2p = d2;  *d4p = d4;  *d6p = d6;
 }
 
-// libstb patch: the same AAN DCT as stbiw__jpg_DCT (identical arithmetic, in the
-// same order, so the output bytes do not change), applied to 8 columns of a packed
-// 8x8 block at once. Lane i works on p[i], p[i+8], ... p[i+56]; the 8 iterations are
-// independent, so compilers turn the loop into SIMD (SSE2 / NEON) by themselves.
-static void stbiw__jpg_dct_cols(float *p) {
-   int i;
-   for(i = 0; i < 8; ++i) {
-      float d0 = p[i], d1 = p[i+8], d2 = p[i+16], d3 = p[i+24];
-      float d4 = p[i+32], d5 = p[i+40], d6 = p[i+48], d7 = p[i+56];
-      float z1, z2, z3, z4, z5, z11, z13;
-      float tmp0 = d0 + d7;
-      float tmp7 = d0 - d7;
-      float tmp1 = d1 + d6;
-      float tmp6 = d1 - d6;
-      float tmp2 = d2 + d5;
-      float tmp5 = d2 - d5;
-      float tmp3 = d3 + d4;
-      float tmp4 = d3 - d4;
-      float tmp10 = tmp0 + tmp3;
-      float tmp13 = tmp0 - tmp3;
-      float tmp11 = tmp1 + tmp2;
-      float tmp12 = tmp1 - tmp2;
-      d0 = tmp10 + tmp11;
-      d4 = tmp10 - tmp11;
-      z1 = (tmp12 + tmp13) * 0.707106781f;
-      d2 = tmp13 + z1;
-      d6 = tmp13 - z1;
-      tmp10 = tmp4 + tmp5;
-      tmp11 = tmp5 + tmp6;
-      tmp12 = tmp6 + tmp7;
-      z5 = (tmp10 - tmp12) * 0.382683433f;
-      z2 = tmp10 * 0.541196100f + z5;
-      z4 = tmp12 * 1.306562965f + z5;
-      z3 = tmp11 * 0.707106781f;
-      z11 = tmp7 + z3;
-      z13 = tmp7 - z3;
-      p[i+40] = z13 + z2;
-      p[i+24] = z13 - z2;
-      p[i+8]  = z11 + z4;
-      p[i+56] = z11 - z4;
-      p[i] = d0;  p[i+16] = d2;  p[i+32] = d4;  p[i+48] = d6;
-   }
-}
-
 static void stbiw__jpg_calcBits(int val, unsigned short bits[2]) {
    int tmp1 = val < 0 ? -val : val;
    val = val < 0 ? val-1 : val;
-#if defined(__GNUC__) || defined(__clang__)
-   bits[1] = (unsigned short)(32 - __builtin_clz((unsigned)tmp1));  // tmp1 is never 0 here
-#else
    bits[1] = 1;
    while(tmp1 >>= 1) {
       ++bits[1];
    }
-#endif
    bits[0] = val & ((1<<bits[1])-1);
 }
 
@@ -1385,24 +1331,25 @@ static int stbiw__jpg_processDU(stbi__write_context *s, int *bitBuf, int *bitCnt
    int dataOff, i, j, n, diff, end0pos, x, y;
    int DU[64];
 
-   // libstb patch: 2-D DCT as "row DCTs, then column DCTs" exactly like before, but each
-   // pass runs through the 8-lane stbiw__jpg_dct_cols on a transposed copy of the block, and
-   // the quantize/zigzag step is branch-free over contiguous arrays so it vectorizes too.
-   {
-      float A[64], B[64], Q[64];
-      int Qi[64], k;
-      for(y = 0; y < 8; ++y)
-         for(x = 0; x < 8; ++x)
-            A[x*8+y] = CDU[y*du_stride+x];
-      stbiw__jpg_dct_cols(A);                   // A[u*8+y]: horizontal frequency u of row y
-      for(y = 0; y < 8; ++y)
-         for(x = 0; x < 8; ++x)
-            B[y*8+x] = A[x*8+y];
-      stbiw__jpg_dct_cols(B);                   // B[v*8+u]: vertical frequency v, horizontal u
-      // Quantize/descale/zigzag the coefficients
-      for(k = 0; k < 64; ++k) Q[k] = B[k]*fdtbl[k];
-      for(k = 0; k < 64; ++k) Qi[k] = (int)(Q[k] < 0 ? Q[k] - 0.5f : Q[k] + 0.5f);
-      for(k = 0; k < 64; ++k) DU[stbiw__jpg_ZigZag[k]] = Qi[k];
+   // DCT rows
+   for(dataOff=0, n=du_stride*8; dataOff<n; dataOff+=du_stride) {
+      stbiw__jpg_DCT(&CDU[dataOff], &CDU[dataOff+1], &CDU[dataOff+2], &CDU[dataOff+3], &CDU[dataOff+4], &CDU[dataOff+5], &CDU[dataOff+6], &CDU[dataOff+7]);
+   }
+   // DCT columns
+   for(dataOff=0; dataOff<8; ++dataOff) {
+      stbiw__jpg_DCT(&CDU[dataOff], &CDU[dataOff+du_stride], &CDU[dataOff+du_stride*2], &CDU[dataOff+du_stride*3], &CDU[dataOff+du_stride*4],
+                     &CDU[dataOff+du_stride*5], &CDU[dataOff+du_stride*6], &CDU[dataOff+du_stride*7]);
+   }
+   // Quantize/descale/zigzag the coefficients
+   for(y = 0, j=0; y < 8; ++y) {
+      for(x = 0; x < 8; ++x,++j) {
+         float v;
+         i = y*du_stride+x;
+         v = CDU[i]*fdtbl[j];
+         // DU[stbiw__jpg_ZigZag[j]] = (int)(v < 0 ? ceilf(v - 0.5f) : floorf(v + 0.5f));
+         // ceilf() and floorf() are C99, not C89, but I /think/ they're not needed here anyway?
+         DU[stbiw__jpg_ZigZag[j]] = (int)(v < 0 ? v - 0.5f : v + 0.5f);
+      }
    }
 
    // Encode DC

@@ -55,7 +55,7 @@ libstb.info("photo.png")                            # shortcut: ImageInfo.read(.
 ```
 
 **Encoding.** Every format has a pair of methods with its own settings, all
-defaulted: `to_png(compression=6)`, `to_jpg(quality=90)`, `to_bmp()`,
+defaulted: `to_png(compression=8)`, `to_jpg(quality=90)`, `to_bmp()`,
 `to_tga(rle=True)` return the file's bytes, and `write_png(path, ...)`,
 `write_jpg(path, ...)`, `write_bmp(path)`, `write_tga(path, ...)` do the same
 and write it (only after encoding succeeded, so a failure never leaves a
