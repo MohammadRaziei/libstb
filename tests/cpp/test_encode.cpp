@@ -1,6 +1,7 @@
 #include <atomic>
 #include <filesystem>
 #include <thread>
+#include <tuple>
 
 #include "test_common.hpp"
 
@@ -23,6 +24,58 @@ std::filesystem::path tmp(const char* name) { return std::filesystem::temp_direc
 UTEST(libstb_encode_tests, test_png_roundtrip_is_lossless_for_every_channel_count) {
     for (int c = 1; c <= 4; ++c) {
         const stb::image src = gradient(13, 7, c);
+        ASSERT_TRUE(same(src, roundtrip(src.to_png())));
+    }
+}
+
+namespace {
+
+// Deterministic pseudo-random bytes (an LCG), identical on every platform.
+stb::image content(int kind, int w, int h, int c) {
+    stb::image img(w, h, c);
+    std::uint32_t s = 12345u + static_cast<std::uint32_t>(kind);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            for (int k = 0; k < c; ++k) {
+                s = s * 1103515245u + 12345u;
+                const auto noise = static_cast<std::uint8_t>(s >> 16);
+                std::uint8_t v = 0;
+                switch (kind) {
+                    case 0: v = noise; break;                                           // incompressible: stored blocks
+                    case 1: v = 77; break;                                              // flat: long runs
+                    case 2: v = static_cast<std::uint8_t>(x * 3 + y * 2 + k * 40); break;  // smooth
+                    case 3: v = static_cast<std::uint8_t>(((x / 16 + y / 16) & 3) * 60); break;  // tiles
+                    default: v = static_cast<std::uint8_t>(128 + (x + y) / 8 + (noise & 7)); break;  // photo-like
+                }
+                img(x, y, k) = v;
+            }
+    return img;
+}
+
+}  // namespace
+
+// Exact, not approximate: PNG is lossless. Every kind of content exercises a different deflate
+// path (stored / fixed / dynamic Huffman blocks, long runs, long distances).
+UTEST(libstb_encode_tests, test_png_roundtrip_is_exact_for_every_kind_of_content) {
+    for (int kind = 0; kind < 5; ++kind)
+        for (int c = 1; c <= 4; ++c)
+            for (int level : {1, 5, 9}) {
+                const stb::image src = content(kind, 97, 61, c);
+                ASSERT_TRUE(same(src, roundtrip(src.to_png(level))));
+            }
+}
+
+// Millions of tokens: well past one 64K-token deflate block.
+UTEST(libstb_encode_tests, test_png_roundtrip_is_exact_across_many_deflate_blocks) {
+    for (int kind : {0, 3, 4}) {
+        const stb::image src = content(kind, 900, 700, 3);
+        ASSERT_TRUE(same(src, roundtrip(src.to_png())));
+    }
+}
+
+UTEST(libstb_encode_tests, test_png_roundtrip_is_exact_for_degenerate_sizes) {
+    for (auto [w, h, c] : {std::tuple<int, int, int>{1, 1, 1}, {1, 2, 3}, {2, 1, 4}, {3000, 1, 3}, {1, 3000, 3}}) {
+        const stb::image src = content(4, w, h, c);
         ASSERT_TRUE(same(src, roundtrip(src.to_png())));
     }
 }
