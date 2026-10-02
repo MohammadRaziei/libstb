@@ -147,6 +147,18 @@ LICENSE
   See end of file for license information.
 
 */
+/* LIBSTB LOCAL PATCHES: this vendored copy differs from upstream v1.16 in two places.
+   1. The built-in zlib compressor (stbi_zlib_compress, used for PNG) was rewritten:
+      4-byte hash-chain LZ77 with lazy matching, dynamic Huffman blocks (chosen per
+      block against fixed / stored), and an inline CRC-free bit writer. Its output is
+      an ordinary zlib stream and is typically within ~1% of zlib level 6 in size.
+      The STBIW_ZLIB_COMPRESS hook and the stbi_zlib_compress signature are unchanged.
+   2. The JPEG encoder: the DCT, the quantization/zigzag step and the bit-count helper
+      were rewritten so compilers can vectorize them (stbiw__jpg_dct_cols,
+      stbiw__jpg_calcBits and one block in stbiw__jpg_processDU, each marked
+      "libstb patch"). The bytes it writes are identical to upstream's.
+   See src/third_party/README.md. */
+
 
 #ifndef INCLUDE_STB_IMAGE_WRITE_H
 #define INCLUDE_STB_IMAGE_WRITE_H
@@ -810,40 +822,68 @@ STBIWDEF int stbi_write_hdr(char const *filename, int x, int y, int comp, const 
 //
 
 #ifndef STBIW_ZLIB_COMPRESS
-// stretchy buffer; stbiw__sbpush() == vector<>::push_back() -- stbiw__sbcount() == vector<>::size()
-#define stbiw__sbraw(a) ((int *) (void *) (a) - 2)
-#define stbiw__sbm(a)   stbiw__sbraw(a)[0]
-#define stbiw__sbn(a)   stbiw__sbraw(a)[1]
 
-#define stbiw__sbneedgrow(a,n)  ((a)==0 || stbiw__sbn(a)+n >= stbiw__sbm(a))
-#define stbiw__sbmaybegrow(a,n) (stbiw__sbneedgrow(a,(n)) ? stbiw__sbgrow(a,n) : 0)
-#define stbiw__sbgrow(a,n)  stbiw__sbgrowf((void **) &(a), (n), sizeof(*(a)))
+// ---------------------------------------------------------------------------
+// Built-in zlib compressor.
+//
+//   * LZ77 with a 3-byte hash chain (fixed arrays, no per-bucket allocation)
+//     and zlib-style lazy matching; `quality` sets how hard it searches.
+//   * Dynamic Huffman blocks: every block gets its own length-limited
+//     canonical code, and the cheapest of dynamic / fixed / stored is written.
+//
+// The output is a plain zlib stream that any inflater reads.
 
-#define stbiw__sbpush(a, v)      (stbiw__sbmaybegrow(a,1), (a)[stbiw__sbn(a)++] = (v))
-#define stbiw__sbcount(a)        ((a) ? stbiw__sbn(a) : 0)
-#define stbiw__sbfree(a)         ((a) ? STBIW_FREE(stbiw__sbraw(a)),0 : 0)
+typedef unsigned long long stbiw__zu64;
 
-static void *stbiw__sbgrowf(void **arr, int increment, int itemsize)
+#define stbiw__ZWINDOW    32768
+#define stbiw__ZHBITS     16
+#define stbiw__ZHSIZE     (1 << stbiw__ZHBITS)
+#define stbiw__ZBLOCKTOK  65536   // tokens per deflate block; the Huffman codes are rebuilt for each block
+
+static const unsigned short stbiw__zlenbase[29]   = { 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258 };
+static const unsigned char  stbiw__zlenextra[29]  = { 0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0 };
+static const unsigned short stbiw__zdistbase[30]  = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577 };
+static const unsigned char  stbiw__zdistextra[30] = { 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13 };
+static const unsigned char  stbiw__zclorder[19]   = { 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15 };
+
+typedef struct
 {
-   int m = *arr ? 2*stbiw__sbm(*arr)+increment : increment+1;
-   void *p = STBIW_REALLOC_SIZED(*arr ? stbiw__sbraw(*arr) : 0, *arr ? (stbiw__sbm(*arr)*itemsize + sizeof(int)*2) : 0, itemsize * m + sizeof(int)*2);
-   STBIW_ASSERT(p);
-   if (p) {
-      if (!*arr) ((int *) p)[1] = 0;
-      *arr = (void *) ((int *) p + 2);
-      stbiw__sbm(*arr) = m;
-   }
-   return *arr;
-}
+   unsigned char *out;
+   int n;                 // bytes written; capacity is reserved up front (see stbi_zlib_compress)
+   stbiw__zu64 bits;
+   int nbits;
 
-static unsigned char *stbiw__zlib_flushf(unsigned char *data, unsigned int *bitbuffer, int *bitcount)
+   const unsigned char *data;
+   unsigned int *tok;     // literal: the byte (< 256); match: (length << 16) | distance
+   int ntok;
+   int raw_start, raw_len;       // input bytes covered by the tokens of the current block
+   int extra_bits;               // length / distance extra bits of the current block
+   unsigned int lfreq[288], dfreq[32];
+
+   unsigned short len_sym[259];  // match length -> literal/length symbol (257..285)
+   unsigned char dtab[512];      // distance -> distance symbol (see stbiw__zdsym)
+   unsigned char  fl[288], fdl[30];   // fixed Huffman code lengths
+   unsigned short fc[288], fdc[30];   // fixed Huffman codes (bit-reversed for output)
+} stbiw__zctx;
+
+#define stbiw__zput(z, v, k) do { \
+      (z)->bits |= (stbiw__zu64)(v) << (z)->nbits; (z)->nbits += (k); \
+      if ((z)->nbits >= 32) { \
+         stbiw__zu64 b_ = (z)->bits; unsigned char *o_ = (z)->out + (z)->n; \
+         o_[0] = (unsigned char) b_; o_[1] = (unsigned char) (b_ >> 8); \
+         o_[2] = (unsigned char) (b_ >> 16); o_[3] = (unsigned char) (b_ >> 24); \
+         (z)->n += 4; (z)->bits >>= 32; (z)->nbits -= 32; } \
+   } while (0)
+
+static void stbiw__zalign(stbiw__zctx *z)
 {
-   while (*bitcount >= 8) {
-      stbiw__sbpush(data, STBIW_UCHAR(*bitbuffer));
-      *bitbuffer >>= 8;
-      *bitcount -= 8;
+   while (z->nbits > 0) {
+      z->out[z->n++] = (unsigned char) z->bits;
+      z->bits >>= 8;
+      z->nbits -= 8;
    }
-   return data;
+   z->bits = 0;
+   z->nbits = 0;
 }
 
 static int stbiw__zlib_bitrev(int code, int codebits)
@@ -856,39 +896,261 @@ static int stbiw__zlib_bitrev(int code, int codebits)
    return res;
 }
 
-static unsigned int stbiw__zlib_countm(unsigned char *a, unsigned char *b, int limit)
+static int stbiw__zcmp_u32(const void *a, const void *b)
+{
+   unsigned int x = *(const unsigned int *) a, y = *(const unsigned int *) b;
+   return x < y ? -1 : x > y ? 1 : 0;
+}
+
+// Code lengths (all <= maxlen) for freq[0..n-1]. At least two symbols must have a
+// non-zero frequency, and n <= 288. Huffman by the two-queue method; if the tree
+// is too deep the frequencies are flattened and it is rebuilt (slightly
+// suboptimal, always valid).
+static void stbiw__zhuff_lengths(const unsigned int *freq, int n, int maxlen, unsigned char *len)
+{
+   unsigned int work[288], key[288], w[600];
+   int parent[600], depth[600];
+   int i, k, m, li, ni, nn, maxd;
+   for (i=0; i < n; ++i) work[i] = freq[i];
+   for (;;) {
+      m = 0;
+      for (i=0; i < n; ++i) if (work[i]) key[m++] = (work[i] << 9) | (unsigned int) i;
+      qsort(key, (size_t) m, sizeof(key[0]), stbiw__zcmp_u32);
+      for (i=0; i < m; ++i) w[i] = key[i] >> 9;
+      li = 0; ni = m; nn = m;
+      for (k=0; k < m-1; ++k) {
+         int a, b;
+         if (li < m && (ni >= nn || w[li] <= w[ni])) a = li++; else a = ni++;
+         if (li < m && (ni >= nn || w[li] <= w[ni])) b = li++; else b = ni++;
+         w[nn] = w[a] + w[b];
+         parent[a] = parent[b] = nn;
+         ++nn;
+      }
+      depth[nn-1] = 0;
+      maxd = 0;
+      for (i=nn-2; i >= 0; --i) {
+         depth[i] = depth[parent[i]] + 1;
+         if (i < m && depth[i] > maxd) maxd = depth[i];
+      }
+      if (maxd <= maxlen) break;
+      for (i=0; i < n; ++i) if (work[i]) work[i] = (work[i] + 1) >> 1;
+   }
+   for (i=0; i < n; ++i) len[i] = 0;
+   for (i=0; i < m; ++i) len[key[i] & 511] = (unsigned char) depth[i];
+}
+
+// Canonical codes for the given lengths, bit-reversed so they can be written LSB first.
+static void stbiw__zhuff_codes(const unsigned char *len, int n, unsigned short *code)
+{
+   int count[16], next[16], i, c = 0;
+   for (i=0; i < 16; ++i) count[i] = 0;
+   for (i=0; i < n; ++i) count[len[i]]++;
+   count[0] = 0;
+   next[0] = 0;
+   for (i=1; i < 16; ++i) { c = (c + count[i-1]) << 1; next[i] = c; }
+   for (i=0; i < n; ++i)
+      code[i] = len[i] ? (unsigned short) stbiw__zlib_bitrev(next[len[i]]++, len[i]) : 0;
+}
+
+#define stbiw__zdsym(c, d) ((d) <= 256 ? (c)->dtab[(d)-1] : (c)->dtab[256 + (((d)-1) >> 7)])
+
+static void stbiw__zwrite_tokens(stbiw__zctx *c, const unsigned short *lc, const unsigned char *ll,
+                                 const unsigned short *dc, const unsigned char *dl)
 {
    int i;
-   for (i=0; i < limit && i < 258; ++i)
-      if (a[i] != b[i]) break;
-   return i;
+   for (i=0; i < c->ntok; ++i) {
+      unsigned int t = c->tok[i];
+      if (t < 256) {
+         stbiw__zput(c, lc[t], ll[t]);
+      } else {
+         int len = (int) (t >> 16), dist = (int) (t & 0xffff);
+         int ls = c->len_sym[len], ds = stbiw__zdsym(c, dist);
+         stbiw__zput(c, lc[ls], ll[ls]);
+         if (stbiw__zlenextra[ls-257]) stbiw__zput(c, len - stbiw__zlenbase[ls-257], stbiw__zlenextra[ls-257]);
+         stbiw__zput(c, dc[ds], dl[ds]);
+         if (stbiw__zdistextra[ds]) stbiw__zput(c, dist - stbiw__zdistbase[ds], stbiw__zdistextra[ds]);
+      }
+   }
+   stbiw__zput(c, lc[256], ll[256]);
 }
 
-static unsigned int stbiw__zhash(unsigned char *data)
+// Writes the tokens collected so far as one block (the cheapest of dynamic, fixed, stored).
+static void stbiw__zflush(stbiw__zctx *c, int final)
 {
-   stbiw_uint32 hash = data[0] + (data[1] << 8) + (data[2] << 16);
-   hash ^= hash << 3;
-   hash += hash >> 5;
-   hash ^= hash << 4;
-   hash += hash >> 17;
-   hash ^= hash << 25;
-   hash += hash >> 6;
-   return hash;
+   unsigned int lf[288], df[32], clf[19];
+   unsigned char ll[288], dl[32], cl[19], rle[320], rlx[320], seq[320];
+   unsigned short lc[288], dc[32], cc[19];
+   int i, used, nlit, ndist, ncl, nrle, total, run, v, r, nsub;
+   unsigned int dyn, fix, sto;
+
+   c->lfreq[256] = 1;   // end of block
+
+   for (i=0; i < 286; ++i) lf[i] = c->lfreq[i];
+   for (i=0; i < 30; ++i) df[i] = c->dfreq[i];
+   for (used=0, i=0; i < 286; ++i) used += lf[i] != 0;
+   for (i=0; i < 286 && used < 2; ++i) if (!lf[i]) { lf[i] = 1; ++used; }
+   for (used=0, i=0; i < 30; ++i) used += df[i] != 0;
+   for (i=0; i < 30 && used < 2; ++i) if (!df[i]) { df[i] = 1; ++used; }
+   stbiw__zhuff_lengths(lf, 286, 15, ll);
+   stbiw__zhuff_lengths(df, 30, 15, dl);
+   stbiw__zhuff_codes(ll, 286, lc);
+   stbiw__zhuff_codes(dl, 30, dc);
+
+   nlit = 286; while (nlit > 257 && ll[nlit-1] == 0) --nlit;
+   ndist = 30; while (ndist > 1 && dl[ndist-1] == 0) --ndist;
+
+   // run-length code the code lengths (16: repeat previous, 17/18: runs of zeros)
+   total = nlit + ndist;
+   for (i=0; i < nlit; ++i) seq[i] = ll[i];
+   for (i=0; i < ndist; ++i) seq[nlit+i] = dl[i];
+   nrle = 0;
+   for (i=0; i < total; ) {
+      v = seq[i];
+      run = 1;
+      while (i+run < total && seq[i+run] == v) ++run;
+      if (v == 0 && run >= 3) {
+         i += run;
+         while (run > 0) {
+            if (run >= 11) { r = run > 138 ? 138 : run; rle[nrle] = 18; rlx[nrle++] = (unsigned char) (r-11); run -= r; }
+            else if (run >= 3) { rle[nrle] = 17; rlx[nrle++] = (unsigned char) (run-3); run = 0; }
+            else { while (run--) { rle[nrle] = 0; rlx[nrle++] = 0; } run = 0; }
+         }
+      } else {
+         rle[nrle] = (unsigned char) v; rlx[nrle++] = 0;
+         ++i; --run;
+         while (run >= 3) { r = run > 6 ? 6 : run; rle[nrle] = 16; rlx[nrle++] = (unsigned char) (r-3); run -= r; i += r; }
+         while (run > 0) { rle[nrle] = (unsigned char) v; rlx[nrle++] = 0; --run; ++i; }
+      }
+   }
+   for (i=0; i < 19; ++i) clf[i] = 0;
+   for (i=0; i < nrle; ++i) clf[rle[i]]++;
+   for (used=0, i=0; i < 19; ++i) used += clf[i] != 0;
+   for (i=0; i < 19 && used < 2; ++i) if (!clf[i]) { clf[i] = 1; ++used; }
+   stbiw__zhuff_lengths(clf, 19, 7, cl);
+   stbiw__zhuff_codes(cl, 19, cc);
+   ncl = 19; while (ncl > 4 && cl[stbiw__zclorder[ncl-1]] == 0) --ncl;
+
+   // what would each kind of block cost, in bits?
+   dyn = 3 + 14 + 3 * (unsigned int) ncl + (unsigned int) c->extra_bits;
+   for (i=0; i < nrle; ++i) dyn += cl[rle[i]] + (rle[i] == 16 ? 2 : rle[i] == 17 ? 3 : rle[i] == 18 ? 7 : 0);
+   for (i=0; i < 286; ++i) dyn += c->lfreq[i] * ll[i];
+   for (i=0; i < 30; ++i) dyn += c->dfreq[i] * dl[i];
+   fix = 3 + (unsigned int) c->extra_bits;
+   for (i=0; i < 286; ++i) fix += c->lfreq[i] * c->fl[i];
+   for (i=0; i < 30; ++i) fix += c->dfreq[i] * 5;
+   nsub = c->raw_len ? (c->raw_len + 65534) / 65535 : 1;
+   sto = (unsigned int) c->raw_len * 8 + (unsigned int) nsub * 48;
+
+   if (sto <= dyn && sto <= fix) {
+      const unsigned char *p = c->data + c->raw_start;
+      int left = c->raw_len;
+      for (i=0; i < nsub; ++i) {
+         int blk = left > 65535 ? 65535 : left;
+         stbiw__zput(c, final && i == nsub-1, 1);
+         stbiw__zput(c, 0, 2);
+         stbiw__zalign(c);
+         c->out[c->n++] = (unsigned char) blk;        c->out[c->n++] = (unsigned char) (blk >> 8);
+         c->out[c->n++] = (unsigned char) ~blk;       c->out[c->n++] = (unsigned char) (~blk >> 8);
+         memcpy(c->out + c->n, p, (size_t) blk);
+         c->n += blk; p += blk; left -= blk;
+      }
+   } else if (fix <= dyn) {
+      stbiw__zput(c, final, 1);
+      stbiw__zput(c, 1, 2);
+      stbiw__zwrite_tokens(c, c->fc, c->fl, c->fdc, c->fdl);
+   } else {
+      stbiw__zput(c, final, 1);
+      stbiw__zput(c, 2, 2);
+      stbiw__zput(c, nlit - 257, 5);
+      stbiw__zput(c, ndist - 1, 5);
+      stbiw__zput(c, ncl - 4, 4);
+      for (i=0; i < ncl; ++i) stbiw__zput(c, cl[stbiw__zclorder[i]], 3);
+      for (i=0; i < nrle; ++i) {
+         stbiw__zput(c, cc[rle[i]], cl[rle[i]]);
+         if (rle[i] == 16) stbiw__zput(c, rlx[i], 2);
+         else if (rle[i] == 17) stbiw__zput(c, rlx[i], 3);
+         else if (rle[i] == 18) stbiw__zput(c, rlx[i], 7);
+      }
+      stbiw__zwrite_tokens(c, lc, ll, dc, dl);
+   }
+
+   c->raw_start += c->raw_len;
+   c->raw_len = 0;
+   c->ntok = 0;
+   c->extra_bits = 0;
+   memset(c->lfreq, 0, sizeof(c->lfreq));
+   memset(c->dfreq, 0, sizeof(c->dfreq));
 }
 
-#define stbiw__zlib_flush() (out = stbiw__zlib_flushf(out, &bitbuf, &bitcount))
-#define stbiw__zlib_add(code,codebits) \
-      (bitbuf |= (code) << bitcount, bitcount += (codebits), stbiw__zlib_flush())
-#define stbiw__zlib_huffa(b,c)  stbiw__zlib_add(stbiw__zlib_bitrev(b,c),c)
-// default huffman tables
-#define stbiw__zlib_huff1(n)  stbiw__zlib_huffa(0x30 + (n), 8)
-#define stbiw__zlib_huff2(n)  stbiw__zlib_huffa(0x190 + (n)-144, 9)
-#define stbiw__zlib_huff3(n)  stbiw__zlib_huffa(0 + (n)-256,7)
-#define stbiw__zlib_huff4(n)  stbiw__zlib_huffa(0xc0 + (n)-280,8)
-#define stbiw__zlib_huff(n)  ((n) <= 143 ? stbiw__zlib_huff1(n) : (n) <= 255 ? stbiw__zlib_huff2(n) : (n) <= 279 ? stbiw__zlib_huff3(n) : stbiw__zlib_huff4(n))
-#define stbiw__zlib_huffb(n) ((n) <= 143 ? stbiw__zlib_huff1(n) : stbiw__zlib_huff2(n))
+static void stbiw__zadd_lit(stbiw__zctx *c, int b)
+{
+   c->tok[c->ntok++] = (unsigned int) b;
+   c->lfreq[b]++;
+   c->raw_len++;
+   if (c->ntok >= stbiw__ZBLOCKTOK) stbiw__zflush(c, 0);
+}
 
-#define stbiw__ZHASH   16384
+static void stbiw__zadd_match(stbiw__zctx *c, int len, int dist)
+{
+   int ls = c->len_sym[len], ds = stbiw__zdsym(c, dist);
+   c->tok[c->ntok++] = ((unsigned int) len << 16) | (unsigned int) dist;
+   c->lfreq[ls]++;
+   c->dfreq[ds]++;
+   c->extra_bits += stbiw__zlenextra[ls-257] + stbiw__zdistextra[ds];
+   c->raw_len += len;
+   if (c->ntok >= stbiw__ZBLOCKTOK) stbiw__zflush(c, 0);
+}
+
+static unsigned int stbiw__zload32(const unsigned char *p)
+{
+   unsigned int v;
+   memcpy(&v, p, 4);
+   return v;
+}
+
+static int stbiw__zmatchlen(const unsigned char *a, const unsigned char *b, int maxlen)
+{
+   int l = 0;
+   while (l + 8 <= maxlen) {
+      stbiw__zu64 x, y;
+      memcpy(&x, a+l, 8); memcpy(&y, b+l, 8);
+      if (x != y) break;
+      l += 8;
+   }
+   while (l < maxlen && a[l] == b[l]) ++l;
+   return l;
+}
+
+#define stbiw__zhash4(p) (stbiw__zload32(p) * 0x9E3779B1u >> (32 - stbiw__ZHBITS))
+
+// Longest match for d[pos..] that is longer than `best`; *dist is set when one is found.
+static int stbiw__zfind(const unsigned char *d, int pos, int n, const int *head, const int *prev,
+                        int best, int chain, int nice, int *dist)
+{
+   int maxlen = n - pos, cand;
+   const unsigned char *b = d + pos;
+   if (maxlen > 258) maxlen = 258;
+   if (nice > maxlen) nice = maxlen;
+   if (best >= maxlen) return best;
+   cand = head[stbiw__zhash4(b)];
+   while (cand >= 0 && pos - cand <= stbiw__ZWINDOW && chain-- > 0) {
+      const unsigned char *a = d + cand;
+      if (a[best] == b[best] && stbiw__zload32(a) == stbiw__zload32(b)) {
+         int l = stbiw__zmatchlen(a, b, maxlen);
+         if (l > best) {
+            best = l;
+            *dist = pos - cand;
+            if (l >= nice) break;
+         }
+      }
+      {
+         int next = prev[cand & (stbiw__ZWINDOW-1)];
+         if (next >= cand) break;
+         cand = next;
+      }
+   }
+   return best;
+}
 
 #endif // STBIW_ZLIB_COMPRESS
 
@@ -898,108 +1160,100 @@ STBIWDEF unsigned char * stbi_zlib_compress(unsigned char *data, int data_len, i
    // user provided a zlib compress implementation, use that
    return STBIW_ZLIB_COMPRESS(data, data_len, out_len, quality);
 #else // use builtin
-   static unsigned short lengthc[] = { 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258, 259 };
-   static unsigned char  lengtheb[]= { 0,0,0,0,0,0,0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4,  4,  5,  5,  5,  5,  0 };
-   static unsigned short distc[]   = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577, 32768 };
-   static unsigned char  disteb[]  = { 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13 };
-   unsigned int bitbuf=0;
-   int i,j, bitcount=0;
-   unsigned char *out = NULL;
-   unsigned char ***hash_table = (unsigned char***) STBIW_MALLOC(stbiw__ZHASH * sizeof(unsigned char**));
-   if (hash_table == NULL)
+   // search effort by quality: { good length, max lazy length (0 = greedy), nice length, max chain }
+   static const unsigned short effort[11][4] = {
+      {4,0,8,4}, {4,0,8,4}, {4,0,16,8}, {4,0,32,32}, {4,4,16,16}, {8,16,32,32},
+      {8,16,64,64}, {8,16,128,128}, {8,32,128,256}, {32,128,258,1024}, {32,258,258,4096}
+   };
+   stbiw__zctx *c;
+   int *head, *prev;
+   int i, j, pos, cap, good, lazy, nice, maxchain;
+   int pend_len = 0, pend_dist = 0, pend_lit = 0;
+
+   if (quality < 0) quality = 0;
+   if (quality > 10) quality = 10;
+   good = effort[quality][0]; lazy = effort[quality][1]; nice = effort[quality][2]; maxchain = effort[quality][3];
+
+   c = (stbiw__zctx *) STBIW_MALLOC(sizeof(*c));
+   head = (int *) STBIW_MALLOC(2 * stbiw__ZHSIZE * sizeof(int));
+   // worst case: every block ends up stored (5 bytes of header per 64K) plus the zlib wrapper
+   cap = data_len + data_len / 4096 + 1024;
+   if (!c || !head || !(c->tok = (unsigned int *) STBIW_MALLOC(stbiw__ZBLOCKTOK * sizeof(unsigned int)))
+       || !(c->out = (unsigned char *) STBIW_MALLOC((size_t) cap))) {
+      if (c) { STBIW_FREE(c->tok); STBIW_FREE(c); }
+      STBIW_FREE(head);
       return NULL;
-   if (quality < 5) quality = 5;
+   }
+   prev = head + stbiw__ZHSIZE;
+   memset(head, 0xff, stbiw__ZHSIZE * sizeof(int));   // -1: empty
 
-   stbiw__sbpush(out, 0x78);   // DEFLATE 32K window
-   stbiw__sbpush(out, 0x5e);   // FLEVEL = 1
-   stbiw__zlib_add(1,1);  // BFINAL = 1
-   stbiw__zlib_add(1,2);  // BTYPE = 1 -- fixed huffman
+   c->data = data;
+   c->n = 0; c->bits = 0; c->nbits = 0;
+   c->ntok = 0; c->raw_start = 0; c->raw_len = 0; c->extra_bits = 0;
+   memset(c->lfreq, 0, sizeof(c->lfreq));
+   memset(c->dfreq, 0, sizeof(c->dfreq));
 
-   for (i=0; i < stbiw__ZHASH; ++i)
-      hash_table[i] = NULL;
+   // lookup tables: length -> symbol, distance -> symbol, fixed Huffman code
+   for (i=0; i < 3; ++i) c->len_sym[i] = 257;   // never used: lengths start at 3
+   for (j=0; j < 29; ++j) {
+      int hi = j < 28 ? stbiw__zlenbase[j+1] - 1 : 258;
+      for (i=stbiw__zlenbase[j]; i <= hi; ++i) c->len_sym[i] = (unsigned short) (257 + j);
+   }
+   for (j=0; j < 30; ++j) {
+      int lo = stbiw__zdistbase[j] - 1, hi = lo + (1 << stbiw__zdistextra[j]) - 1;
+      if (hi < 256) for (i=lo; i <= hi; ++i) c->dtab[i] = (unsigned char) j;
+      else for (i=lo >> 7; i <= hi >> 7; ++i) c->dtab[256+i] = (unsigned char) j;
+      c->fdl[j] = 5;
+      c->fdc[j] = (unsigned short) stbiw__zlib_bitrev(j, 5);
+   }
+   for (i=0; i < 288; ++i) c->fl[i] = (unsigned char) (i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8);
+   stbiw__zhuff_codes(c->fl, 288, c->fc);
 
-   i=0;
-   while (i < data_len-3) {
-      // hash next 3 bytes of data to be compressed
-      int h = stbiw__zhash(data+i)&(stbiw__ZHASH-1), best=3;
-      unsigned char *bestloc = 0;
-      unsigned char **hlist = hash_table[h];
-      int n = stbiw__sbcount(hlist);
-      for (j=0; j < n; ++j) {
-         if (hlist[j]-data > i-32768) { // if entry lies within window
-            int d = stbiw__zlib_countm(hlist[j], data+i, data_len-i);
-            if (d >= best) { best=d; bestloc=hlist[j]; }
+   c->out[c->n++] = 0x78;   // zlib header: deflate, 32K window
+   c->out[c->n++] = 0x5e;
+
+   pos = 0;
+   while (pos < data_len) {
+      int len = 0, dist = 0, have = data_len - pos >= 4;
+      if (have && pend_len < lazy + (lazy == 0)) {
+         int floor = pend_len > 3 ? pend_len : 3;
+         len = stbiw__zfind(data, pos, data_len, head, prev, floor, pend_len >= good ? maxchain >> 2 : maxchain, nice, &dist);
+         if (len <= floor) len = 0;
+      }
+      if (lazy == 0) {
+         // greedy
+         if (len >= 4) {
+            stbiw__zadd_match(c, len, dist);
+            for (i=0; i < len; ++i, ++pos)
+               if (data_len - pos >= 4) { int h = (int) stbiw__zhash4(data+pos); prev[pos & (stbiw__ZWINDOW-1)] = head[h]; head[h] = pos; }
+         } else {
+            stbiw__zadd_lit(c, data[pos]);
+            if (have) { int h = (int) stbiw__zhash4(data+pos); prev[pos & (stbiw__ZWINDOW-1)] = head[h]; head[h] = pos; }
+            ++pos;
          }
+         continue;
       }
-      // when hash table entry is too long, delete half the entries
-      if (hash_table[h] && stbiw__sbn(hash_table[h]) == 2*quality) {
-         STBIW_MEMMOVE(hash_table[h], hash_table[h]+quality, sizeof(hash_table[h][0])*quality);
-         stbiw__sbn(hash_table[h]) = quality;
-      }
-      stbiw__sbpush(hash_table[h],data+i);
-
-      if (bestloc) {
-         // "lazy matching" - check match at *next* byte, and if it's better, do cur byte as literal
-         h = stbiw__zhash(data+i+1)&(stbiw__ZHASH-1);
-         hlist = hash_table[h];
-         n = stbiw__sbcount(hlist);
-         for (j=0; j < n; ++j) {
-            if (hlist[j]-data > i-32767) {
-               int e = stbiw__zlib_countm(hlist[j], data+i+1, data_len-i-1);
-               if (e > best) { // if next match is better, bail on current match
-                  bestloc = NULL;
-                  break;
-               }
-            }
-         }
-      }
-
-      if (bestloc) {
-         int d = (int) (data+i - bestloc); // distance back
-         STBIW_ASSERT(d <= 32767 && best <= 258);
-         for (j=0; best > lengthc[j+1]-1; ++j);
-         stbiw__zlib_huff(j+257);
-         if (lengtheb[j]) stbiw__zlib_add(best - lengthc[j], lengtheb[j]);
-         for (j=0; d > distc[j+1]-1; ++j);
-         stbiw__zlib_add(stbiw__zlib_bitrev(j,5),5);
-         if (disteb[j]) stbiw__zlib_add(d - distc[j], disteb[j]);
-         i += best;
+      if (have) { int h = (int) stbiw__zhash4(data+pos); prev[pos & (stbiw__ZWINDOW-1)] = head[h]; head[h] = pos; }
+      if (pend_len >= 4 && len <= pend_len) {
+         // the match found one byte ago wins
+         int end = pos - 1 + pend_len;
+         stbiw__zadd_match(c, pend_len, pend_dist);
+         for (i=pos+1; i < end; ++i)
+            if (data_len - i >= 4) { int h = (int) stbiw__zhash4(data+i); prev[i & (stbiw__ZWINDOW-1)] = head[h]; head[h] = i; }
+         pos = end;
+         pend_len = 0; pend_lit = 0;
       } else {
-         stbiw__zlib_huffb(data[i]);
-         ++i;
+         if (pend_lit) stbiw__zadd_lit(c, data[pos-1]);
+         pend_len = len; pend_dist = dist; pend_lit = 1;
+         ++pos;
       }
    }
-   // write out final bytes
-   for (;i < data_len; ++i)
-      stbiw__zlib_huffb(data[i]);
-   stbiw__zlib_huff(256); // end of block
-   // pad with 0 bits to byte boundary
-   while (bitcount)
-      stbiw__zlib_add(0,1);
-
-   for (i=0; i < stbiw__ZHASH; ++i)
-      (void) stbiw__sbfree(hash_table[i]);
-   STBIW_FREE(hash_table);
-
-   // store uncompressed instead if compression was worse
-   if (stbiw__sbn(out) > data_len + 2 + ((data_len+32766)/32767)*5) {
-      stbiw__sbn(out) = 2;  // truncate to DEFLATE 32K window and FLEVEL = 1
-      for (j = 0; j < data_len;) {
-         int blocklen = data_len - j;
-         if (blocklen > 32767) blocklen = 32767;
-         stbiw__sbpush(out, data_len - j == blocklen); // BFINAL = ?, BTYPE = 0 -- no compression
-         stbiw__sbpush(out, STBIW_UCHAR(blocklen)); // LEN
-         stbiw__sbpush(out, STBIW_UCHAR(blocklen >> 8));
-         stbiw__sbpush(out, STBIW_UCHAR(~blocklen)); // NLEN
-         stbiw__sbpush(out, STBIW_UCHAR(~blocklen >> 8));
-         memcpy(out+stbiw__sbn(out), data+j, blocklen);
-         stbiw__sbn(out) += blocklen;
-         j += blocklen;
-      }
-   }
+   if (pend_lit) stbiw__zadd_lit(c, data[pos-1]);
+   stbiw__zflush(c, 1);
+   stbiw__zalign(c);
 
    {
-      // compute adler32 on input
+      // adler32 of the input, big endian
       unsigned int s1=1, s2=0;
       int blocklen = (int) (data_len % 5552);
       j=0;
@@ -1009,15 +1263,19 @@ STBIWDEF unsigned char * stbi_zlib_compress(unsigned char *data, int data_len, i
          j += blocklen;
          blocklen = 5552;
       }
-      stbiw__sbpush(out, STBIW_UCHAR(s2 >> 8));
-      stbiw__sbpush(out, STBIW_UCHAR(s2));
-      stbiw__sbpush(out, STBIW_UCHAR(s1 >> 8));
-      stbiw__sbpush(out, STBIW_UCHAR(s1));
+      c->out[c->n++] = STBIW_UCHAR(s2 >> 8);
+      c->out[c->n++] = STBIW_UCHAR(s2);
+      c->out[c->n++] = STBIW_UCHAR(s1 >> 8);
+      c->out[c->n++] = STBIW_UCHAR(s1);
    }
-   *out_len = stbiw__sbn(out);
-   // make returned pointer freeable
-   STBIW_MEMMOVE(stbiw__sbraw(out), out, *out_len);
-   return (unsigned char *) stbiw__sbraw(out);
+   {
+      unsigned char *result = c->out;
+      *out_len = c->n;
+      STBIW_FREE(c->tok);
+      STBIW_FREE(c);
+      STBIW_FREE(head);
+      return result;
+   }
 #endif // STBIW_ZLIB_COMPRESS
 }
 
@@ -1315,13 +1573,61 @@ static void stbiw__jpg_DCT(float *d0p, float *d1p, float *d2p, float *d3p, float
    *d0p = d0;  *d2p = d2;  *d4p = d4;  *d6p = d6;
 }
 
+// libstb patch: the same AAN DCT as stbiw__jpg_DCT (identical arithmetic, in the
+// same order, so the output bytes do not change), applied to 8 columns of a packed
+// 8x8 block at once. Lane i works on p[i], p[i+8], ... p[i+56]; the 8 iterations are
+// independent, so compilers turn the loop into SIMD (SSE2 / NEON) by themselves.
+static void stbiw__jpg_dct_cols(float *p) {
+   int i;
+   for(i = 0; i < 8; ++i) {
+      float d0 = p[i], d1 = p[i+8], d2 = p[i+16], d3 = p[i+24];
+      float d4 = p[i+32], d5 = p[i+40], d6 = p[i+48], d7 = p[i+56];
+      float z1, z2, z3, z4, z5, z11, z13;
+      float tmp0 = d0 + d7;
+      float tmp7 = d0 - d7;
+      float tmp1 = d1 + d6;
+      float tmp6 = d1 - d6;
+      float tmp2 = d2 + d5;
+      float tmp5 = d2 - d5;
+      float tmp3 = d3 + d4;
+      float tmp4 = d3 - d4;
+      float tmp10 = tmp0 + tmp3;
+      float tmp13 = tmp0 - tmp3;
+      float tmp11 = tmp1 + tmp2;
+      float tmp12 = tmp1 - tmp2;
+      d0 = tmp10 + tmp11;
+      d4 = tmp10 - tmp11;
+      z1 = (tmp12 + tmp13) * 0.707106781f;
+      d2 = tmp13 + z1;
+      d6 = tmp13 - z1;
+      tmp10 = tmp4 + tmp5;
+      tmp11 = tmp5 + tmp6;
+      tmp12 = tmp6 + tmp7;
+      z5 = (tmp10 - tmp12) * 0.382683433f;
+      z2 = tmp10 * 0.541196100f + z5;
+      z4 = tmp12 * 1.306562965f + z5;
+      z3 = tmp11 * 0.707106781f;
+      z11 = tmp7 + z3;
+      z13 = tmp7 - z3;
+      p[i+40] = z13 + z2;
+      p[i+24] = z13 - z2;
+      p[i+8]  = z11 + z4;
+      p[i+56] = z11 - z4;
+      p[i] = d0;  p[i+16] = d2;  p[i+32] = d4;  p[i+48] = d6;
+   }
+}
+
 static void stbiw__jpg_calcBits(int val, unsigned short bits[2]) {
    int tmp1 = val < 0 ? -val : val;
    val = val < 0 ? val-1 : val;
+#if defined(__GNUC__) || defined(__clang__)
+   bits[1] = (unsigned short)(32 - __builtin_clz((unsigned)tmp1));  // tmp1 is never 0 here
+#else
    bits[1] = 1;
    while(tmp1 >>= 1) {
       ++bits[1];
    }
+#endif
    bits[0] = val & ((1<<bits[1])-1);
 }
 
@@ -1331,25 +1637,24 @@ static int stbiw__jpg_processDU(stbi__write_context *s, int *bitBuf, int *bitCnt
    int dataOff, i, j, n, diff, end0pos, x, y;
    int DU[64];
 
-   // DCT rows
-   for(dataOff=0, n=du_stride*8; dataOff<n; dataOff+=du_stride) {
-      stbiw__jpg_DCT(&CDU[dataOff], &CDU[dataOff+1], &CDU[dataOff+2], &CDU[dataOff+3], &CDU[dataOff+4], &CDU[dataOff+5], &CDU[dataOff+6], &CDU[dataOff+7]);
-   }
-   // DCT columns
-   for(dataOff=0; dataOff<8; ++dataOff) {
-      stbiw__jpg_DCT(&CDU[dataOff], &CDU[dataOff+du_stride], &CDU[dataOff+du_stride*2], &CDU[dataOff+du_stride*3], &CDU[dataOff+du_stride*4],
-                     &CDU[dataOff+du_stride*5], &CDU[dataOff+du_stride*6], &CDU[dataOff+du_stride*7]);
-   }
-   // Quantize/descale/zigzag the coefficients
-   for(y = 0, j=0; y < 8; ++y) {
-      for(x = 0; x < 8; ++x,++j) {
-         float v;
-         i = y*du_stride+x;
-         v = CDU[i]*fdtbl[j];
-         // DU[stbiw__jpg_ZigZag[j]] = (int)(v < 0 ? ceilf(v - 0.5f) : floorf(v + 0.5f));
-         // ceilf() and floorf() are C99, not C89, but I /think/ they're not needed here anyway?
-         DU[stbiw__jpg_ZigZag[j]] = (int)(v < 0 ? v - 0.5f : v + 0.5f);
-      }
+   // libstb patch: 2-D DCT as "row DCTs, then column DCTs" exactly like before, but each
+   // pass runs through the 8-lane stbiw__jpg_dct_cols on a transposed copy of the block, and
+   // the quantize/zigzag step is branch-free over contiguous arrays so it vectorizes too.
+   {
+      float A[64], B[64], Q[64];
+      int Qi[64], k;
+      for(y = 0; y < 8; ++y)
+         for(x = 0; x < 8; ++x)
+            A[x*8+y] = CDU[y*du_stride+x];
+      stbiw__jpg_dct_cols(A);                   // A[u*8+y]: horizontal frequency u of row y
+      for(y = 0; y < 8; ++y)
+         for(x = 0; x < 8; ++x)
+            B[y*8+x] = A[x*8+y];
+      stbiw__jpg_dct_cols(B);                   // B[v*8+u]: vertical frequency v, horizontal u
+      // Quantize/descale/zigzag the coefficients
+      for(k = 0; k < 64; ++k) Q[k] = B[k]*fdtbl[k];
+      for(k = 0; k < 64; ++k) Qi[k] = (int)(Q[k] < 0 ? Q[k] - 0.5f : Q[k] + 0.5f);
+      for(k = 0; k < 64; ++k) DU[stbiw__jpg_ZigZag[k]] = Qi[k];
    }
 
    // Encode DC

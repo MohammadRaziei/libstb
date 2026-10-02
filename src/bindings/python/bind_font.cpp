@@ -1,3 +1,4 @@
+#include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -45,6 +46,12 @@ void bind_font(nb::module_& m) {
     using stb::font;
 
     nb::class_<font>(m, "Font", "A TrueType/OpenType font. Only load fonts you trust.")
+        // Path -> font without the file ever passing through a Python bytes object
+        // (that read plus the copy into the C++ buffer is what made open() slow).
+        .def_static(
+            "open",
+            [](const std::filesystem::path& path, int index) { return font::open(path, index); },
+            "path"_a, "index"_a = 0, nb::call_guard<nb::gil_scoped_release>())
         .def_static(
             "from_bytes",
             [](nb::bytes data, int index) {

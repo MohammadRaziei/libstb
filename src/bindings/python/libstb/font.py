@@ -6,6 +6,7 @@ on untrusted font files. Only load fonts you trust.
 
 from __future__ import annotations
 
+import os
 from typing import Dict, NamedTuple, Optional
 
 
@@ -104,6 +105,8 @@ class Font:
 
         Raises ValueError (bad index), DecodeError (not a font), OSError.
         """
+        if isinstance(source, (str, os.PathLike)):
+            return cls(_native.Font.open(source, index))
         return cls(_native.Font.from_bytes(_read(source), index))
 
     def metrics(self, pixel_height: float) -> FontMetrics:

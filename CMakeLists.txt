@@ -67,6 +67,12 @@ target_compile_options(libstb_core PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /EHsc>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
+# -fno-trapping-math: lets GCC/Clang vectorize float->int conversions in the JPEG encoder's
+# quantization (about 2x faster JPEG). It only means FP operations are not required to
+# raise hardware traps (nothing here enables or reads them); results are unchanged.
+target_compile_options(libstb_core PRIVATE
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-trapping-math>
+)
 apply_optimization_flags(libstb_core)
 
 # --- install (find_package(libstb) -> libstb::core) ---

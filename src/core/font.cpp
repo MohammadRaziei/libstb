@@ -10,6 +10,14 @@
 #include <unordered_set>
 #include <utility>
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#define STB_FONT_HAVE_MMAP 1
+#endif
+
 #include "file.hpp"
 #include "stb/utf8.hpp"
 
@@ -27,8 +35,54 @@ namespace stb {
 
 // ------------------------------------------------------------------ pimpl
 
+// The font file's bytes: either owned memory or a read-only mapping of the file.
+// stbtt_fontinfo points into this, so it is never moved after init.
+struct font_bytes {
+    std::vector<std::uint8_t> owned;
+    const std::uint8_t* ptr = nullptr;
+    std::size_t len = 0;
+#ifdef STB_FONT_HAVE_MMAP
+    void* map = nullptr;
+#endif
+
+    font_bytes() = default;
+    font_bytes(const font_bytes&) = delete;
+    font_bytes& operator=(const font_bytes&) = delete;
+    ~font_bytes() {
+#ifdef STB_FONT_HAVE_MMAP
+        if (map) ::munmap(map, len);
+#endif
+    }
+
+    void own(std::vector<std::uint8_t> v) {
+        owned = std::move(v);
+        ptr = owned.data();
+        len = owned.size();
+    }
+
+#ifdef STB_FONT_HAVE_MMAP
+    // Maps the file instead of reading it: opening a 750 KB font costs a few
+    // microseconds, and only the pages stb_truetype actually touches are paged in.
+    // Returns false (caller falls back to reading) on any problem, including the
+    // empty / over-2-GiB files read_file reports a proper error for.
+    bool map_file(const std::filesystem::path& path) {
+        const int fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0) return false;
+        struct stat st;
+        const bool ok = ::fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0 && st.st_size <= INT_MAX;
+        void* m = ok ? ::mmap(nullptr, static_cast<std::size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0) : MAP_FAILED;
+        ::close(fd);
+        if (m == MAP_FAILED) return false;
+        map = m;
+        ptr = static_cast<const std::uint8_t*>(m);
+        len = static_cast<std::size_t>(st.st_size);
+        return true;
+    }
+#endif
+};
+
 struct font::impl {
-    std::vector<std::uint8_t> data;  // stbtt_fontinfo points into this: never moved after init
+    font_bytes data;
     stbtt_fontinfo info{};
     int index = 0;
 
@@ -116,25 +170,44 @@ const atlas_glyph* atlas::find(char32_t codepoint) const noexcept {
 
 // ------------------------------------------------------------------- font
 
+namespace {
+
+void init_font(font::impl* p, int index) {
+    const int offset = stbtt_GetFontOffsetForIndex(p->data.ptr, index);
+    if (offset < 0) throw decode_error("no font at this index (not a TrueType/OpenType file?)");
+    if (!stbtt_InitFont(&p->info, p->data.ptr, offset))
+        throw decode_error("not a valid TrueType/OpenType font");
+    int asc = 0, desc = 0, gap = 0;
+    stbtt_GetFontVMetrics(&p->info, &asc, &desc, &gap);
+    if (asc - desc <= 0) throw decode_error("font has no usable vertical metrics");
+}
+
+}  // namespace
+
 font font::from_memory(std::vector<std::uint8_t> data, int index) {
     if (index < 0) throw std::invalid_argument("font index must be >= 0");
     if (data.empty()) throw decode_error("empty font data");
 
     auto p = std::make_shared<impl>();
-    p->data = std::move(data);
+    p->data.own(std::move(data));
     p->index = index;
-    const int offset = stbtt_GetFontOffsetForIndex(p->data.data(), index);
-    if (offset < 0) throw decode_error("no font at this index (not a TrueType/OpenType file?)");
-    if (!stbtt_InitFont(&p->info, p->data.data(), offset))
-        throw decode_error("not a valid TrueType/OpenType font");
-    int asc = 0, desc = 0, gap = 0;
-    stbtt_GetFontVMetrics(&p->info, &asc, &desc, &gap);
-    if (asc - desc <= 0) throw decode_error("font has no usable vertical metrics");
+    init_font(p.get(), index);
     return font(std::move(p));
 }
 
 font font::open(const std::filesystem::path& path, int index) {
-    return from_memory(detail::read_file(path), index);
+    if (index < 0) throw std::invalid_argument("font index must be >= 0");
+    auto p = std::make_shared<impl>();
+    p->index = index;
+#ifdef STB_FONT_HAVE_MMAP
+    if (!p->data.map_file(path))
+#endif
+    {
+        p->data.own(detail::read_file(path));  // throws io_error / limit_error with the right errno
+        if (p->data.len == 0) throw decode_error("empty font data");
+    }
+    init_font(p.get(), index);
+    return font(std::move(p));
 }
 
 font_metrics font::metrics(float px) const {
@@ -258,7 +331,7 @@ atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int 
     range.array_of_unicode_codepoints = ids.data();
     range.num_chars = int(ids.size());
     range.chardata_for_range = packed.data();
-    const int ok = stbtt_PackFontRanges(&spc, impl_->data.data(), impl_->index, &range, 1);
+    const int ok = stbtt_PackFontRanges(&spc, impl_->data.ptr, impl_->index, &range, 1);
     stbtt_PackEnd(&spc);
     if (!ok) throw limit_error("atlas too small for the requested glyphs");
 
