@@ -23,8 +23,6 @@ from PIL import Image as PILImage
 import libstb
 from libstb import Image, Resizer
 
-MODES = {1: "L", 2: "LA", 3: "RGB", 4: "RGBA"}
-
 
 def rmse(a, b):
     assert a.shape == b.shape, f"shape {a.shape} != {b.shape}"
@@ -57,7 +55,7 @@ def photo(c=3, w=131, h=97):
 
 
 def pil_bytes(arr, fmt, **kw):
-    im = PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr, MODES[arr.shape[2]])
+    im = PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
     buf = io.BytesIO()
     im.save(buf, fmt, **kw)
     return buf.getvalue()
@@ -207,8 +205,7 @@ PIL_FILTERS = {"linear": PILImage.BILINEAR, "cubic": PILImage.BICUBIC, "box": PI
 
 
 def pil_resize(arr, w, h, filt):
-    mode = MODES[arr.shape[2]]
-    im = PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr, mode)
+    im = PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
     out = np.asarray(im.resize((w, h), resample=PIL_FILTERS[filt]))
     return out[..., None] if out.ndim == 2 else out
 
