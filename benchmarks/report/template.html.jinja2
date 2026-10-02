@@ -201,6 +201,7 @@ h3.op-title:first-of-type { margin-top: 8px; }
 }
 .panel h4 { margin: 0 0 4px; font-size: 14px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
 .chart-box { position: relative; height: 320px; }
+.dir { font-weight: 400; color: var(--muted, #8b93a7); font-size: 0.85em; }
 .chart-box.tall { height: 420px; }
 .chart-pair { display: grid; grid-template-columns: 1fr; gap: 18px; }
 
@@ -337,7 +338,7 @@ section.major { padding-top: 56px; }
 
   {% if op.has_tp %}
   <div class="panel">
-    <h4>Throughput vs. image size (each dot is one corpus entry)</h4>
+    <h4>Throughput vs. image size <span class="dir">(higher is better)</span></h4>
     <div class="chart-box"><canvas id="chart-tp-{{ op.key }}"></canvas></div>
   </div>
   {% endif %}
@@ -346,13 +347,13 @@ section.major { padding-top: 56px; }
   <div class="chart-pair">
     {% if op.has_time %}
     <div class="panel">
-      <h4>Time vs. image size</h4>
+      <h4>Time vs. image size <span class="dir">(lower is better)</span></h4>
       <div class="chart-box"><canvas id="chart-time-trend-{{ op.key }}"></canvas></div>
     </div>
     {% endif %}
     {% if op.has_mem %}
     <div class="panel">
-      <h4>Extra peak memory vs. image size</h4>
+      <h4>Extra peak memory vs. image size <span class="dir">(lower is better)</span></h4>
       <div class="chart-box"><canvas id="chart-mem-trend-{{ op.key }}"></canvas></div>
     </div>
     {% endif %}
@@ -365,11 +366,11 @@ section.major { padding-top: 56px; }
       {% for entry in op.entries %}
       <div class="mini-panel">
         <div class="mini-label">{{ entry.label }}</div>
-        <div class="mini-subhead">time</div>
+        <div class="mini-subhead">time (lower is better)</div>
         <div class="mini-chart-box"><canvas id="{{ entry.id }}"></canvas></div>
         <div class="mini-values">{{ entry.values_text }}</div>
         {% if entry.mem_id %}
-        <div class="mini-subhead mini-mem-subhead">extra peak memory</div>
+        <div class="mini-subhead mini-mem-subhead">extra peak memory (lower is better)</div>
         <div class="mini-chart-box"><canvas id="{{ entry.mem_id }}"></canvas></div>
         <div class="mini-values">{{ entry.mem_text }}</div>
         {% endif %}
@@ -388,6 +389,10 @@ section.major { padding-top: 56px; }
     <a href="https://github.com/MohammadRaziei/pip-size" style="color:var(--accent)">pip-size</a>.
     Capability is not the same thing as size: a bigger package is usually doing far more, which is why the
     last column is here.</p>
+  <div class="panel">
+    <h4>Total download size <span class="dir">(lower is better)</span></h4>
+    <div class="chart-box"><canvas id="chart-install-size"></canvas></div>
+  </div>
   <table class="size-table">
     <thead><tr><th>Package</th><th class="num">Version</th><th class="num">Total</th><th class="num">Deps</th><th>What it is</th></tr></thead>
     <tbody>
@@ -434,7 +439,7 @@ section.major { padding-top: 56px; }
     cost per pixel stays constant; a falling line means it grows with the image.</p>
   {% for panel in scaling.panels %}
   <div class="panel">
-    <h4>{{ panel.title }}</h4>
+    <h4>{{ panel.title }} <span class="dir">(throughput, higher is better)</span></h4>
     <div class="chart-box"><canvas id="{{ panel.id }}"></canvas></div>
   </div>
   {% endfor %}
@@ -455,7 +460,10 @@ section.major { padding-top: 56px; }
   <div class="subsection">
     <h3 class="op-title">{{ op.title }}</h3>
     {% if op.summary %}<p class="op-winner">{{ op.summary | safe }}</p>{% endif %}
-    <div class="panel"><div class="chart-box"><canvas id="{{ op.id }}"></canvas></div></div>
+    <div class="panel">
+      <h4>Time per call <span class="dir">(lower is better)</span></h4>
+      <div class="chart-box"><canvas id="{{ op.id }}"></canvas></div>
+    </div>
     <details class="mini-details">
       <summary>See the numbers</summary>
       <table>

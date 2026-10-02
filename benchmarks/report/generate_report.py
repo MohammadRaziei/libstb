@@ -21,6 +21,7 @@ comparisons. See _e_ratio() and README.md ("On fairness").
 import argparse
 import datetime
 import json
+import math
 import os
 
 from jinja2 import Environment, FileSystemLoader
@@ -234,8 +235,11 @@ def _build_op(key, meta, rows, mem_rows):
     wins = {lib: 0 for lib in libs}
     mem_wins = {lib: 0 for lib in libs}
     n_cmp = n_mem_cmp = 0
-    time_pts = {lib: [] for lib in libs}
-    mem_pts = {lib: [] for lib in libs}
+    # trend charts: one point per (library, image size), aggregated over the entries of that size
+    time_agg = {lib: {} for lib in libs}
+    mem_agg = {lib: {} for lib in libs}
+    time_agg_all = {lib: {} for lib in libs}
+    mem_agg_all = {lib: {} for lib in libs}
     size_pairs = {lib: [] for lib in libs}  # (out_bytes, ref out_bytes) filled below
 
     for i, r in enumerate(rows):
@@ -247,8 +251,11 @@ def _build_op(key, meta, rows, mem_rows):
         n_cmp += 1
         wins[cells[0][0]] += 1
         mpx = r["pixels"] / 1e6
+        synthetic = not r["genre"].startswith("real")
         for lib, c in cells:
-            time_pts[lib].append({"x": round(mpx, 5), "y": round(c["seconds"] * 1000, 5)})
+            time_agg_all[lib].setdefault(round(mpx, 5), []).append(c["seconds"])
+            if synthetic:
+                time_agg[lib].setdefault(round(mpx, 5), []).append(c["seconds"])
 
         label = _entry_label(r, canonical)
         values_text = "  \u00b7  ".join(f"{_label(lib)} {_fmt_ms(c['seconds'] * 1000)}" for lib, c in cells)
@@ -266,7 +273,9 @@ def _build_op(key, meta, rows, mem_rows):
             n_mem_cmp += 1
             mem_wins[mem_cells[0][0]] += 1
             for lib, m in mem_cells:
-                mem_pts[lib].append({"x": round(mpx, 5), "y": round(m["delta_mb"], 3)})
+                mem_agg_all[lib].setdefault(round(mpx, 5), []).append(m["delta_mb"])
+                if synthetic:
+                    mem_agg[lib].setdefault(round(mpx, 5), []).append(m["delta_mb"])
             mem_id = f"chart-mem-{key}-{i}"
             mem_text = "  \u00b7  ".join(f"{_label(lib)} {m['delta_mb']:.1f}MB" for lib, m in mem_cells)
             js.append(_chart_js(mem_id, _bar_config([_label(lib) for lib, _ in mem_cells],
@@ -336,30 +345,47 @@ def _build_op(key, meta, rows, mem_rows):
             if e is not None:
                 size_rows.append({"lib": _label(lib), "ratio": f"{e:.2f}\u00d7", "ref": _label(ref_size_lib), "n": len(p)})
 
-    def scatter(points_by_lib, x_title, y_title, y_log):
-        ds = [_series(lib, sorted(points_by_lib[lib], key=lambda p: p["x"]), False)
-              for lib in libs if points_by_lib.get(lib)]
+    def _gmean(v):
+        v = [x for x in v if x > 0]
+        return math.exp(sum(math.log(x) for x in v) / len(v)) if v else None
+
+    def _lines(agg, agg_all, reduce, scale=1.0):
+        """One line per library: x = image size, y = reduce(values of every entry of that size).
+        Synthetic entries share four sizes across genres, so they average cleanly; real photos each
+        have their own odd size and would zig-zag the line, so they are used only as a fallback."""
+        src = agg if any(len(pts) >= 2 for pts in agg.values()) else agg_all
+        ds = []
+        for lib in libs:
+            pts = []
+            for x, vals in sorted(src[lib].items()):
+                y = reduce(vals)
+                if y is not None:
+                    pts.append({"x": x, "y": round(y * scale, 5)})
+            if pts:
+                ds.append(_series(lib, pts, True))
         return ds
 
-    time_ds = scatter(time_pts, "Image size (megapixels, log scale)", "", True)
-    mem_ds = scatter(mem_pts, "", "", False)
-    tp_pts = {lib: [{"x": p["x"], "y": round(p["x"] / (p["y"] / 1000.0), 3)} for p in pts if p["y"] > 0]
-              for lib, pts in time_pts.items()}
-    tp_ds = scatter(tp_pts, "", "", True)
+    time_ds = _lines(time_agg, time_agg_all, _gmean, 1000.0)
+    mem_ds = _lines(mem_agg, mem_agg_all, lambda v: sum(v) / len(v))
+    # throughput = megapixels / seconds; the megapixel count is shared by the group, so the
+    # geometric mean of throughput is mpx / geometric-mean(time)
+    tp_ds = []
+    for d_ in _lines(time_agg, time_agg_all, _gmean):
+        tp_ds.append({**d_, "data": [{"x": p["x"], "y": round(p["x"] / p["y"], 3)} for p in d_["data"]]})
 
     charts = []
     has_tp = bool(tp_ds)
     if has_tp:
         charts.append(_chart_js(f"chart-tp-{key}", _xy_config(
-            tp_ds, "Image size (megapixels, log scale)", "Throughput (MP/s, log scale, higher is better)", True)))
+            tp_ds, "Image size (megapixels, log scale)", "Throughput (MP/s, log scale)", True)))
     has_time = bool(time_ds)
     if has_time:
         charts.append(_chart_js(f"chart-time-trend-{key}", _xy_config(
-            time_ds, "Image size (megapixels, log scale)", "Time (ms, log scale, lower is better)", True)))
+            time_ds, "Image size (megapixels, log scale)", "Time (ms, log scale)", True)))
     has_mem = bool(mem_ds)
     if has_mem:
         charts.append(_chart_js(f"chart-mem-trend-{key}", _xy_config(
-            mem_ds, "Image size (megapixels, log scale)", "Extra peak memory (MB, lower is better)", False)))
+            mem_ds, "Image size (megapixels, log scale)", "Extra peak memory (MB)", False)))
 
     return {
         "key": key, "title": meta["title"], "note": meta["note"],
@@ -406,7 +432,7 @@ def _build_scaling(scaling):
             continue
         cid = f"chart-scaling-{label}"
         js.append(_chart_js(cid, _xy_config(ds, "Image size (megapixels, log scale)",
-                                            "Throughput (MP/s, log scale, higher is better)", True)))
+                                            "Throughput (MP/s, log scale)", True)))
         panels.append({"id": cid, "title": SCALING_TITLES.get(label, label)})
     return {"panels": panels, "chart_js": "\n".join(js), "sides": scaling.get("sides", [])}
 
@@ -444,7 +470,7 @@ def _build_fonts(fonts):
                  "backgroundColor": LIB_COLORS["pillow"]},
             ]},
             "options": {"responsive": True, "maintainAspectRatio": False,
-                        "scales": {"y": {"type": "logarithmic", "title": {"display": True, "text": "\u00b5s (log scale, lower is better)"}}},
+                        "scales": {"y": {"type": "logarithmic", "title": {"display": True, "text": "\u00b5s (log scale)"}}},
                         "plugins": {"legend": {"position": "bottom"}}},
         }
         js.append(_chart_js(cid, cfg))
@@ -482,6 +508,16 @@ def _build_sizes(sizes):
     return rows
 
 
+def _build_sizes_chart(size_rows):
+    if not size_rows:
+        return ""
+    lib_by_label = {v: k for k, v in LIB_LABELS.items()}
+    labels = [f"{r['label']} ({r['n_deps']} dep{'s' if r['n_deps'] != 1 else ''})" for r in size_rows]
+    values = [round(r["kb"] / 1024, 2) for r in size_rows]
+    colors = [LIB_COLORS.get(lib_by_label.get(r["label"], ""), FALLBACK_COLOR) for r in size_rows]
+    return _chart_js("chart-install-size", _bar_config(labels, values, colors, "MB (wheel + all dependencies)"))
+
+
 # ------------------------------------------------------------------ build --
 
 def build(results_dir, output_path, chartjs_path):
@@ -497,6 +533,7 @@ def build(results_dir, output_path, chartjs_path):
     scl = _build_scaling(scaling)
     fnt = _build_fonts(fonts)
     size_rows = _build_sizes(sizes)
+    size_chart_js = _build_sizes_chart(size_rows)
 
     with open(chartjs_path, "r", encoding="utf-8") as f:
         chartjs_source = f.read()
@@ -504,7 +541,7 @@ def build(results_dir, output_path, chartjs_path):
     embedded = {"throughput": throughput, "throughput_memory": throughput_memory, "scaling": scaling,
                 "fonts": fonts, "sizes": sizes, "verify": verify, "system_info": system_info}
 
-    chart_scripts = [scl["chart_js"], fnt["chart_js"]]
+    chart_scripts = [scl["chart_js"], fnt["chart_js"], size_chart_js]
     for sec in sections:
         for op in sec["ops_built"]:
             chart_scripts.append(op["trend_chart_js"])
