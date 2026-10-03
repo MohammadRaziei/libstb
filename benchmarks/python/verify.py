@@ -9,14 +9,19 @@ images (so a swapped width/height cannot hide) and checks the output:
   decode / load_file   lossless formats (png, bmp, tga) must reproduce
                        the original pixels EXACTLY, channel order
                        included; jpg must agree with Pillow's decode to
-                       within a small mean error (decoders round and
-                       upsample chroma slightly differently).
+                       within JPEG_NMAE (decoders round and upsample
+                       chroma slightly differently).
   encode_*             the produced bytes are decoded by Pillow: exact
-                       for png/bmp/tga, close for jpg.
+                       for png/bmp/tga; for jpg the loss against the
+                       original may exceed Pillow's own by at most
+                       JPEG_NMAE.
   resize_*             the output has exactly the requested shape and is
-                       close to Pillow's result for the same filter, on a
-                       smooth image (so OpenCV's non-antialiased shrink
-                       cannot show up as a difference).
+                       within RESIZE_NMAE of Pillow's result for the same
+                       filter, on a smooth image (so OpenCV's
+                       non-antialiased shrink stays under the limit).
+
+Differences are measured as nmae, the mean absolute difference divided
+by 255 (1e-4 is 0.0255 of one 8-bit level).
   info                 width, height and channels are right.
 
 Failures exit non-zero, which stops the CMake build before any
@@ -36,8 +41,9 @@ from PIL import Image
 import runners
 from corpus import gen_gradient, gen_graphics, gen_photo, manifest_entries
 
-JPEG_MEAN_TOL = 4.0
-RESIZE_MEAN_TOL = 8.0
+# One limit per kind of comparison, shared by every library (measured worst cases in brackets).
+JPEG_NMAE = 5e-4    # decode vs Pillow [libstb 3.2e-4, the rest 0]; encode loss vs Pillow's [libstb -3.2e-5]
+RESIZE_NMAE = 1e-2  # vs Pillow, same filter [libstb 2.0e-3, skimage 4.5e-3, OpenCV 6.6e-3 (no antialiasing)]
 
 
 def _to_array(result, lib):
@@ -60,15 +66,20 @@ def _mean_diff(a, b):
     return float(np.abs(a.astype(np.int16) - b.astype(np.int16)).mean())
 
 
+def _nmae(a, b):
+    return _mean_diff(a, b) / 255
+
+
 def _check_decode(op, lib, entry, out, expected_rgb):
     a = _to_array(out, lib)
     fmt = entry["format"]
     ref = expected_rgb if fmt != "jpg" else np.asarray(Image.open(entry["path"]))
     if a.shape != ref.shape:
         return f"shape {a.shape} != {ref.shape}"
-    d = _mean_diff(a, ref)
     if fmt == "jpg":
-        return None if d <= JPEG_MEAN_TOL else f"mean error {d:.2f} vs Pillow's decode"
+        d = _nmae(a, ref)
+        return None if d <= JPEG_NMAE else f"nmae {d:.2e} vs Pillow's decode (limit {JPEG_NMAE:.0e})"
+    d = _mean_diff(a, ref)
     return None if d == 0.0 else f"not pixel-exact (mean error {d:.3f})"
 
 
@@ -79,9 +90,12 @@ def _check_encode(op, entry, out, arr):
     back = _decode_bytes(bytes(out))
     if back.shape != arr.shape:
         return f"round-trip shape {back.shape} != {arr.shape}"
-    d = _mean_diff(back, arr)
     if fmt == "jpg":
-        return None if d <= JPEG_MEAN_TOL * 2 else f"round-trip mean error {d:.2f}"
+        pillow_back = _decode_bytes(bytes(runners.prepare("encode_jpg", "pillow", runners.Inputs(entry))()))
+        loss, pillow_loss = _nmae(back, arr), _nmae(pillow_back, arr)
+        return None if loss <= pillow_loss + JPEG_NMAE else (
+            f"round-trip nmae {loss:.2e} vs Pillow's {pillow_loss:.2e} (limit +{JPEG_NMAE:.0e})")
+    d = _mean_diff(back, arr)
     return None if d == 0.0 else f"round-trip not pixel-exact (mean error {d:.3f})"
 
 
@@ -91,8 +105,8 @@ def _check_resize(op, lib, entry, out, arr):
     if a.shape[:2] != (h, w):
         return f"output {a.shape[:2]} != requested {(h, w)}"
     ref = _to_array(runners.prepare(op, "pillow", runners.Inputs(entry))(), "pillow")
-    d = _mean_diff(a, ref)
-    return None if d <= RESIZE_MEAN_TOL else f"mean error {d:.2f} vs Pillow with the same filter"
+    d = _nmae(a, ref)
+    return None if d <= RESIZE_NMAE else f"nmae {d:.2e} vs Pillow with the same filter (limit {RESIZE_NMAE:.0e})"
 
 
 def run(tmp):

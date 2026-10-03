@@ -164,9 +164,10 @@ is 8 in stb, 6 in Pillow, 1 in OpenCV):
 - JPEG: quality 90 everywhere.
 - TGA: uncompressed everywhere (libstb with `rle=False`).
 
-Matching the *setting* does not match the *output*. stb ships a small
-deflate and a simple JPEG encoder; zlib and libjpeg-turbo are more
-elaborate. So each encode operation also records the output size in
+Matching the *setting* does not match the *output*. libstb's PNG deflate
+(patched in `stb_image_write.h`) lands within about 1% of zlib's size, but
+its JPEG encoder is still a simple one and its grayscale JPEGs carry three
+components. So each encode operation also records the output size in
 bytes, and the report shows E[size / Pillow's size] next to the speed:
 a faster encoder that writes a bigger file is making a trade, not
 winning.
@@ -195,10 +196,12 @@ be a like-for-like comparison.
 small **non-square** images (so a swapped width and height cannot hide)
 it checks that every operation produces the right thing: lossless
 formats must decode to the original pixels *exactly* (channel order
-included), JPEG must agree with Pillow's decode within a small mean
-error, encoder output is decoded back with Pillow, and resize output
-must have exactly the requested shape and be close to Pillow's result
-for the same filter on a smooth image. A speed number for an operation
+included), JPEG must agree with Pillow's decode within a normalized mean
+absolute error of 5e-4 (0.1275 of one 8-bit level), encoder output is
+decoded back with Pillow, and resize output must have exactly the
+requested shape and be within 1e-2 of Pillow's result for the same filter
+on a smooth image (OpenCV, which does not antialias, is the worst at
+6.6e-3). A speed number for an operation
 that produced wrong pixels is worse than no number.
 
 ### The memory benchmark
