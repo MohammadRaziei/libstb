@@ -1,0 +1,4 @@
+libstb
+numpy
+matplotlib
+jupyterlab
