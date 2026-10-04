@@ -154,11 +154,13 @@ LICENSE
       block against fixed / stored). Its output is an ordinary zlib stream, typically
       within ~1% of zlib level 6 in size. The STBIW_ZLIB_COMPRESS hook and the
       stbi_zlib_compress signature are unchanged.
-   2. The JPEG encoder is faster (about 1.2x to 1.5x in the benchmark suite) and writes exactly the bytes upstream
-      does: a buffered 64-bit entropy bit writer (upstream called the sink once per output
-      byte), an AC loop that walks only the non-zero coefficients, a vectorizable DCT and
-      quantizer, and SSE2 colour conversion / transposes on x86 (plain C elsewhere).
-      tests/python/test_jpeg_golden.py pins the output bytes.
+   2. The JPEG encoder is faster (about 1.2x to 1.5x in the benchmark suite): a buffered
+      64-bit entropy bit writer (upstream called the sink once per output byte), an AC loop
+      that walks only the non-zero coefficients, a vectorizable DCT and quantizer, and SSE2
+      colour conversion / transposes on x86 (plain C elsewhere). Built with the same compiler
+      and flags it writes the same bytes as upstream (tests/tools/jpeg_vs_upstream.py checks
+      that); JPEG bytes are not a portable contract, though: a compiler that fuses a*b+c
+      (ARM64, -mfma) flips rare rounding ties in upstream's own encoder too.
    See src/third_party/README.md. */
 
 
