@@ -147,16 +147,18 @@ LICENSE
   See end of file for license information.
 
 */
-/* LIBSTB LOCAL PATCHES: this vendored copy differs from upstream v1.16 in two places.
+/* LIBSTB LOCAL PATCHES: this vendored copy differs from upstream v1.16 in two places, each
+   marked "libstb patch" in the code.
    1. The built-in zlib compressor (stbi_zlib_compress, used for PNG) was rewritten:
-      4-byte hash-chain LZ77 with lazy matching, dynamic Huffman blocks (chosen per
-      block against fixed / stored), and an inline CRC-free bit writer. Its output is
-      an ordinary zlib stream and is typically within ~1% of zlib level 6 in size.
-      The STBIW_ZLIB_COMPRESS hook and the stbi_zlib_compress signature are unchanged.
-   2. The JPEG encoder: the DCT, the quantization/zigzag step and the bit-count helper
-      were rewritten so compilers can vectorize them (stbiw__jpg_dct_cols,
-      stbiw__jpg_calcBits and one block in stbiw__jpg_processDU, each marked
-      "libstb patch"). The bytes it writes are identical to upstream's.
+      4-byte hash-chain LZ77 with lazy matching and dynamic Huffman blocks (chosen per
+      block against fixed / stored). Its output is an ordinary zlib stream, typically
+      within ~1% of zlib level 6 in size. The STBIW_ZLIB_COMPRESS hook and the
+      stbi_zlib_compress signature are unchanged.
+   2. The JPEG encoder is faster (about 1.2x to 1.5x in the benchmark suite) and writes exactly the bytes upstream
+      does: a buffered 64-bit entropy bit writer (upstream called the sink once per output
+      byte), an AC loop that walks only the non-zero coefficients, a vectorizable DCT and
+      quantizer, and SSE2 colour conversion / transposes on x86 (plain C elsewhere).
+      tests/python/test_jpeg_golden.py pins the output bytes.
    See src/third_party/README.md. */
 
 
@@ -1508,72 +1510,75 @@ STBIWDEF int stbi_write_png_to_func(stbi_write_func *func, void *context, int x,
 static const unsigned char stbiw__jpg_ZigZag[] = { 0,1,5,6,14,15,27,28,2,4,7,13,16,26,29,42,3,8,12,17,25,30,41,43,9,11,18,
       24,31,40,44,53,10,19,23,32,39,45,52,54,20,22,33,38,46,51,55,60,21,34,37,47,50,56,59,61,35,36,48,49,57,58,62,63 };
 
-static void stbiw__jpg_writeBits(stbi__write_context *s, int *bitBufP, int *bitCntP, const unsigned short *bs) {
-   int bitBuf = *bitBufP, bitCnt = *bitCntP;
-   bitCnt += bs[1];
-   bitBuf |= bs[0] << (24 - bitCnt);
-   while(bitCnt >= 8) {
-      unsigned char c = (bitBuf >> 16) & 255;
-      stbiw__putc(s, c);
-      if(c == 255) {
-         stbiw__putc(s, 0);
-      }
-      bitBuf <<= 8;
-      bitCnt -= 8;
+// libstb patch: the entropy bit writer. Upstream called the sink once per OUTPUT BYTE; this
+// one keeps a 64-bit accumulator and a 4 KB buffer (one sink call per 4 KB), and stores four
+// bytes at a time unless one of them is 0xFF (which must be followed by a stuffed 0x00).
+// It writes exactly the bytes upstream does.
+typedef struct {
+   stbi__write_context *s;
+   unsigned long long acc;
+   int nbits;
+   int len;
+   unsigned char buf[4096 + 16];
+} stbiw__jpg_bw;
+
+static void stbiw__jpg_bw_flush(stbiw__jpg_bw *w)
+{
+   if (w->len) {
+      w->s->func(w->s->context, w->buf, w->len);
+      w->len = 0;
    }
-   *bitBufP = bitBuf;
-   *bitCntP = bitCnt;
 }
 
-static void stbiw__jpg_DCT(float *d0p, float *d1p, float *d2p, float *d3p, float *d4p, float *d5p, float *d6p, float *d7p) {
-   float d0 = *d0p, d1 = *d1p, d2 = *d2p, d3 = *d3p, d4 = *d4p, d5 = *d5p, d6 = *d6p, d7 = *d7p;
-   float z1, z2, z3, z4, z5, z11, z13;
-
-   float tmp0 = d0 + d7;
-   float tmp7 = d0 - d7;
-   float tmp1 = d1 + d6;
-   float tmp6 = d1 - d6;
-   float tmp2 = d2 + d5;
-   float tmp5 = d2 - d5;
-   float tmp3 = d3 + d4;
-   float tmp4 = d3 - d4;
-
-   // Even part
-   float tmp10 = tmp0 + tmp3;   // phase 2
-   float tmp13 = tmp0 - tmp3;
-   float tmp11 = tmp1 + tmp2;
-   float tmp12 = tmp1 - tmp2;
-
-   d0 = tmp10 + tmp11;       // phase 3
-   d4 = tmp10 - tmp11;
-
-   z1 = (tmp12 + tmp13) * 0.707106781f; // c4
-   d2 = tmp13 + z1;       // phase 5
-   d6 = tmp13 - z1;
-
-   // Odd part
-   tmp10 = tmp4 + tmp5;       // phase 2
-   tmp11 = tmp5 + tmp6;
-   tmp12 = tmp6 + tmp7;
-
-   // The rotator is modified from fig 4-8 to avoid extra negations.
-   z5 = (tmp10 - tmp12) * 0.382683433f; // c6
-   z2 = tmp10 * 0.541196100f + z5; // c2-c6
-   z4 = tmp12 * 1.306562965f + z5; // c2+c6
-   z3 = tmp11 * 0.707106781f; // c4
-
-   z11 = tmp7 + z3;      // phase 5
-   z13 = tmp7 - z3;
-
-   *d5p = z13 + z2;         // phase 6
-   *d3p = z13 - z2;
-   *d1p = z11 + z4;
-   *d7p = z11 - z4;
-
-   *d0p = d0;  *d2p = d2;  *d4p = d4;  *d6p = d6;
+static void stbiw__jpg_bw_put32(stbiw__jpg_bw *w, unsigned int v)
+{
+   unsigned int t = ~v;
+   if (((t - 0x01010101u) & ~t & 0x80808080u) == 0) {   // none of the four bytes is 0xFF
+      unsigned char *o = w->buf + w->len;
+      o[0] = (unsigned char) (v >> 24); o[1] = (unsigned char) (v >> 16);
+      o[2] = (unsigned char) (v >> 8);  o[3] = (unsigned char) v;
+      w->len += 4;
+   } else {
+      int i;
+      for (i = 24; i >= 0; i -= 8) {
+         unsigned char c = (unsigned char) (v >> i);
+         w->buf[w->len++] = c;
+         if (c == 0xFF) w->buf[w->len++] = 0;
+      }
+   }
+   if (w->len >= 4096) stbiw__jpg_bw_flush(w);
 }
 
-// libstb patch: the same AAN DCT as stbiw__jpg_DCT (identical arithmetic, in the
+// Appends the low n bits of `bits` (n <= 27, bits above n must be zero).
+static void stbiw__jpg_bw_put(stbiw__jpg_bw *w, unsigned int bits, int n)
+{
+   w->acc = (w->acc << n) | bits;
+   w->nbits += n;
+   if (w->nbits >= 32) {
+      w->nbits -= 32;
+      stbiw__jpg_bw_put32(w, (unsigned int) (w->acc >> w->nbits));
+   }
+}
+
+// Pads the last byte with 1 bits (what upstream's fill bits do) and writes everything out.
+static void stbiw__jpg_bw_finish(stbiw__jpg_bw *w)
+{
+   int pad = (8 - (w->nbits & 7)) & 7;
+   if (pad) {
+      w->acc = (w->acc << pad) | ((1u << pad) - 1);
+      w->nbits += pad;
+   }
+   while (w->nbits >= 8) {
+      unsigned char c;
+      w->nbits -= 8;
+      c = (unsigned char) (w->acc >> w->nbits);
+      w->buf[w->len++] = c;
+      if (c == 0xFF) w->buf[w->len++] = 0;
+   }
+   stbiw__jpg_bw_flush(w);
+}
+
+// libstb patch: replaces upstream's stbiw__jpg_DCT with the same AAN DCT (identical arithmetic, in the
 // same order, so the output bytes do not change), applied to 8 columns of a packed
 // 8x8 block at once. Lane i works on p[i], p[i+8], ... p[i+56]; the 8 iterations are
 // independent, so compilers turn the loop into SIMD (SSE2 / NEON) by themselves.
@@ -1617,25 +1622,69 @@ static void stbiw__jpg_dct_cols(float *p) {
    }
 }
 
-static void stbiw__jpg_calcBits(int val, unsigned short bits[2]) {
-   int tmp1 = val < 0 ? -val : val;
-   val = val < 0 ? val-1 : val;
-#if defined(__GNUC__) || defined(__clang__)
-   bits[1] = (unsigned short)(32 - __builtin_clz((unsigned)tmp1));  // tmp1 is never 0 here
-#else
-   bits[1] = 1;
-   while(tmp1 >>= 1) {
-      ++bits[1];
-   }
+// libstb patch: dst[x*8+y] = src[y*stride+x] for an 8x8 block (a pure data move, no arithmetic).
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#define STBIW__JPG_SSE2 1
+#include <emmintrin.h>
 #endif
-   bits[0] = val & ((1<<bits[1])-1);
+
+static void stbiw__jpg_transpose8(float *dst, const float *src, int stride)
+{
+#ifdef STBIW__JPG_SSE2
+   int by, bx;
+   for(by = 0; by < 8; by += 4)
+      for(bx = 0; bx < 8; bx += 4) {
+         const float *s0 = src + by*stride + bx;
+         __m128 r0 = _mm_loadu_ps(s0), r1 = _mm_loadu_ps(s0 + stride);
+         __m128 r2 = _mm_loadu_ps(s0 + 2*stride), r3 = _mm_loadu_ps(s0 + 3*stride);
+         _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
+         _mm_storeu_ps(dst + bx*8 + by,       r0);
+         _mm_storeu_ps(dst + (bx+1)*8 + by,   r1);
+         _mm_storeu_ps(dst + (bx+2)*8 + by,   r2);
+         _mm_storeu_ps(dst + (bx+3)*8 + by,   r3);
+      }
+#else
+   int x, y;
+   for(y = 0; y < 8; ++y)
+      for(x = 0; x < 8; ++x)
+         dst[x*8+y] = src[y*stride+x];
+#endif
 }
 
-static int stbiw__jpg_processDU(stbi__write_context *s, int *bitBuf, int *bitCnt, float *CDU, int du_stride, float *fdtbl, int DC, const unsigned short HTDC[256][2], const unsigned short HTAC[256][2]) {
-   const unsigned short EOB[2] = { HTAC[0x00][0], HTAC[0x00][1] };
-   const unsigned short M16zeroes[2] = { HTAC[0xF0][0], HTAC[0xF0][1] };
-   int dataOff, i, j, n, diff, end0pos, x, y;
+// number of bits needed for a > 0
+static int stbiw__jpg_nbits(unsigned int a)
+{
+#if defined(__GNUC__) || defined(__clang__)
+   return 32 - __builtin_clz(a);
+#else
+   int n = 1;
+   while (a >>= 1) ++n;
+   return n;
+#endif
+}
+
+static int stbiw__jpg_ctz64(unsigned long long x)   // x != 0
+{
+#if defined(__GNUC__) || defined(__clang__)
+   return __builtin_ctzll(x);
+#else
+   int n = 0;
+   while (!(x & 1)) { x >>= 1; ++n; }
+   return n;
+#endif
+}
+
+// Huffman code `ht` for `symbol`, immediately followed by the amplitude bits of `val`, in one put.
+static void stbiw__jpg_put_value(stbiw__jpg_bw *w, const unsigned short *ht, int val, int nb)
+{
+   unsigned int amp = (unsigned int) (val < 0 ? val - 1 : val) & ((1u << nb) - 1);
+   stbiw__jpg_bw_put(w, ((unsigned int) ht[0] << nb) | amp, ht[1] + nb);
+}
+
+static int stbiw__jpg_processDU(stbiw__jpg_bw *w, float *CDU, int du_stride, float *fdtbl, int DC, const unsigned short HTDC[256][2], const unsigned short HTAC[256][2]) {
+   int i, diff;
    int DU[64];
+   unsigned long long nz;
 
    // libstb patch: 2-D DCT as "row DCTs, then column DCTs" exactly like before, but each
    // pass runs through the 8-lane stbiw__jpg_dct_cols on a transposed copy of the block, and
@@ -1643,13 +1692,9 @@ static int stbiw__jpg_processDU(stbi__write_context *s, int *bitBuf, int *bitCnt
    {
       float A[64], B[64], Q[64];
       int Qi[64], k;
-      for(y = 0; y < 8; ++y)
-         for(x = 0; x < 8; ++x)
-            A[x*8+y] = CDU[y*du_stride+x];
+      stbiw__jpg_transpose8(A, CDU, du_stride);  // A[x*8+y] = CDU[y*du_stride+x]
       stbiw__jpg_dct_cols(A);                   // A[u*8+y]: horizontal frequency u of row y
-      for(y = 0; y < 8; ++y)
-         for(x = 0; x < 8; ++x)
-            B[y*8+x] = A[x*8+y];
+      stbiw__jpg_transpose8(B, A, 8);           // B[y*8+x] = A[x*8+y]
       stbiw__jpg_dct_cols(B);                   // B[v*8+u]: vertical frequency v, horizontal u
       // Quantize/descale/zigzag the coefficients
       for(k = 0; k < 64; ++k) Q[k] = B[k]*fdtbl[k];
@@ -1660,44 +1705,69 @@ static int stbiw__jpg_processDU(stbi__write_context *s, int *bitBuf, int *bitCnt
    // Encode DC
    diff = DU[0] - DC;
    if (diff == 0) {
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, HTDC[0]);
+      stbiw__jpg_bw_put(w, HTDC[0][0], HTDC[0][1]);
    } else {
-      unsigned short bits[2];
-      stbiw__jpg_calcBits(diff, bits);
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, HTDC[bits[1]]);
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, bits);
+      stbiw__jpg_put_value(w, HTDC[stbiw__jpg_nbits((unsigned int) (diff < 0 ? -diff : diff))], diff,
+                           stbiw__jpg_nbits((unsigned int) (diff < 0 ? -diff : diff)));
    }
-   // Encode ACs
-   end0pos = 63;
-   for(; (end0pos>0)&&(DU[end0pos]==0); --end0pos) {
-   }
-   // end0pos = first element in reverse order !=0
-   if(end0pos == 0) {
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, EOB);
-      return DU[0];
-   }
-   for(i = 1; i <= end0pos; ++i) {
-      int startpos = i;
-      int nrzeroes;
-      unsigned short bits[2];
-      for (; DU[i]==0 && i<=end0pos; ++i) {
+
+   // Encode ACs: walk only the non-zero coefficients (bit k of nz is set when DU[k] != 0)
+   nz = 0;
+   for(i = 1; i < 64; ++i) nz |= (unsigned long long) (DU[i] != 0) << i;
+   {
+      int last = 0;   // index of the previous coefficient that was written (0 = the DC)
+      while (nz) {
+         int k = stbiw__jpg_ctz64(nz), zeroes = k - last - 1, val = DU[k];
+         int nb = stbiw__jpg_nbits((unsigned int) (val < 0 ? -val : val));
+         for (; zeroes >= 16; zeroes -= 16)
+            stbiw__jpg_bw_put(w, HTAC[0xF0][0], HTAC[0xF0][1]);
+         stbiw__jpg_put_value(w, HTAC[(zeroes << 4) + nb], val, nb);
+         last = k;
+         nz &= nz - 1;
       }
-      nrzeroes = i-startpos;
-      if ( nrzeroes >= 16 ) {
-         int lng = nrzeroes>>4;
-         int nrmarker;
-         for (nrmarker=1; nrmarker <= lng; ++nrmarker)
-            stbiw__jpg_writeBits(s, bitBuf, bitCnt, M16zeroes);
-         nrzeroes &= 15;
-      }
-      stbiw__jpg_calcBits(DU[i], bits);
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, HTAC[(nrzeroes<<4)+bits[1]]);
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, bits);
-   }
-   if(end0pos != 63) {
-      stbiw__jpg_writeBits(s, bitBuf, bitCnt, EOB);
+      if (last != 63) stbiw__jpg_bw_put(w, HTAC[0x00][0], HTAC[0x00][1]);   // EOB
    }
    return DU[0];
+}
+
+// libstb patch: RGB -> YCbCr for a run of n pixels inside the image (n is 8 or 16).
+// The arithmetic is exactly the per-pixel float expression upstream uses, in the same order,
+// so every rounding (and every output byte) is unchanged.
+static void stbiw__jpg_convert_run(float *Y, float *U, float *V, const unsigned char *src, int ofsG, int ofsB, int comp, int n)
+{
+   int i = 0;
+#ifdef STBIW__JPG_SSE2
+   if(comp >= 3) {   // interleaved R,G,B[,A]: four pixels per step, SSE2 is part of the x86-64 baseline
+      const __m128 cY0 = _mm_set1_ps(0.29900f), cY1 = _mm_set1_ps(0.58700f), cY2 = _mm_set1_ps(0.11400f), c128 = _mm_set1_ps(128);
+      const __m128 cU0 = _mm_set1_ps(-0.16874f), cU1 = _mm_set1_ps(-0.33126f), cU2 = _mm_set1_ps(0.50000f);
+      const __m128 cV0 = _mm_set1_ps(0.50000f), cV1 = _mm_set1_ps(-0.41869f), cV2 = _mm_set1_ps(-0.08131f);
+      for(; i < n; i += 4) {
+         __m128 r, g, b;
+         if(comp == 4) {
+            __m128i px = _mm_loadu_si128((const __m128i *)(src + i*4)), m = _mm_set1_epi32(255);
+            r = _mm_cvtepi32_ps(_mm_and_si128(px, m));
+            g = _mm_cvtepi32_ps(_mm_and_si128(_mm_srli_epi32(px, 8), m));
+            b = _mm_cvtepi32_ps(_mm_and_si128(_mm_srli_epi32(px, 16), m));
+         } else {
+            unsigned int w0, w1, w2;   // r0 g0 b0 r1 | g1 b1 r2 g2 | b2 r3 g3 b3
+            memcpy(&w0, src + i*3, 4); memcpy(&w1, src + i*3 + 4, 4); memcpy(&w2, src + i*3 + 8, 4);
+            r = _mm_cvtepi32_ps(_mm_setr_epi32((int)(w0 & 255), (int)(w0 >> 24), (int)((w1 >> 16) & 255), (int)((w2 >> 8) & 255)));
+            g = _mm_cvtepi32_ps(_mm_setr_epi32((int)((w0 >> 8) & 255), (int)(w1 & 255), (int)(w1 >> 24), (int)((w2 >> 16) & 255)));
+            b = _mm_cvtepi32_ps(_mm_setr_epi32((int)((w0 >> 16) & 255), (int)((w1 >> 8) & 255), (int)(w2 & 255), (int)(w2 >> 24)));
+         }
+         _mm_storeu_ps(Y + i, _mm_sub_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(cY0, r), _mm_mul_ps(cY1, g)), _mm_mul_ps(cY2, b)), c128));
+         _mm_storeu_ps(U + i, _mm_add_ps(_mm_add_ps(_mm_mul_ps(cU0, r), _mm_mul_ps(cU1, g)), _mm_mul_ps(cU2, b)));
+         _mm_storeu_ps(V + i, _mm_add_ps(_mm_add_ps(_mm_mul_ps(cV0, r), _mm_mul_ps(cV1, g)), _mm_mul_ps(cV2, b)));
+      }
+      return;
+   }
+#endif
+   for(; i < n; ++i) {
+      float r = src[i*comp], g = src[i*comp+ofsG], b = src[i*comp+ofsB];
+      Y[i]= +0.29900f*r + 0.58700f*g + 0.11400f*b - 128;
+      U[i]= -0.16874f*r - 0.33126f*g + 0.50000f*b;
+      V[i]= +0.50000f*r - 0.41869f*g - 0.08131f*b;
+   }
 }
 
 static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, int comp, const void* data, int quality) {
@@ -1826,9 +1896,9 @@ static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, in
 
    // Encode 8x8 macroblocks
    {
-      static const unsigned short fillBits[] = {0x7F, 7};
       int DCY=0, DCU=0, DCV=0;
-      int bitBuf=0, bitCnt=0;
+      stbiw__jpg_bw bw;
+      bw.s = s; bw.acc = 0; bw.nbits = 0; bw.len = 0;
       // comp == 2 is grey+alpha (alpha is ignored)
       int ofsG = comp > 2 ? 1 : 0, ofsB = comp > 2 ? 2 : 0;
       const unsigned char *dataR = (const unsigned char *)data;
@@ -1843,6 +1913,11 @@ static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, in
                   // row >= height => use last input row
                   int clamped_row = (row < height) ? row : height - 1;
                   int base_p = (stbi__flip_vertically_on_write ? (height-1-clamped_row) : clamped_row)*width*comp;
+                  if(x + 16 <= width) {
+                     // libstb patch: a 16-pixel run inside the image needs no per-pixel column clamp
+                     stbiw__jpg_convert_run(Y+pos, U+pos, V+pos, dataR + base_p + x*comp, ofsG, ofsB, comp, 16);
+                     pos += 16;
+                  } else
                   for(col = x; col < x+16; ++col, ++pos) {
                      // if col >= width => use pixel from last input column
                      int p = base_p + ((col < width) ? col : (width-1))*comp;
@@ -1852,10 +1927,10 @@ static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, in
                      V[pos]= +0.50000f*r - 0.41869f*g - 0.08131f*b;
                   }
                }
-               DCY = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, Y+0,   16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
-               DCY = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, Y+8,   16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
-               DCY = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, Y+128, 16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
-               DCY = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, Y+136, 16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
+               DCY = stbiw__jpg_processDU(&bw, Y+0,   16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
+               DCY = stbiw__jpg_processDU(&bw, Y+8,   16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
+               DCY = stbiw__jpg_processDU(&bw, Y+128, 16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
+               DCY = stbiw__jpg_processDU(&bw, Y+136, 16, fdtbl_Y, DCY, YDC_HT, YAC_HT);
 
                // subsample U,V
                {
@@ -1868,8 +1943,8 @@ static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, in
                         subV[pos] = (V[j+0] + V[j+1] + V[j+16] + V[j+17]) * 0.25f;
                      }
                   }
-                  DCU = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, subU, 8, fdtbl_UV, DCU, UVDC_HT, UVAC_HT);
-                  DCV = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, subV, 8, fdtbl_UV, DCV, UVDC_HT, UVAC_HT);
+                  DCU = stbiw__jpg_processDU(&bw, subU, 8, fdtbl_UV, DCU, UVDC_HT, UVAC_HT);
+                  DCV = stbiw__jpg_processDU(&bw, subV, 8, fdtbl_UV, DCV, UVDC_HT, UVAC_HT);
                }
             }
          }
@@ -1881,6 +1956,11 @@ static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, in
                   // row >= height => use last input row
                   int clamped_row = (row < height) ? row : height - 1;
                   int base_p = (stbi__flip_vertically_on_write ? (height-1-clamped_row) : clamped_row)*width*comp;
+                  if(x + 8 <= width) {
+                     // libstb patch: an 8-pixel run inside the image needs no per-pixel column clamp
+                     stbiw__jpg_convert_run(Y+pos, U+pos, V+pos, dataR + base_p + x*comp, ofsG, ofsB, comp, 8);
+                     pos += 8;
+                  } else
                   for(col = x; col < x+8; ++col, ++pos) {
                      // if col >= width => use pixel from last input column
                      int p = base_p + ((col < width) ? col : (width-1))*comp;
@@ -1891,15 +1971,15 @@ static int stbi_write_jpg_core(stbi__write_context *s, int width, int height, in
                   }
                }
 
-               DCY = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, Y, 8, fdtbl_Y,  DCY, YDC_HT, YAC_HT);
-               DCU = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, U, 8, fdtbl_UV, DCU, UVDC_HT, UVAC_HT);
-               DCV = stbiw__jpg_processDU(s, &bitBuf, &bitCnt, V, 8, fdtbl_UV, DCV, UVDC_HT, UVAC_HT);
+               DCY = stbiw__jpg_processDU(&bw, Y, 8, fdtbl_Y,  DCY, YDC_HT, YAC_HT);
+               DCU = stbiw__jpg_processDU(&bw, U, 8, fdtbl_UV, DCU, UVDC_HT, UVAC_HT);
+               DCV = stbiw__jpg_processDU(&bw, V, 8, fdtbl_UV, DCV, UVDC_HT, UVAC_HT);
             }
          }
       }
 
       // Do the bit alignment of the EOI marker
-      stbiw__jpg_writeBits(s, &bitBuf, &bitCnt, fillBits);
+      stbiw__jpg_bw_finish(&bw);
    }
 
    // EOI

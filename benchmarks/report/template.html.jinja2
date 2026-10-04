@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>libstb Benchmarks</title>
 <style>
+.method { color: var(--text-dim); font-size: 15px; max-width: 760px; padding-left: 20px; }
+.method li { margin: 10px 0; }
+.method strong { color: var(--text); font-weight: 650; }
+.katex { font-size: 1.04em; }
+{{ katex_css | safe }}
 :root {
   --bg: #0b0e14;
   --bg-panel: #12161f;
@@ -327,7 +332,7 @@ section.major { padding-top: 56px; }
 
   {% if op.size_rows %}
   <table class="size-rows">
-    <thead><tr><th>Output size</th><th class="num">E[size / {{ op.size_rows[0].ref }}'s]</th><th class="num">entries</th></tr></thead>
+    <thead><tr><th>Output size</th><th class="num">\(\mathbb{E}\!\left[\dfrac{s_{L}}{s_{\text{ {{ op.size_rows[0].ref }} }}}\right]\)</th><th class="num">entries</th></tr></thead>
     <tbody>
     {% for row in op.size_rows %}
       <tr><td>{{ row.lib }}</td><td class="num">{{ row.ratio }}</td><td class="num">{{ row.n }}</td></tr>
@@ -379,6 +384,34 @@ section.major { padding-top: 56px; }
     </div>
   </details>
 {% endmacro %}
+
+<section class="major" id="method">
+  <div class="section-rule"></div>
+  <div class="kicker">Method</div>
+  <h2>How the numbers are computed</h2>
+  <p class="lede">Each corpus entry \(i\) is one image (a genre, a size and a format). For a library \(L\),
+    \(t_i^{L}\) is the best of {{ repeats }} timed runs of one operation on entry \(i\), \(s_i^{L}\) is the size
+    in bytes of the file it wrote, and \(m_i^{L}\) is its extra peak memory. Two libraries are compared only on
+    the entries where both ran.</p>
+  <ul class="method">
+    <li><strong>Reference library.</strong> \(W_L=\bigl|\{\,i : t_i^{L}=\min_K t_i^{K}\,\}\bigr|\) is the number of
+      entries on which \(L\) was fastest, and \(\mathrm{ref}=\arg\max_L W_L\) is the library that won the most.
+      The count shows up in the per-operation summaries.</li>
+    <li><strong>Headline ratio.</strong> Over the \(N\) entries both libraries ran,
+      \(\mathbb{E}\!\left[\dfrac{t_L}{t_{\mathrm{ref}}}\right]=\dfrac{1}{N}\sum_{i=1}^{N}\dfrac{t_i^{L}}{t_i^{\mathrm{ref}}}\).
+      It is the mean of each entry's own ratio (ratio first, then average), so a 64x64 image counts as much as a
+      4000x4000 one. Above 1 means \(L\) took longer than the reference. Output size and extra memory use the same
+      formula with \(s\) and \(m\) in place of \(t\).</li>
+    <li><strong>Trend charts.</strong> For an image of \(z\) pixels, let \(G_z\) be the synthetic entries of that size
+      (photo, gradient, noise, graphics). Each library's point is
+      \(\bar t_L(z)=\Bigl(\prod_{i\in G_z} t_i^{L}\Bigr)^{1/|G_z|}\) for time, throughput
+      \(\dfrac{z/10^{6}}{\bar t_L(z)}\) in MP/s, and \(\bar m_L(z)=\dfrac{1}{|G_z|}\sum_{i\in G_z} m_i^{L}\)
+      for memory. Real photographs have an odd size each, so they appear only in the per-entry bars.</li>
+    <li><strong>Reading a ratio.</strong> Averaging ratios is not symmetric: a library 10 times faster on one entry
+      and 10 times slower on another scores \(\mathbb{E}=(0.1+10)/2=5.05\), not 1. Read it together with the win
+      count \(W_L\).</li>
+  </ul>
+</section>
 
 {% if has_sizes %}
 <section class="major" id="install-size">
@@ -521,6 +554,20 @@ section.major { padding-top: 56px; }
 
 <script>
 {{ chartjs_source | safe }}
+</script>
+
+<script>
+{{ katex_js | safe }}
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (typeof renderMathInElement !== "function") return;
+  renderMathInElement(document.body, {
+    delimiters: [{left: "\\(", right: "\\)", display: false}],
+    throwOnError: false,
+    ignoredTags: ["script", "style", "textarea", "pre", "code", "option"],
+  });
+});
 </script>
 
 <script id="libstb-data" type="application/json">

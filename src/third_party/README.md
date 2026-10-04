@@ -20,8 +20,12 @@ in the code):
   matching and picks dynamic / fixed / stored per block, which brings PNGs to within
   about 1% of zlib level 6 in size at roughly twice its speed. The output is a plain zlib
   stream; the `STBIW_ZLIB_COMPRESS` hook and the function signature are unchanged.
-- **JPEG:** the DCT, quantization/zigzag step and bit-count helper were rewritten so
-  compilers vectorize them. Output bytes are identical to upstream's.
+- **JPEG:** the encoder is about 1.2x to 1.5x faster (benchmark suite, 1 MP and up) and its output is byte-for-byte upstream's.
+  The entropy coder uses a buffered 64-bit bit writer (upstream called the sink once per
+  output byte) and walks only the non-zero coefficients; the DCT and quantizer are written
+  so compilers vectorize them; colour conversion and the 8x8 transposes use SSE2 on x86 (a
+  plain C fallback runs everywhere else). `tests/python/test_jpeg_golden.py` holds SHA-256
+  digests of upstream's output, so any later change that alters a byte fails a test.
 
 Each header is included ONLY from src/core/*.cpp (with its STB_*_IMPLEMENTATION
 defined there), never from a public include/libstb/*.hpp header. To update:

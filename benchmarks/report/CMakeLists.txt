@@ -25,6 +25,33 @@ add_custom_command(
 )
 add_custom_target(libstb_bench_chartjs DEPENDS "${CHARTJS_UMD_MIN}")
 
+# --------------------------------------------------------------- KaTeX --
+# The report writes its formulas in LaTeX and renders them in the browser with KaTeX. Fetched
+# the same way as Chart.js (an npm tarball, kept in the build dir, never in git); the
+# generator inlines its script, stylesheet and the few fonts it needs, so the report stays one file.
+
+set(KATEX_VERSION "0.16.22" CACHE STRING "KaTeX version to embed in the report")
+set(KATEX_DL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_katex")
+set(KATEX_ARCHIVE "${KATEX_DL_DIR}/katex-${KATEX_VERSION}.tgz")
+set(KATEX_EXTRACTED "${KATEX_DL_DIR}/extracted")
+set(KATEX_DIST "${KATEX_EXTRACTED}/package/dist")
+set(KATEX_MIN_JS "${KATEX_DIST}/katex.min.js")
+
+file(MAKE_DIRECTORY "${KATEX_DL_DIR}")
+file(MAKE_DIRECTORY "${KATEX_EXTRACTED}")
+
+add_custom_command(
+  OUTPUT "${KATEX_MIN_JS}"
+  COMMAND ${CMAKE_COMMAND} -DURL=https://registry.npmjs.org/katex/-/katex-${KATEX_VERSION}.tgz
+                            -DDEST=${KATEX_ARCHIVE}
+                            -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Download.cmake"
+  COMMAND ${CMAKE_COMMAND} -E tar xzf "${KATEX_ARCHIVE}"
+          WORKING_DIRECTORY "${KATEX_EXTRACTED}"
+  COMMENT "libstb benchmarks: fetching KaTeX ${KATEX_VERSION} (formulas in the standalone report)"
+  USES_TERMINAL
+)
+add_custom_target(libstb_bench_katex DEPENDS "${KATEX_MIN_JS}")
+
 # ------------------------------------------------------------- report --
 
 set(REPORT_HTML "${LIBSTB_BENCH_RESULTS_DIR}/report.html")
@@ -39,9 +66,11 @@ add_custom_command(
           "${CMAKE_CURRENT_SOURCE_DIR}/generate_report.py"
           "${LIBSTB_BENCH_RESULTS_SCRATCH_DIR}" "${REPORT_HTML}"
           --chartjs-path "${CHARTJS_UMD_MIN}"
+          --katex-dir "${KATEX_DIST}"
   DEPENDS
     "${LIBSTB_BENCH_VENV_STAMP}"
     "${CHARTJS_UMD_MIN}"
+    "${KATEX_MIN_JS}"
     "${CMAKE_CURRENT_SOURCE_DIR}/generate_report.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/template.html.jinja2"
     ${LIBSTB_BENCH_ALL_RESULT_JSONS}
@@ -58,6 +87,7 @@ add_dependencies(libstb_bench_report
   libstb_bench_fonts
   libstb_bench_system_info
   libstb_bench_chartjs
+  libstb_bench_katex
 )
 
 # results/report.html is the one artifact meant to be committed (see

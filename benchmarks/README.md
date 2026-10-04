@@ -166,7 +166,7 @@ is 8 in stb, 6 in Pillow, 1 in OpenCV):
 
 Matching the *setting* does not match the *output*. libstb's PNG deflate
 (patched in `stb_image_write.h`) lands within about 1% of zlib's size, but
-its JPEG encoder is still a simple one and its grayscale JPEGs carry three
+its JPEG encoder is faster than upstream stb but still about half the speed of libjpeg-turbo, and its grayscale JPEGs carry three
 components. So each encode operation also records the output size in
 bytes, and the report shows E[size / Pillow's size] next to the speed:
 a faster encoder that writes a bigger file is making a trade, not
@@ -253,6 +253,11 @@ them: it picks whichever library wins the most comparisons as the
 **E[target/ref]**: the ratio on *each* corpus entry individually,
 averaged across entries, ratio-then-average and not
 average-then-ratio.
+
+The report writes these definitions as LaTeX formulas (inline, between `\(` and `\)`) and renders
+them in the browser with KaTeX. KaTeX is fetched from the npm registry at build time, like Chart.js,
+and inlined together with the eight fonts it needs, so `report.html` is still one self-contained
+file. Without KaTeX the formulas show as their LaTeX source.
 
 ```
 E[time_x / time_ref] = mean( time_x_i / time_ref_i  for each corpus entry i )

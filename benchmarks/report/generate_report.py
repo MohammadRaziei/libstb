@@ -19,10 +19,12 @@ average-then-ratio), against whichever library wins the most
 comparisons. See _e_ratio() and README.md ("On fairness").
 """
 import argparse
+import base64
 import datetime
 import json
 import math
 import os
+import re
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -141,6 +143,47 @@ FONT_OP_TITLES = {
 
 def _label(lib):
     return LIB_LABELS.get(lib, lib)
+
+
+# Formulas are written in LaTeX between \( and \) (inline only) and rendered in the browser by KaTeX.
+# "%s" slots: the quantity symbol (t = time, m = extra peak memory, s = output size) and the
+# reference library's name; L stands for each other library the sentence goes on to list.
+TEX_E_VS_REF = r"\(\mathbb{E}\!\left[\dfrac{%s_{L}}{%s_{\text{%s}}}\right]\)"
+TEX_E_FONT = r"\(\mathbb{E}\!\left[\dfrac{t_{\text{libstb}}}{t_{\text{Pillow}}}\right]\)"
+
+
+def _tex_e(symbol, ref_label):
+    return TEX_E_VS_REF % (symbol, symbol, ref_label)
+
+
+# The only KaTeX fonts the report's formulas use; every other @font-face is dropped so the
+# page does not carry ~20 fonts for a handful of symbols.
+KATEX_FONTS = ("KaTeX_AMS-Regular", "KaTeX_Caligraphic-Regular", "KaTeX_Main-Regular", "KaTeX_Main-Italic",
+               "KaTeX_Main-Bold", "KaTeX_Math-Italic", "KaTeX_Size1-Regular", "KaTeX_Size2-Regular")
+
+
+def _katex_assets(dist_dir):
+    """(css, js) that render the report's formulas with no network: KaTeX itself, its auto-render
+    extension, and a stylesheet whose fonts are the base64 woff2 files above. ("", "") when KaTeX
+    is not available: the formulas then show as their LaTeX source instead of failing the report."""
+    if not dist_dir or not os.path.isfile(os.path.join(dist_dir, "katex.min.js")):
+        print("generate_report: KaTeX not found, formulas will show as LaTeX source")
+        return "", ""
+
+    def read(*parts, mode="r"):
+        with open(os.path.join(dist_dir, *parts), mode, **({"encoding": "utf-8"} if mode == "r" else {})) as f:
+            return f.read()
+
+    def face(match):
+        block = match.group(0)
+        font = re.search(r"url\(fonts/(KaTeX_[A-Za-z0-9-]+)\.woff2\)", block)
+        if not font or font.group(1) not in KATEX_FONTS:
+            return ""
+        data = base64.b64encode(read("fonts", font.group(1) + ".woff2", mode="rb")).decode("ascii")
+        return re.sub(r"src:[^;}]*", 'src:url(data:font/woff2;base64,' + data + ') format("woff2")', block, count=1)
+
+    css = re.sub(r"@font-face\{[^}]*\}", face, read("katex.min.css"))
+    return css, read("katex.min.js") + "\n" + read("contrib", "auto-render.min.js")
 
 
 def _e_ratio(pairs):
@@ -301,7 +344,7 @@ def _build_op(key, meta, rows, mem_rows):
         rest = ", ".join(f"{_label(lib)} {e:.1f}\u00d7" for lib, e in sorted(e_ratios.items(), key=lambda kv: kv[1]))
         winner_summary = (
             f"<strong>{_label(ref_lib)}</strong> is the reference (fastest on the most corpus entries). "
-            f"On average (E[time/{_label(ref_lib)}], the mean of each entry's own ratio, not a ratio of medians)"
+            f"On average ({_tex_e('t', _label(ref_lib))}, the mean of each entry's own ratio, not a ratio of medians)"
             + (f": {rest} as long." if rest else ".")
         )
 
@@ -324,7 +367,7 @@ def _build_op(key, meta, rows, mem_rows):
             f"<strong>{_label(mref)}</strong> needs the least extra memory on the most entries "
             f"(extra peak RSS on top of what the process held before the operation started; images under "
             f"0.065 MP are not measured)"
-            + (f". On average, E[memory/{_label(mref)}]: {rest} as much." if rest else ".")
+            + (f". On average, {_tex_e('m', _label(mref))}: {rest} as much." if rest else ".")
         )
 
     # Output size, for encoders: speed alone would reward writing a worse file.
@@ -475,7 +518,7 @@ def _build_fonts(fonts):
         }
         js.append(_chart_js(cid, cfg))
         e = _e_ratio(pairs)
-        summary = (f"On average (E[libstb time / Pillow time], the mean of each case's own ratio): "
+        summary = (f"On average ({TEX_E_FONT}, the mean of each case's own ratio): "
                    f"<strong>{e:.2f}\u00d7</strong>; below 1 means libstb took less time.") if e else ""
         ops.append({"key": op, "title": FONT_OP_TITLES[op], "id": cid, "rows": rows, "summary": summary})
     return {"ops": ops, "chart_js": "\n".join(js), "font": fonts.get("font", "")}
@@ -520,7 +563,7 @@ def _build_sizes_chart(size_rows):
 
 # ------------------------------------------------------------------ build --
 
-def build(results_dir, output_path, chartjs_path):
+def build(results_dir, output_path, chartjs_path, katex_dir=None):
     throughput = _load(os.path.join(results_dir, "throughput.json"))
     throughput_memory = _load(os.path.join(results_dir, "throughput_memory.json"))
     scaling = _load(os.path.join(results_dir, "scaling.json"))
@@ -537,6 +580,8 @@ def build(results_dir, output_path, chartjs_path):
 
     with open(chartjs_path, "r", encoding="utf-8") as f:
         chartjs_source = f.read()
+
+    katex_css, katex_js = _katex_assets(katex_dir)
 
     embedded = {"throughput": throughput, "throughput_memory": throughput_memory, "scaling": scaling,
                 "fonts": fonts, "sizes": sizes, "verify": verify, "system_info": system_info}
@@ -566,7 +611,7 @@ def build(results_dir, output_path, chartjs_path):
         has_throughput_memory=bool(throughput_memory),
         has_sizes=bool(size_rows), size_rows=size_rows,
         verify=verify, system_info=system_info, repeats=repeats,
-        chartjs_source=chartjs_source, embedded_json=json.dumps(embedded),
+        chartjs_source=chartjs_source, katex_css=katex_css, katex_js=katex_js, embedded_json=json.dumps(embedded),
         chart_scripts="\n".join(chart_scripts),
     )
 
@@ -583,7 +628,10 @@ if __name__ == "__main__":
     p.add_argument("--chartjs-path", default=os.path.join(HERE, "vendor", "chart.umd.min.js"),
                    help="path to a Chart.js UMD build (CMake fetches this fresh; "
                         "defaults to a local vendor/ copy for running by hand)")
+    p.add_argument("--katex-dir", default=os.path.join(HERE, "vendor", "katex"),
+                   help="KaTeX's dist/ directory (CMake fetches this fresh); without it the formulas "
+                        "are left as LaTeX source")
     args = p.parse_args()
 
-    out = build(args.results_dir, args.output, args.chartjs_path)
+    out = build(args.results_dir, args.output, args.chartjs_path, args.katex_dir)
     print(f"generate_report: wrote {out} ({os.path.getsize(out) / 1024:.0f}KB, standalone)")
