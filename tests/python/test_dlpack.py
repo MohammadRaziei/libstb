@@ -12,17 +12,31 @@ import libstb
 
 SRC = np.arange(2 * 4 * 3, dtype=np.uint8).reshape(2, 4, 3)
 
+# numpy < 2.1 (the newest numpy on Python 3.9) only knows the legacy DLPack capsule: it
+# imports every view read-only, cannot export a read-only array, and from_dlpack takes no
+# copy= / device= arguments. The writable / copy= behaviour is checked from numpy 2.1 on.
+NUMPY_DLPACK_V1 = tuple(int(v) for v in np.__version__.split(".")[:2]) >= (2, 1)
+needs_numpy_2_1 = pytest.mark.skipif(
+    not NUMPY_DLPACK_V1, reason="numpy < 2.1 has legacy DLPack only (read-only views, no copy=)"
+)
+
 
 def test_device_is_cpu():
     assert libstb.Image(SRC).__dlpack_device__() == (1, 0)
 
 
-def test_from_dlpack_is_a_zero_copy_writable_view():
+def test_from_dlpack_is_a_zero_copy_view():
     img = libstb.Image(SRC.copy())
     a = np.from_dlpack(img)
     assert a.shape == (2, 4, 3) and a.dtype == np.uint8
-    assert a.flags.writeable
     assert np.shares_memory(a, img.numpy())
+
+
+@needs_numpy_2_1
+def test_from_dlpack_view_is_writable():
+    img = libstb.Image(SRC.copy())
+    a = np.from_dlpack(img)
+    assert a.flags.writeable
     a[0, 0, 0] = 99
     assert img.numpy()[0, 0, 0] == 99
 
@@ -33,11 +47,31 @@ def test_shape_is_height_width_channels(shape):
     assert np.from_dlpack(img).shape == img.shape
 
 
-def test_copy_true_is_independent():
+class CopyingProvider:
+    """Asks the image for a copy=True export, whatever numpy version consumes it."""
+
+    def __init__(self, img):
+        self.img = img
+
+    def __dlpack__(self, **kwargs):
+        return self.img.__dlpack__(copy=True, **kwargs)
+
+    def __dlpack_device__(self):
+        return self.img.__dlpack_device__()
+
+
+def test_dlpack_copy_true_exports_an_independent_copy():
+    img = libstb.Image(SRC.copy())
+    b = np.from_dlpack(CopyingProvider(img))
+    assert not np.shares_memory(b, img.numpy())
+    np.testing.assert_array_equal(b, SRC)
+
+
+@needs_numpy_2_1
+def test_from_dlpack_copy_argument_of_numpy():
     img = libstb.Image(SRC.copy())
     b = np.from_dlpack(img, copy=True)
     assert not np.shares_memory(b, img.numpy())
-    np.testing.assert_array_equal(b, SRC)
     assert b.flags.writeable
 
 
@@ -118,6 +152,7 @@ def test_from_dlpack_copy_true_is_independent():
     np.testing.assert_array_equal(img.numpy(), SRC)
 
 
+@needs_numpy_2_1  # older numpy cannot export a read-only array through DLPack at all
 def test_from_dlpack_copies_what_it_cannot_share():
     a = SRC.copy()
     a.flags.writeable = False

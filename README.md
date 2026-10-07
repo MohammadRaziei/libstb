@@ -115,8 +115,10 @@ same zero-copy view as a plain 3-D `memoryview` (numpy reads it too), and
 and `cupy.from_dlpack(img)` share the pixels with no copy and no framework
 import on libstb's side. The layout is fixed: `uint8`, shape `(height, width,
 channels)`, on the CPU (`dl_device` other than the CPU is a `BufferError`).
-The result is writable and keeps the image alive; `copy=True` gives an
-independent copy. The other way round, `libstb.Image.from_dlpack(x)` takes any
+The view keeps the image alive. It is writable with numpy 2.1 or newer (older
+numpy, the last one on Python 3.9 being 2.0.2, imports every DLPack view
+read-only and has no `copy=` argument; `img.numpy()` is always writable).
+Asking for `copy=True` gives an independent copy. The other way round, `libstb.Image.from_dlpack(x)` takes any
 DLPack object holding `uint8` pixels of shape `(H, W)` or `(H, W, 1..4)` (a
 torch, jax, cupy or numpy array, another `Image`): a writable C-contiguous CPU
 array is shared, anything else is copied, and `copy=True` always copies.

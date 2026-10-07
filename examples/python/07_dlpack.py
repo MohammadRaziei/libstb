@@ -22,11 +22,17 @@ img = libstb.Image(np.dstack([
 # The layout is fixed: uint8, (height, width, channels), on the CPU.
 view = np.from_dlpack(img)
 print("numpy view    :", view.shape, view.dtype, "| shares memory:", np.shares_memory(view, img.numpy()))
-view[0, 0] = (255, 255, 255)          # writable: the image sees the change
-print("write-through :", img.numpy()[0, 0].tolist())
+if view.flags.writeable:               # numpy >= 2.1; older numpy imports DLPack views read-only
+    view[0, 0] = (255, 255, 255)       # writable: the image sees the change
+    print("write-through :", img.numpy()[0, 0].tolist())
+else:
+    print("write-through : numpy < 2.1 gives a read-only view (write through img.numpy() instead)")
 
-independent = np.from_dlpack(img, copy=True)
-print("copy=True     :", "independent" if not np.shares_memory(independent, img.numpy()) else "shared")
+try:
+    independent = np.from_dlpack(img, copy=True)
+    print("copy=True     :", "independent" if not np.shares_memory(independent, img.numpy()) else "shared")
+except TypeError:
+    print("copy=True     : needs numpy >= 2.1, skipped")
 
 # Other frameworks take the same call:
 #     t = torch.from_dlpack(img)            # torch.uint8, (H, W, C)

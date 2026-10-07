@@ -31,7 +31,11 @@ back = libstb.Image.from_dlpack(shared)
 print("from_dlpack shares memory    :", np.shares_memory(back.numpy(), shared))
 # For another layout, convert on their side, e.g.
 #     torch.from_dlpack(img).permute(2, 0, 1).float() / 255
-print("DLPack copy=True independent :", not np.shares_memory(np.from_dlpack(img, copy=True), img.numpy()))
+try:
+    independent = np.from_dlpack(img, copy=True)  # numpy >= 2.1; torch/jax take it too
+    print("DLPack copy=True independent :", not np.shares_memory(independent, img.numpy()))
+except TypeError:
+    print("DLPack copy=True             : needs numpy >= 2.1, skipped")
 
 # Without numpy: memoryview is a zero-copy 3-D view, tobytes() is a copy.
 view = memoryview(img)
