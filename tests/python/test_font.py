@@ -41,7 +41,7 @@ def test_lookup_advance_kerning(font):
 def test_render_glyph_is_an_exact_rectangle(font):
     g = font.render_glyph("A", 100)
     assert (g.bitmap.width, g.bitmap.height, g.bitmap.channels) == (40, 70, 1)
-    assert (g.bitmap.array == 255).all()
+    assert (g.bitmap.numpy() == 255).all()
     assert (g.x_offset, g.y_offset, g.advance) == (10, -70, 60.0)
 
 
@@ -59,7 +59,7 @@ def test_measure(font):
 
 def test_render_places_ink_exactly(font):
     t = font.render("AB", 100)
-    a = t.bitmap.array[:, :, 0]
+    a = t.bitmap.numpy()[:, :, 0]
     assert a.shape == (100, 100) and (t.origin_x, t.origin_y) == (0, 0)
     assert a[10, 10] == 255 and a[79, 49] == 255 and a[10, 9] == 0 and a[79, 50] == 0  # A
     assert a[45, 60] == 255 and a[79, 89] == 255 and a[45, 59] == 0 and a[44, 60] == 0  # B
@@ -67,7 +67,7 @@ def test_render_places_ink_exactly(font):
 
 
 def test_render_multiline(font):
-    a = font.render("A\nA", 100).bitmap.array[:, :, 0]
+    a = font.render("A\nA", 100).bitmap.numpy()[:, :, 0]
     assert a.shape[0] == 200 and a[10, 10] == 255 and a[110, 10] == 255 and a[100, 10] == 0
 
 
@@ -101,7 +101,7 @@ def test_atlas(font):
     g = a["A"]
     assert (g.x1 - g.x0, g.y1 - g.y0) == (40, 70)
     assert (g.xoff, g.yoff, g.advance) == (10.0, -70.0, 60.0)
-    px = a.image.array[g.y0:g.y1, g.x0:g.x1]
+    px = a.image.numpy()[g.y0:g.y1, g.x0:g.x1]
     assert (px == 255).all()
     assert a.image.shape == (256, 256, 1)
 
@@ -129,12 +129,12 @@ def test_loading_errors():
 
 
 def test_concurrent_rendering(font):
-    ref = font.render("AB\nBA", 100).bitmap.array
+    ref = font.render("AB\nBA", 100).bitmap.numpy()
     bad = []
 
     def work():
         for _ in range(50):
-            if not np.array_equal(font.render("AB\nBA", 100).bitmap.array, ref):
+            if not np.array_equal(font.render("AB\nBA", 100).bitmap.numpy(), ref):
                 bad.append(1)
 
     ts = [threading.Thread(target=work) for _ in range(8)]

@@ -85,7 +85,7 @@ def test_jpeg_decode_agrees_with_libjpeg(c, subsampling, quality):
     buf = io.BytesIO()
     pil_image(photo(97, 131, c, seed=2)).save(buf, "JPEG", quality=quality, subsampling=subsampling)
     data = buf.getvalue()
-    mine, ref = Image.open(data).array.astype(int), pil_array(data)
+    mine, ref = Image.open(data).numpy().astype(int), pil_array(data)
     assert mine.shape == ref.shape
     assert nmae(mine, ref) <= JPEG_NMAE
     assert np.abs(mine - ref).max() <= JPEG_MAX_DIFF
@@ -143,7 +143,7 @@ def reference_resize_rgba(arr, w, h, name):
 
 def libstb_resize(arr, w, h, name):
     # srgb=False: resize the stored values directly, as the references do (the default is linear light)
-    return Image(arr).resize(w, h, Resizer(name, srgb=False)).array.astype(int)
+    return Image(arr).resize(w, h, Resizer(name, srgb=False)).numpy().astype(int)
 
 
 SIZES = [(64, 48), (32, 24), (16, 12), (97, 71), (133, 100), (200, 150)]  # 128x96 source: shrink, odd ratios, enlarge

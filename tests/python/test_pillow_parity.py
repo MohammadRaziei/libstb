@@ -82,22 +82,22 @@ def pil_array(data):
 def test_png_decode_is_pixel_exact(c):
     src = photo(c)
     data = pil_bytes(src, "PNG")
-    np.testing.assert_array_equal(Image.open(data).array, pil_array(data))
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), pil_array(data))
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
 
 
 @pytest.mark.parametrize("c,fmt", [(3, "BMP"), (3, "TGA"), (4, "TGA"), (1, "TGA")])
 def test_bmp_and_tga_decode_is_pixel_exact(c, fmt):
     src = photo(c)
     data = pil_bytes(src, fmt)
-    np.testing.assert_array_equal(Image.open(data).array, pil_array(data))
+    np.testing.assert_array_equal(Image.open(data).numpy(), pil_array(data))
 
 
 @pytest.mark.parametrize("c", [3, 4])
 def test_rle_tga_decode_is_pixel_exact(c):
     src = photo(c)
     data = pil_bytes(src, "TGA", compression="tga_rle")
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
 
 
 def test_palette_and_one_bit_pngs_expand_like_pillow():
@@ -105,20 +105,20 @@ def test_palette_and_one_bit_pngs_expand_like_pillow():
     pal = PILImage.fromarray(rgb).quantize(64)
     buf = io.BytesIO()
     pal.save(buf, "PNG")
-    np.testing.assert_array_equal(Image.open(buf.getvalue()).array, np.asarray(pal.convert("RGB")))
+    np.testing.assert_array_equal(Image.open(buf.getvalue()).numpy(), np.asarray(pal.convert("RGB")))
 
     with_trns = pal.copy()
     with_trns.info["transparency"] = 3                  # palette entry 3 is fully transparent
     buf = io.BytesIO()
     with_trns.save(buf, "PNG", transparency=3)
-    mine = Image.open(buf.getvalue()).array
+    mine = Image.open(buf.getvalue()).numpy()
     np.testing.assert_array_equal(mine, np.asarray(with_trns.convert("RGBA")))
     assert (mine[..., 3] == 0).any()
 
     bw = PILImage.fromarray(photo(1)[..., 0]).convert("1")
     buf = io.BytesIO()
     bw.save(buf, "PNG")
-    np.testing.assert_array_equal(Image.open(buf.getvalue()).array[..., 0],
+    np.testing.assert_array_equal(Image.open(buf.getvalue()).numpy()[..., 0],
                                   np.asarray(bw).astype(np.uint8) * 255)
 
 
@@ -126,7 +126,7 @@ def test_palette_and_one_bit_pngs_expand_like_pillow():
 @pytest.mark.parametrize("quality", [50, 75, 90, 100])
 def test_jpeg_decode_matches_pillow(quality, subsampling):
     data = pil_bytes(photo(3), "JPEG", quality=quality, subsampling=subsampling)
-    mine, ref = Image.open(data).array, pil_array(data)
+    mine, ref = Image.open(data).numpy(), pil_array(data)
     assert nmae(mine, ref) < JPEG_NMAE
     assert max_diff(mine, ref) <= JPEG_MAX_DIFF
 
@@ -135,8 +135,8 @@ def test_grayscale_jpeg_decode_matches_pillow():
     data = pil_bytes(photo(1), "JPEG", quality=90)
     mine = Image.open(data)
     assert mine.channels == 1
-    assert nmae(mine.array, pil_array(data)) < JPEG_NMAE
-    assert max_diff(mine.array, pil_array(data)) <= JPEG_MAX_DIFF
+    assert nmae(mine.numpy(), pil_array(data)) < JPEG_NMAE
+    assert max_diff(mine.numpy(), pil_array(data)) <= JPEG_MAX_DIFF
 
 
 @pytest.mark.parametrize("fmt,c", [("PNG", 4), ("PNG", 1), ("BMP", 3), ("TGA", 4), ("JPEG", 3)])
@@ -144,14 +144,14 @@ def test_info_and_load_agree_with_pillow(fmt, c, tmp_path):
     src = photo(c, 83, 61)
     data = pil_bytes(src, fmt)
     ref = PILImage.open(io.BytesIO(data))
-    width, height, channels = libstb.info(data)
+    width, height, channels = libstb.iminfo(data)
     assert (width, height) == ref.size
     assert channels == len(ref.getbands())
 
     path = tmp_path / f"x.{fmt.lower()}"
     path.write_bytes(data)
-    np.testing.assert_array_equal(libstb.load(path), Image.open(path).array)
-    np.testing.assert_array_equal(libstb.load(path), Image.open(data).array)
+    np.testing.assert_array_equal(libstb.imread(path), Image.open(path).numpy())
+    np.testing.assert_array_equal(libstb.imread(path), Image.open(data).numpy())
 
 
 # ------------------------------------------------------------------ encode --
@@ -199,7 +199,7 @@ def test_jpeg_grayscale_encode_matches_pillows_loss():
     # grayscale file), so the result decodes to RGB; it must still be grey and lose as little.
     src = photo(1)
     data = Image(src).to_jpg(quality=90)
-    assert libstb.info(data).channels == 3
+    assert libstb.iminfo(data).channels == 3
     mine = pil_array(data)
     assert max_diff(mine, np.repeat(mine[..., :1], 3, axis=2)) == 0  # the three planes are identical
     theirs = pil_array(pil_bytes(src, "JPEG", quality=90))
@@ -208,8 +208,8 @@ def test_jpeg_grayscale_encode_matches_pillows_loss():
 
 def test_both_decoders_agree_on_libstbs_own_jpeg():
     data = Image(photo(3)).to_jpg(quality=90)
-    assert nmae(Image.open(data).array, pil_array(data)) < JPEG_NMAE
-    assert max_diff(Image.open(data).array, pil_array(data)) <= JPEG_MAX_DIFF
+    assert nmae(Image.open(data).numpy(), pil_array(data)) < JPEG_NMAE
+    assert max_diff(Image.open(data).numpy(), pil_array(data)) <= JPEG_MAX_DIFF
 
 
 # ------------------------------------------------------------------ resize --
@@ -225,7 +225,7 @@ def pil_resize(arr, w, h, filt):
 
 def libstb_resize(arr, w, h, filt):
     # srgb=False: Pillow blends the stored values directly, libstb's default resizes in linear light.
-    return Image(arr).resize(w, h, Resizer(filt, srgb=False)).array
+    return Image(arr).resize(w, h, Resizer(filt, srgb=False)).numpy()
 
 
 @pytest.mark.parametrize("filt", ["linear", "cubic"])
@@ -268,8 +268,8 @@ def test_resize_does_not_swap_width_and_height():
     out = Image(src).resize(40, 90, Resizer("linear", srgb=False))
     assert (out.width, out.height) == (40, 90)
     theirs = pil_resize(src, 40, 90, "linear")
-    assert nmae(out.array, theirs) < 2e-3  # measured 8.6e-4
-    assert max_diff(out.array, theirs) <= 5
+    assert nmae(out.numpy(), theirs) < 2e-3  # measured 8.6e-4
+    assert max_diff(out.numpy(), theirs) <= 5
 
 
 def test_the_srgb_default_differs_from_pillow_and_the_flag_fixes_it():
@@ -278,4 +278,4 @@ def test_the_srgb_default_differs_from_pillow_and_the_flag_fixes_it():
     src[:, ::2] = 255                                    # fine black and white stripes
     ref = pil_resize(src, 16, 16, "box")
     assert max_diff(libstb_resize(src, 16, 16, "box"), ref) == 0  # a whole-number box: exact
-    assert nmae(Image(src).resize(16, 16, Resizer("box")).array, ref) > 0.05  # measured 0.235
+    assert nmae(Image(src).resize(16, 16, Resizer("box")).numpy(), ref) > 0.05  # measured 0.235

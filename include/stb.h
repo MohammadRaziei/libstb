@@ -10,7 +10,7 @@
 #define LIBSTB_H
 
 #define LIBSTB_VERSION_MAJOR 0
-#define LIBSTB_VERSION_MINOR 4
+#define LIBSTB_VERSION_MINOR 3
 #define LIBSTB_VERSION_PATCH 0
 
 #ifdef __cplusplus

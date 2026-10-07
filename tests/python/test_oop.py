@@ -11,21 +11,21 @@ def test_open_bytes_and_properties():
     img = Image.open(RGB)
     assert (img.width, img.height, img.channels) == (2, 2, 3)
     assert img.shape == (2, 2, 3)
-    assert img.array.dtype == np.uint8
-    np.testing.assert_array_equal(img.array, EXPECTED)
+    assert img.numpy().dtype == np.uint8
+    np.testing.assert_array_equal(img.numpy(), EXPECTED)
     assert repr(img) == "Image(width=2, height=2, channels=3)"
 
 
 def test_open_path(tmp_path):
     p = tmp_path / "x.png"
     p.write_bytes(RGB)
-    np.testing.assert_array_equal(Image.open(p).array, EXPECTED)
-    np.testing.assert_array_equal(Image.open(str(p)).array, EXPECTED)
+    np.testing.assert_array_equal(Image.open(p).numpy(), EXPECTED)
+    np.testing.assert_array_equal(Image.open(str(p)).numpy(), EXPECTED)
 
 
 def test_open_options():
     assert Image.open(RGB, channels=4).channels == 4
-    np.testing.assert_array_equal(Image.open(RGB, flip=True).array, EXPECTED[::-1])
+    np.testing.assert_array_equal(Image.open(RGB, flip=True).numpy(), EXPECTED[::-1])
     with pytest.raises(libstb.LimitError, match="too large"):
         Image.open(RGB, max_bytes=1)
     with pytest.raises(ValueError):
@@ -35,8 +35,8 @@ def test_open_options():
 def test_numpy_interop():
     img = Image.open(RGB)
     np.testing.assert_array_equal(np.asarray(img), EXPECTED)
-    assert np.shares_memory(np.asarray(img), img.array)  # no copy by default
-    assert not np.shares_memory(np.array(img, copy=True), img.array)
+    assert np.shares_memory(np.asarray(img), img.numpy())  # no copy by default
+    assert not np.shares_memory(np.array(img, copy=True), img.numpy())
     assert np.asarray(img, dtype=np.float32).dtype == np.float32
 
 
@@ -54,17 +54,17 @@ def test_constructor_from_array():
 def test_image_info_class():
     i = ImageInfo.read(RGB)
     assert isinstance(i, ImageInfo)
-    assert i == (2, 2, 3) == libstb.info(RGB)
+    assert i == (2, 2, 3) == libstb.iminfo(RGB)
 
 
 def test_functional_shortcuts_match_object_api():
-    np.testing.assert_array_equal(libstb.load(RGB, flip=True), Image.open(RGB, flip=True).array)
+    np.testing.assert_array_equal(libstb.imread(RGB, flip=True), Image.open(RGB, flip=True).numpy())
 
 
 def test_numpy_method():
     img = Image.open(RGB)
-    assert np.shares_memory(img.numpy(), img.array)      # view by default
-    assert not np.shares_memory(img.numpy(copy=True), img.array)
+    assert np.shares_memory(img.numpy(), img.numpy())      # view by default
+    assert not np.shares_memory(img.numpy(copy=True), img.numpy())
     np.testing.assert_array_equal(img.numpy(copy=True), EXPECTED)
     f = img.numpy(dtype=np.float32)
     assert f.dtype == np.float32 and f.shape == (2, 2, 3)
@@ -73,21 +73,21 @@ def test_numpy_method():
 def test_array_is_a_writable_view_that_keeps_the_image_alive():
     import gc
 
-    a = Image.open(RGB).array  # the Image object is gone; the view must still be valid
+    a = Image.open(RGB).numpy()  # the Image object is gone; the view must still be valid
     gc.collect()
     np.testing.assert_array_equal(a, EXPECTED)
     img = Image.open(RGB)
-    img.array[0, 0, 0] = 7  # writes through to the image
-    assert img.array[0, 0, 0] == 7
+    img.numpy()[0, 0, 0] = 7  # writes through to the image
+    assert img.numpy()[0, 0, 0] == 7
 
 
 def test_constructor_views_a_writable_contiguous_array_without_copying():
     src = EXPECTED.copy()
     img = Image(src)
-    assert np.shares_memory(img.array, src)
+    assert np.shares_memory(img.numpy(), src)
     src[0, 0, 0] = 99  # the image sees changes to the array...
-    assert img.array[0, 0, 0] == 99
-    img.array[0, 0, 1] = 5  # ...and the array sees changes to the image
+    assert img.numpy()[0, 0, 0] == 99
+    img.numpy()[0, 0, 1] = 5  # ...and the array sees changes to the image
     assert src[0, 0, 1] == 5
 
 
@@ -100,8 +100,8 @@ def test_the_view_keeps_the_array_alive():
 
     img = make()
     gc.collect()
-    assert (img.array == 9).all()
-    view = img.array
+    assert (img.numpy() == 9).all()
+    view = img.numpy()
     del img
     gc.collect()
     assert (view == 9).all()  # and the view keeps the image alive
@@ -109,17 +109,17 @@ def test_the_view_keeps_the_array_alive():
 
 def test_constructor_copies_arrays_it_cannot_view():
     flipped = Image(EXPECTED[::-1])  # negative stride
-    assert not np.shares_memory(flipped.array, EXPECTED)
-    np.testing.assert_array_equal(flipped.array, EXPECTED[::-1])
+    assert not np.shares_memory(flipped.numpy(), EXPECTED)
+    np.testing.assert_array_equal(flipped.numpy(), EXPECTED[::-1])
     transposed = Image(np.ascontiguousarray(EXPECTED).transpose(1, 0, 2))
-    np.testing.assert_array_equal(transposed.array, EXPECTED.transpose(1, 0, 2))
+    np.testing.assert_array_equal(transposed.numpy(), EXPECTED.transpose(1, 0, 2))
     assert Image(np.zeros((3, 4), np.uint8)[:, ::2]).shape == (3, 2, 1)
 
     ro = EXPECTED.copy()
     ro.flags.writeable = False  # read-only memory must never be written through
     img = Image(ro)
-    assert not np.shares_memory(img.array, ro)
-    img.array[0, 0, 0] = 1  # allowed: it is the image's own copy
+    assert not np.shares_memory(img.numpy(), ro)
+    img.numpy()[0, 0, 0] = 1  # allowed: it is the image's own copy
     assert ro[0, 0, 0] == 255
 
 
@@ -130,17 +130,17 @@ def test_copy_is_explicit_and_independent():
     img = Image(src)
     for dup in (img.copy(), copy_module.copy(img), copy_module.deepcopy(img)):
         assert isinstance(dup, Image)
-        assert not np.shares_memory(dup.array, img.array)
-        np.testing.assert_array_equal(dup.array, img.array)
-        dup.array[0, 0, 0] = 1
+        assert not np.shares_memory(dup.numpy(), img.numpy())
+        np.testing.assert_array_equal(dup.numpy(), img.numpy())
+        dup.numpy()[0, 0, 0] = 1
         assert src[0, 0, 0] == 255  # neither the original image nor the array changed
 
 
 def test_decoded_images_own_their_pixels_and_copy_detaches():
     img = Image.open(RGB)
     dup = img.copy()
-    dup.array[0, 0, 0] = 0
-    np.testing.assert_array_equal(img.array, EXPECTED)
+    dup.numpy()[0, 0, 0] = 0
+    np.testing.assert_array_equal(img.numpy(), EXPECTED)
 
 
 def test_writes_from_a_viewing_image_reach_the_array(tmp_path):
@@ -149,15 +149,15 @@ def test_writes_from_a_viewing_image_reach_the_array(tmp_path):
     src[:] = 200
     p = tmp_path / "x.png"
     img.write(p)  # encodes what the array holds now
-    np.testing.assert_array_equal(Image.open(p).array, src)
-    assert img.resize(2, 2).array.shape == (2, 2, 3)
+    np.testing.assert_array_equal(Image.open(p).numpy(), src)
+    assert img.resize(2, 2).numpy().shape == (2, 2, 3)
 
 
 def test_open_sources_bytes_bytearray_memoryview_ndarray_and_paths(tmp_path):
     p = tmp_path / "x.png"
     p.write_bytes(RGB)
     for src in (RGB, bytearray(RGB), memoryview(RGB), np.frombuffer(RGB, np.uint8), p, str(p)):
-        np.testing.assert_array_equal(Image.open(src).array, EXPECTED)
+        np.testing.assert_array_equal(Image.open(src).numpy(), EXPECTED)
 
 
 def test_open_missing_file_is_file_not_found_and_not_a_libstb_error(tmp_path):

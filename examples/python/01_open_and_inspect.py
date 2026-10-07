@@ -19,13 +19,17 @@ def make_gradient(width=320, height=200):
 
 # Make a file to work with.
 src = OUT / "gradient.png"
-libstb.Image(make_gradient()).write(src)
+libstb.imwrite(src, make_gradient())
 
 # Header only: no pixels are decoded.
-info = libstb.ImageInfo.read(src)
+info = libstb.iminfo(src)
 print("header :", info.width, info.height, info.channels)
 
-# Full decode.
+# Just the pixels, as a numpy array.
+pixels = libstb.imread(src)
+print("imread :", pixels.shape, pixels.dtype)
+
+# Or an Image object, which also resizes and encodes.
 img = libstb.Image.open(src)
 print("image  :", img.width, img.height, img.channels)
 

@@ -29,7 +29,7 @@ EXPECTED = np.array([[[255, 0, 0], [0, 255, 0]], [[0, 0, 255], [255, 255, 255]]]
 
 
 def test_load_png_bytes():
-    a = libstb.load(RGB)
+    a = libstb.imread(RGB)
     assert a.dtype == np.uint8
     assert a.shape == (2, 2, 3)
     assert a.flags["C_CONTIGUOUS"]
@@ -37,7 +37,7 @@ def test_load_png_bytes():
 
 
 def test_info():
-    i = libstb.info(RGB)
+    i = libstb.iminfo(RGB)
     assert i == (2, 2, 3)
     assert (i.width, i.height, i.channels) == (2, 2, 3)
 
@@ -45,70 +45,70 @@ def test_info():
 def test_load_from_str_and_pathlib_paths(tmp_path):
     p = tmp_path / "x.png"
     p.write_bytes(RGB)
-    np.testing.assert_array_equal(libstb.load(p), EXPECTED)
-    np.testing.assert_array_equal(libstb.load(str(p)), EXPECTED)
-    assert libstb.info(p) == (2, 2, 3)
+    np.testing.assert_array_equal(libstb.imread(p), EXPECTED)
+    np.testing.assert_array_equal(libstb.imread(str(p)), EXPECTED)
+    assert libstb.iminfo(p) == (2, 2, 3)
 
 
 def test_load_from_bytearray_and_memoryview():
-    np.testing.assert_array_equal(libstb.load(bytearray(RGB)), EXPECTED)
-    np.testing.assert_array_equal(libstb.load(memoryview(RGB)), EXPECTED)
+    np.testing.assert_array_equal(libstb.imread(bytearray(RGB)), EXPECTED)
+    np.testing.assert_array_equal(libstb.imread(memoryview(RGB)), EXPECTED)
 
 
 def test_missing_file_raises_oserror(tmp_path):
     with pytest.raises(FileNotFoundError):
-        libstb.load(tmp_path / "nope.png")
+        libstb.imread(tmp_path / "nope.png")
 
 
 def test_channels_conversion():
-    rgba = libstb.load(RGB, channels=4)
+    rgba = libstb.imread(RGB, channels=4)
     assert rgba.shape == (2, 2, 4)
     assert (rgba[..., 3] == 255).all()
     np.testing.assert_array_equal(rgba[..., :3], EXPECTED)
-    assert libstb.load(RGB, channels=1).shape == (2, 2, 1)
+    assert libstb.imread(RGB, channels=1).shape == (2, 2, 1)
 
 
 def test_flip():
-    np.testing.assert_array_equal(libstb.load(RGB, flip=True), EXPECTED[::-1])
+    np.testing.assert_array_equal(libstb.imread(RGB, flip=True), EXPECTED[::-1])
 
 
 def test_result_owns_its_memory():
-    a = libstb.load(RGB)
+    a = libstb.imread(RGB)
     import gc
 
     gc.collect()
     np.testing.assert_array_equal(a, EXPECTED)  # still valid, source long gone
     a[0, 0, 0] = 7  # writable, independent buffer
-    np.testing.assert_array_equal(libstb.load(RGB), EXPECTED)
+    np.testing.assert_array_equal(libstb.imread(RGB), EXPECTED)
 
 
 def test_garbage_raises_decode_error():
     with pytest.raises(libstb.DecodeError):
-        libstb.load(b"definitely not an image")
+        libstb.imread(b"definitely not an image")
     with pytest.raises(libstb.DecodeError):
-        libstb.info(b"definitely not an image")
+        libstb.iminfo(b"definitely not an image")
 
 
 def test_empty_input_raises_decode_error():
     with pytest.raises(libstb.DecodeError, match="empty"):
-        libstb.load(b"")
+        libstb.imread(b"")
 
 
 def test_truncated_png_raises_decode_error():
     with pytest.raises(libstb.DecodeError):
-        libstb.load(RGB[: len(RGB) // 2])
+        libstb.imread(RGB[: len(RGB) // 2])
 
 
 @pytest.mark.parametrize("bad", [-1, 5])
 def test_bad_channels_raises_value_error(bad):
     with pytest.raises(ValueError):
-        libstb.load(RGB, channels=bad)
+        libstb.imread(RGB, channels=bad)
 
 
 def test_max_bytes():
     with pytest.raises(libstb.LimitError, match="too large"):
-        libstb.load(RGB, max_bytes=11)  # decodes to 12 bytes
-    assert libstb.load(RGB, max_bytes=12).shape == (2, 2, 3)
+        libstb.imread(RGB, max_bytes=11)  # decodes to 12 bytes
+    assert libstb.imread(RGB, max_bytes=12).shape == (2, 2, 3)
 
 
 def test_huge_declared_dimensions_rejected_fast():
@@ -118,7 +118,7 @@ def test_huge_declared_dimensions_rejected_fast():
     # stb itself may refuse such a header (DecodeError) or our max_bytes guard
     # does (LimitError); either way nothing is allocated.
     with pytest.raises(libstb.Error):
-        libstb.load(hdr)
+        libstb.imread(hdr)
 
 
 def test_flip_is_thread_safe():
@@ -127,7 +127,7 @@ def test_flip_is_thread_safe():
     def work(t):
         for i in range(500):
             flip = (i + t) % 2 == 1
-            a = libstb.load(RGB, flip=flip)
+            a = libstb.imread(RGB, flip=flip)
             want = EXPECTED[::-1] if flip else EXPECTED
             if not np.array_equal(a, want):
                 errors.append((t, i))

@@ -1,7 +1,6 @@
 """libstb must work, and import cleanly, in an environment without numpy.
 
-numpy is an optional extra: only `Image.array`, `Image.numpy()`, `__array__`
-and `libstb.load()` need it. Each test runs in a subprocess with numpy made
+numpy is an optional extra: only `Image.numpy()`, `__array__` and `libstb.imread()` need it. Each test runs in a subprocess with numpy made
 unimportable (`sys.modules["numpy"] = None` makes `import numpy` raise
 ImportError), so it does not matter that the rest of the test suite imports it.
 """
@@ -23,7 +22,7 @@ def test_import_and_core_api_work_without_numpy():
         assert img.shape == (2, 4, 3)
         png = img.to_png()
         assert libstb.Image.open(png).shape == (2, 4, 3)
-        assert libstb.info(png) == (4, 2, 3)
+        assert libstb.iminfo(png) == (4, 2, 3)
         assert img.resize(2, 1).shape == (1, 2, 3)
         assert len(img.to_jpg()) > 0
     """)
@@ -46,7 +45,7 @@ def test_numpy_access_raises_a_clear_import_error():
     r = _run("""
         import libstb
         img = libstb.Image(memoryview(bytearray(12)).cast("B", shape=[2, 2, 3]))
-        for access in (lambda: img.array, lambda: img.numpy(), lambda: libstb.load(img.to_png())):
+        for access in (lambda: img.numpy(), lambda: libstb.imread(img.to_png())):
             try:
                 access()
             except ImportError as e:
@@ -89,3 +88,16 @@ def test_buffer_view_is_zero_copy_and_keeps_the_image_alive():
     del opened
     gc.collect()                                # the view alone must keep the pixels alive
     assert view.tobytes() == expected
+
+
+def test_imwrite_and_iminfo_work_without_numpy(tmp_path=None):
+    import tempfile, os
+    d = tempfile.mkdtemp()
+    r = _run(f"""
+        import libstb
+        buf = memoryview(bytearray(range(24))).cast("B", shape=[2, 4, 3])
+        libstb.imwrite({d!r} + "/a.png", buf)
+        libstb.imwrite({d!r} + "/a.jpg", libstb.Image(buf), quality=50)
+        assert libstb.iminfo({d!r} + "/a.png") == (4, 2, 3)
+    """)
+    assert r.returncode == 0, r.stderr

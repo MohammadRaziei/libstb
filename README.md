@@ -5,8 +5,8 @@ libraries. `pip install libstb` and you have image/font processing with **no
 system dependencies and no Python dependencies**. The C++ library is usable from
 CMake too.
 
-numpy is optional: `pip install "libstb[numpy]"` if you want `img.array` /
-`img.numpy()` / `libstb.load()`. It is imported only when one of those is first
+numpy is optional: `pip install "libstb[numpy]"` if you want `img.numpy()` /
+`libstb.imread()`. It is imported only when one of those is first
 used, never by `import libstb`, and without it they raise an `ImportError` that
 says so. Everything else works without numpy, including `Image(array)` from any
 buffer (a `memoryview`, `array.array`, a `bytearray`, a PIL-exported buffer...),
@@ -29,6 +29,10 @@ import libstb
 img = libstb.Image.open("photo.png")                # or bytes; also: channels=4, flip=True
 img.width, img.height, img.channels                 # 640, 480, 3
 img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
+np.from_dlpack(img)                                 # DLPack: also torch/jax/cupy.from_dlpack(img), zero-copy
+libstb.Image.from_dlpack(tensor)                    # and back: a torch/jax/cupy/numpy uint8 array -> Image
+pixels = libstb.imread("photo.png")                 # just the ndarray (same options as Image.open)
+libstb.imwrite("out.jpg", pixels, quality=80)       # an ndarray or an Image; format from the extension
 libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
 libstb.Image(np.zeros((8, 8, 4), np.uint8))         # from your own uint8 array (no copy, see below)
 img.copy()                                          # an independent image (deep copy)
@@ -50,8 +54,7 @@ font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measur
 font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_offset, advance)
 atlas = font.make_atlas("ABCabc123", 32, 256, 256)  # Atlas: .image and atlas["A"] -> AtlasGlyph
 
-libstb.load("photo.png")                            # shortcut: Image.open(...).array
-libstb.info("photo.png")                            # shortcut: ImageInfo.read(...)
+libstb.iminfo("photo.png")                          # shortcut: ImageInfo.read(...)
 ```
 
 **Encoding.** Every format has a pair of methods with its own settings, all
@@ -62,6 +65,13 @@ and write it (only after encoding succeeded, so a failure never leaves a
 truncated file). `write(path)` is the shortcut: it picks the format from the
 extension (`.png .jpg .jpeg .bmp .tga`, case-insensitive; `ValueError` for
 anything else) and uses the defaults. For other settings call `write_*`.
+
+`libstb.imwrite(path, image, *, quality=None, compression=None, rle=None)` is
+the functional form: it takes an `Image` or a uint8 array, picks the format
+from the extension, and passes the options that format has (`quality` for jpg,
+`compression` for png, `rle` for tga). An option the format does not have is a
+`ValueError`, not silently ignored. `libstb.imread(source, *, channels, flip,
+max_bytes)` is its counterpart and returns an ndarray.
 
 **Resize filters by name.** `Image.resize(w, h, x)` and `Resizer(x)` accept a
 `Resizer.Filter`, or a case-insensitive name (`-` and space count as `_`). Any
@@ -95,10 +105,24 @@ exceed `max_bytes` (default 512 MiB) are rejected from the header, before any
 pixel memory is allocated.
 
 `libstb.Image` is `stb::image` itself, not a wrapper: `open`, `resize`, `to_*` and
-`write*` are the C++ members, run without the GIL. `img.array` / `np.asarray(img)`
+`write*` are the C++ members, run without the GIL. `img.numpy()` / `np.asarray(img)`
 are numpy views of its pixels (kept alive by the view); `memoryview(img)` is the
 same zero-copy view as a plain 3-D `memoryview` (numpy reads it too), and
 `img.tobytes()` is a copy, both without numpy.
+
+**DLPack.** `Image` implements `__dlpack__` / `__dlpack_device__`, so
+`np.from_dlpack(img)`, `torch.from_dlpack(img)`, `jax.numpy.from_dlpack(img)`
+and `cupy.from_dlpack(img)` share the pixels with no copy and no framework
+import on libstb's side. The layout is fixed: `uint8`, shape `(height, width,
+channels)`, on the CPU (`dl_device` other than the CPU is a `BufferError`).
+The result is writable and keeps the image alive; `copy=True` gives an
+independent copy. The other way round, `libstb.Image.from_dlpack(x)` takes any
+DLPack object holding `uint8` pixels of shape `(H, W)` or `(H, W, 1..4)` (a
+torch, jax, cupy or numpy array, another `Image`): a writable C-contiguous CPU
+array is shared, anything else is copied, and `copy=True` always copies.
+(`Image(x)` accepts the same objects; `from_dlpack` additionally insists on
+`__dlpack__`, so a stray `bytes` is a clear `TypeError`.) For a different layout or dtype (CHW, float32), convert on
+the framework side, e.g. `torch.from_dlpack(img).permute(2, 0, 1).float() / 255`.
 
 Pixels are never copied behind your back. `Image(array)` uses a writable,
 C-contiguous uint8 array in place, so the image and the array share their

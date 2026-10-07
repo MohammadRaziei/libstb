@@ -16,20 +16,20 @@ def gradient(w, h, c):
 def test_size_and_channels_preserved(c):
     out = Image(gradient(10, 8, c)).resize(5, 20)
     assert (out.width, out.height, out.channels) == (5, 20, c)
-    assert out.array.dtype == np.uint8
+    assert out.numpy().dtype == np.uint8
 
 
 def test_resize_returns_a_new_image_and_leaves_the_source_alone():
     src = Image(gradient(6, 6, 3))
-    before = src.array.copy()
+    before = src.numpy().copy()
     out = src.resize(3, 3)
     assert out is not src
-    np.testing.assert_array_equal(src.array, before)
+    np.testing.assert_array_equal(src.numpy(), before)
 
 
 def test_point_upscale_duplicates_pixels():
     src = gradient(2, 2, 3)
-    out = Image(src).resize(4, 4, Resizer(Resizer.Filter.POINT)).array
+    out = Image(src).resize(4, 4, Resizer(Resizer.Filter.POINT)).numpy()
     for y in range(4):
         for x in range(4):
             np.testing.assert_array_equal(out[y, x], src[y // 2, x // 2])
@@ -38,15 +38,15 @@ def test_point_upscale_duplicates_pixels():
 def test_srgb_flag_changes_how_colours_blend():
     src = Image(np.array([[[0], [255]]], np.uint8))
     box = Resizer.Filter.BOX
-    linear = src.resize(1, 1, Resizer(box, srgb=False)).array[0, 0, 0]
-    srgb = src.resize(1, 1, Resizer(box, srgb=True)).array[0, 0, 0]
+    linear = src.resize(1, 1, Resizer(box, srgb=False)).numpy()[0, 0, 0]
+    srgb = src.resize(1, 1, Resizer(box, srgb=True)).numpy()[0, 0, 0]
     assert 127 <= linear <= 128
     assert 186 <= srgb <= 190
 
 
 def test_alpha_is_weighted():
     src = Image(np.array([[[255, 0, 0, 255], [0, 255, 0, 0]]], np.uint8))
-    px = src.resize(1, 1, Resizer(Resizer.Filter.BOX)).array[0, 0]
+    px = src.resize(1, 1, Resizer(Resizer.Filter.BOX)).numpy()[0, 0]
     assert px[0] >= 250 and px[1] <= 5 and 126 <= px[3] <= 129
 
 
@@ -65,7 +65,7 @@ def test_every_filter_and_edge_works():
     for f in Resizer.Filter.__members__.values():
         for e in Resizer.Edge.__members__.values():
             out = src.resize(8, 8, Resizer(f, e))
-            assert out.array[4, 4, 0] == 100
+            assert out.numpy()[4, 4, 0] == 100
 
 
 def test_errors():
@@ -80,12 +80,12 @@ def test_errors():
 
 def test_concurrent_resizes():
     src = Image(gradient(64, 48, 4))
-    ref = src.resize(20, 15).array
+    ref = src.resize(20, 15).numpy()
     bad = []
 
     def work():
         for _ in range(50):
-            if not np.array_equal(src.resize(20, 15).array, ref):
+            if not np.array_equal(src.resize(20, 15).numpy(), ref):
                 bad.append(1)
 
     ts = [threading.Thread(target=work) for _ in range(8)]
@@ -136,16 +136,16 @@ def test_unknown_filter_name_raises_value_error_listing_valid_names():
 
 def test_image_resize_accepts_name_filter_resizer_or_none():
     src = Image(gradient(16, 12, 3))
-    ref = src.resize(8, 6, Resizer("cubic")).array
-    np.testing.assert_array_equal(src.resize(8, 6, "cubic").array, ref)
-    np.testing.assert_array_equal(src.resize(8, 6, Resizer.Filter.CATMULL_ROM).array, ref)
-    np.testing.assert_array_equal(src.resize(8, 6, None).array, src.resize(8, 6).array)
-    np.testing.assert_array_equal(src.resize(8, 6).array, src.resize(8, 6, Resizer()).array)
+    ref = src.resize(8, 6, Resizer("cubic")).numpy()
+    np.testing.assert_array_equal(src.resize(8, 6, "cubic").numpy(), ref)
+    np.testing.assert_array_equal(src.resize(8, 6, Resizer.Filter.CATMULL_ROM).numpy(), ref)
+    np.testing.assert_array_equal(src.resize(8, 6, None).numpy(), src.resize(8, 6).numpy())
+    np.testing.assert_array_equal(src.resize(8, 6).numpy(), src.resize(8, 6, Resizer()).numpy())
 
 
 def test_nearest_by_name_duplicates_pixels():
     src = gradient(2, 2, 3)
-    out = Image(src).resize(4, 4, "nearest").array
+    out = Image(src).resize(4, 4, "nearest").numpy()
     for y in range(4):
         for x in range(4):
             np.testing.assert_array_equal(out[y, x], src[y // 2, x // 2])
@@ -156,8 +156,8 @@ def test_resizer_resize_takes_an_image_and_matches_image_resize():
     r = Resizer("mitchell")
     out = r.resize(src, 8, 6)
     assert isinstance(out, Image) and (out.width, out.height) == (8, 6)
-    np.testing.assert_array_equal(out.array, src.resize(8, 6, r).array)
-    np.testing.assert_array_equal(out.array, src.resize(8, 6, resizer="mitchell").array)
+    np.testing.assert_array_equal(out.numpy(), src.resize(8, 6, r).numpy())
+    np.testing.assert_array_equal(out.numpy(), src.resize(8, 6, resizer="mitchell").numpy())
 
 
 def test_resize_rejects_a_bad_filter_argument_type():

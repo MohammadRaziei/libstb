@@ -145,7 +145,7 @@ const PyType_Slot image_slots[] = {
 // a numpy object is actually asked for, never at `import libstb`. Everything
 // else (open, resize, to_*, write*, fonts, Image(array) from any buffer) works
 // without it. Checked once per process: after the first success this is a
-// single bool test, so `.array` stays as cheap as before.
+// single bool test, so `.numpy()` stays cheap.
 void require_numpy() {
     static bool available = false;
     if (available) return;
@@ -202,7 +202,7 @@ void bind_image(nb::module_& m) {
                       "share their pixels); any other array (read-only, strided) is copied. Call\n"
                       "img.copy() for an independent image.\n"
                       "Image.open(source) decodes a path or encoded bytes. memoryview(img) is a no-copy\n"
-                      "3-D view of the pixels; `.array` is the same as a numpy ndarray (needs numpy).")
+                      "3-D view of the pixels; `.numpy()` is the same as a numpy ndarray (needs numpy).")
         .def(
             "__init__", [](image* self, nb::handle array) { new (self) image(image_from_array(array)); },
             "array"_a)
@@ -234,6 +234,23 @@ void bind_image(nb::module_& m) {
             },
             "source"_a, nb::kw_only(), "channels"_a = 0, "flip"_a = false,
             "max_bytes"_a = stb::load_options{}.max_bytes, release())
+
+        // --- DLPack import: Image.from_dlpack(x), the mirror of np.from_dlpack(img) ---
+        .def_static(
+            "from_dlpack",
+            [](nb::handle obj, bool copy) {
+                if (!nb::hasattr(obj, "__dlpack__"))
+                    throw nb::type_error("Image.from_dlpack needs an object with __dlpack__ "
+                                         "(a torch/jax/cupy/numpy array, another Image, ...)");
+                image img = image_from_array(obj);
+                return copy ? img.copy() : std::move(img);
+            },
+            "obj"_a, nb::kw_only(), "copy"_a = false,
+            "An Image from any object that implements DLPack: a torch, jax, cupy or numpy array...\n\n"
+            "The array must be uint8 with shape (H, W) or (H, W, 1..4). Like Image(array), a\n"
+            "writable C-contiguous CPU array is shared, not copied (the image keeps it alive);\n"
+            "read-only or strided ones are copied. copy=True always gives an independent image.\n"
+            "Raises TypeError (no __dlpack__, not uint8), ValueError (bad shape).")
 
         // --- resizing: resizer=None (default), a Resizer, a Resizer.Filter, or a filter name ---
         .def("resize", nb::overload_cast<int, int, const resizer*>(&image::resize, nb::const_),
@@ -274,9 +291,33 @@ void bind_image(nb::module_& m) {
         .def_prop_ro("channels", &image::channels)
         .def_prop_ro("shape",
                      [](const image& i) { return std::make_tuple(i.height(), i.width(), i.channels()); })
-        .def_prop_ro("array", &pixels_of,
-                     "The pixels as a uint8 numpy ndarray (height, width, channels), no copy.\n"
-                     "Needs numpy (pip install \"libstb[numpy]\"); imported here, on first use.")
+        // DLPack: np.from_dlpack(img), torch.from_dlpack(img), jax.numpy.from_dlpack(img),
+        // cupy.from_dlpack(img) ... all zero-copy, and libstb imports none of them. The
+        // pixels go out as nanobind's own DLPack object (no numpy needed) that keeps this
+        // image alive; it speaks both capsule versions, so consumers get a writable view.
+        // stream, max_version and dl_device are forwarded; copy=True exports a fresh copy.
+        .def(
+            "__dlpack__",
+            [](nb::handle self, nb::args args, nb::kwargs kwargs) {
+                // copy=True is ours to honour (nanobind refuses it): export a fresh copy.
+                nb::object owner = nb::borrow(self);
+                if (kwargs.contains("copy")) {
+                    nb::object want_copy = kwargs["copy"];
+                    nb::del(kwargs["copy"]);
+                    if (!want_copy.is_none() && nb::cast<bool>(want_copy))
+                        owner = nb::cast(nb::cast<stb::image&>(self).copy());
+                }
+                auto& img = nb::cast<stb::image&>(owner);
+                const std::size_t shape[3] = {std::size_t(img.height()), std::size_t(img.width()),
+                                              std::size_t(img.channels())};
+                nb::ndarray<nb::array_api, std::uint8_t, nb::ndim<3>, nb::device::cpu> a(
+                    img.data(), 3, shape, owner);
+                return nb::cast(a).attr("__dlpack__")(*args, **kwargs);
+            },
+            "DLPack export of the pixels (uint8, shape (height, width, channels), no copy).\n"
+            "Use np.from_dlpack(img), torch.from_dlpack(img), jax.numpy.from_dlpack(img), ...")
+        .def("__dlpack_device__", [](const image&) { return std::make_tuple(1, 0); },  // kDLCPU, device 0
+             "(device type, device id): always the CPU.")
         .def(
             "tobytes",
             [](const image& i) {
@@ -286,7 +327,7 @@ void bind_image(nb::module_& m) {
             "The pixels as bytes, row-major (height, width, channels). A copy; needs no numpy.")
         .def("__array__",
              [](nb::handle self, nb::object dtype, nb::object copy) -> nb::object {
-                 nb::object a = self.attr("array");
+                 nb::object a = nb::cast(pixels_of(self));
                  if (!dtype.is_none()) {
                      nb::module_ np = nb::module_::import_("numpy");
                      if (!np.attr("dtype")(dtype).equal(np.attr("dtype")("uint8")))

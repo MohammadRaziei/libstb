@@ -7,7 +7,8 @@ No system dependencies: `pip install libstb` is all you need.
     img.write_jpg("photo.jpg", quality=80) # or pick the format and its settings
     small = img.resize(320, 240)
     libstb.Font.open("font.ttf").render("Hi", 32).bitmap.write("hi.png")
-    pixels = libstb.load("photo.png")      # or: just the ndarray
+    pixels = libstb.imread("photo.png")    # or: just the ndarray
+    libstb.imwrite("out.jpg", pixels, quality=80)
 """
 
 import os as _os
@@ -28,14 +29,51 @@ from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
 _pkg_dir = _os.path.dirname(__file__)
 
 
-def info(source):
-    """Shortcut for ImageInfo.read(source)."""
+def iminfo(source):
+    """Shortcut for ImageInfo.read(source): (width, height, channels), header only."""
     return ImageInfo.read(source)
 
 
-def load(source, **kwargs):
-    """Shortcut for Image.open(source, **kwargs).array (a uint8 ndarray)."""
-    return Image.open(source, **kwargs).array
+def imread(source, *, channels=0, flip=False, max_bytes=DEFAULT_MAX_BYTES):
+    """Decode an image file (path) or encoded bytes straight to a uint8 ndarray
+    of shape (height, width, channels). Needs numpy; use Image.open without it.
+
+    Same options as Image.open: channels (0 keeps the file's), flip, max_bytes.
+    """
+    return Image.open(source, channels=channels, flip=flip, max_bytes=max_bytes).numpy()
+
+
+# extension -> (Image method, the options that format understands)
+_WRITERS = {
+    ".png": ("write_png", ("compression",)),
+    ".jpg": ("write_jpg", ("quality",)),
+    ".jpeg": ("write_jpg", ("quality",)),
+    ".bmp": ("write_bmp", ()),
+    ".tga": ("write_tga", ("rle",)),
+}
+
+
+def imwrite(path, image, *, quality=None, compression=None, rle=None):
+    """Write an Image, or a uint8 array of shape (H, W) / (H, W, 1..4), to `path`.
+
+    The format comes from the extension (.png .jpg .jpeg .bmp .tga, case-insensitive).
+    Options apply to the format that has them and are a ValueError for the others:
+    quality (jpg, 1..100), compression (png, 1..9), rle (tga, bool).
+    """
+    img = image if isinstance(image, Image) else Image(image)
+    ext = _os.path.splitext(_os.fspath(path))[1].lower()
+    if ext not in _WRITERS:
+        raise ValueError(f"unsupported extension {ext!r}: use one of {', '.join(_WRITERS)}")
+    method, allowed = _WRITERS[ext]
+    given = {k: v for k, v in (("quality", quality), ("compression", compression), ("rle", rle))
+             if v is not None}
+    bad = [k for k in given if k not in allowed]
+    if bad:
+        raise ValueError(
+            f"{bad[0]} is not an option for {ext} files"
+            + (f" (it takes: {', '.join(allowed)})" if allowed else " (it takes no options)")
+        )
+    getattr(img, method)(path, **given)
 
 
 def get_include_dir():
@@ -54,7 +92,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "info", "load",
+    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo",
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "Error", "DecodeError", "EncodeError", "LimitError",

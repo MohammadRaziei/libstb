@@ -62,7 +62,7 @@ def pil_bytes(arr, fmt, **kw):
 def test_png_roundtrip_is_exact(kind, c, level):
     src = make(kind, 90, 120, c)
     data = Image(src).to_png(level)
-    np.testing.assert_array_equal(Image.open(data).array, src)  # libstb's own decoder
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)  # libstb's own decoder
     np.testing.assert_array_equal(pil_array(data), src)  # an independent one (zlib)
 
 
@@ -70,7 +70,7 @@ def test_png_roundtrip_is_exact(kind, c, level):
 def test_png_large_image_with_many_deflate_blocks_is_exact(kind):
     src = make(kind, 1100, 1300, 3)  # millions of tokens: far past one 64K-token block
     data = Image(src).to_png()
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
     np.testing.assert_array_equal(pil_array(data), src)
 
 
@@ -79,7 +79,7 @@ def test_png_degenerate_sizes_are_exact(shape):
     h, w, c = shape
     src = make("photo", h, w, c)
     np.testing.assert_array_equal(pil_array(Image(src).to_png()), src)
-    np.testing.assert_array_equal(Image.open(Image(src).to_png()).array, src)
+    np.testing.assert_array_equal(Image.open(Image(src).to_png()).numpy(), src)
 
 
 @pytest.mark.parametrize("kind", ["flat", "gradient", "blocks", "sparse", "photo"])
@@ -104,8 +104,8 @@ def test_png_of_incompressible_data_barely_grows():
 def test_files_written_by_pillow_decode_exactly(fmt, c):
     src = make("photo", 47, 59, c)
     data = pil_bytes(src, fmt)
-    np.testing.assert_array_equal(Image.open(data).array, pil_array(data))
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), pil_array(data))
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
 
 
 # ------------------------------------------------------- libstb -> Pillow ----
@@ -115,21 +115,21 @@ def test_files_written_by_pillow_decode_exactly(fmt, c):
 def test_tga_written_by_libstb_is_exact(c, rle):
     src = make("blocks", 40, 50, c)
     data = Image(src).to_tga(rle)
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
     np.testing.assert_array_equal(pil_array(data), src)
 
 
 def test_bmp_rgb_is_exact():
     src = make("photo", 33, 45, 3)
     data = Image(src).to_bmp()
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
     np.testing.assert_array_equal(pil_array(data), src)
 
 
 def test_bmp_rgba_keeps_alpha_exactly():
     src = make("photo", 33, 45, 4)
     data = Image(src).to_bmp()
-    np.testing.assert_array_equal(Image.open(data).array, src)
+    np.testing.assert_array_equal(Image.open(data).numpy(), src)
     np.testing.assert_array_equal(pil_array(data), src)  # Pillow reads libstb's 32-bit BMP with alpha too
 
 
@@ -138,7 +138,7 @@ def test_bmp_gray_is_stored_as_rgb_with_three_equal_planes():
     (h, w, 3) and each plane must equal the source exactly."""
     src = make("photo", 33, 45, 1)
     data = Image(src).to_bmp()
-    for decoded in (Image.open(data).array, pil_array(data)):
+    for decoded in (Image.open(data).numpy(), pil_array(data)):
         assert decoded.shape == (33, 45, 3)
         for plane in range(3):
             np.testing.assert_array_equal(decoded[..., plane], src[..., 0])
