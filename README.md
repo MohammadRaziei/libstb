@@ -71,7 +71,65 @@ the functional form: it takes an `Image` or a uint8 array, picks the format
 from the extension, and passes the options that format has (`quality` for jpg,
 `compression` for png, `rle` for tga). An option the format does not have is a
 `ValueError`, not silently ignored. `libstb.imread(source, *, channels, flip,
-max_bytes)` is its counterpart and returns an ndarray.
+max_bytes, orient)` is its counterpart and returns an ndarray.
+
+**Editing.** Every operation returns a new `Image` and leaves the source
+alone; `ValueError` on a bad argument, `LimitError` if a result would exceed
+2 GiB. Results are exact, checked against Pillow's (`FLIP_*`, `ROTATE_*`,
+`TRANSPOSE`, `expand`, `convert`).
+
+```python
+img.crop(x, y, width, height)         # must lie inside the image
+img.flip_horizontal(); img.flip_vertical()
+img.rotate90(turns=1)                 # clockwise quarter turns, negative = counter-clockwise
+img.transpose()                       # swap rows and columns
+img.pad(left, top, right, bottom, fill=(255, 255, 255))   # fill: an int, or one value per channel
+img.thumbnail(256, 256)               # fit inside the box, aspect ratio kept, never enlarges
+img.thumbnail(256, 256, "linear")     # same resizer argument as resize()
+```
+
+**Channels and alpha.** `img.convert(channels)` goes between 1 (gray), 2 (gray +
+alpha), 3 (RGB) and 4 (RGBA). Gray is 0.299 R + 0.587 G + 0.114 B on the stored
+values (no gamma, as in Pillow), a missing alpha is 255, and a dropped alpha is
+simply discarded: use `img.flatten(background=(255, 255, 255))` to blend it onto
+a colour first. `img.split()` gives one single-channel `Image` per channel and
+`Image.merge(channels)` puts 1 to 4 of them back (in any order).
+`base.composite(overlay, x=0, y=0)` blends `overlay` on top with the usual "over"
+operator and straight alpha: the overlay may hang over the edges, may have any
+channel count (no alpha means opaque), and the result keeps the base's channel
+count. Its alpha equals Pillow's `alpha_composite`; the colour is within one level
+wherever the pixel is visible (where alpha is almost 0 the colour is ill-defined,
+and it does not matter). `Image.open(..., channels=n)` converts inside stb, which
+can differ from `convert(n)` by a rounding step.
+
+**SIMD.** The loops that are limited by arithmetic rather than by memory
+(`convert`, `composite`, `flatten`) have an AVX2 version, chosen at run time:
+the same wheel runs on any x86-64 CPU and uses AVX2 where the CPU and OS have
+it (GCC/Clang builds; arm64 and MSVC builds use the portable code). Both
+versions compute the same integers, so results are bit-identical, and the tests
+check it for every channel combination. `libstb.simd_name()` says which one is
+active (`"avx2"` or `"baseline"`); `libstb.set_simd(False)` or `LIBSTB_SIMD=off`
+in the environment forces the portable code, for comparing or measuring. Flips,
+turns, `crop` and `pad` only move bytes and are limited by memory bandwidth, so
+they have no SIMD version: AVX2 would not make them faster.
+
+**EXIF orientation.** Phone photos are stored sideways and carry an EXIF tag
+saying how to turn them; stb ignores it. `Image.open(path, orient=True)` (and
+`imread(..., orient=True)`) applies it while decoding, for JPEG and PNG (`eXIf`
+chunk); width and height may swap, and `flip=True` is applied after it. It is
+off by default so decoding keeps returning the stored pixels, and `iminfo` keeps
+reporting the stored size. `libstb.exif_orientation(source)` returns the 1..8
+value (1 when there is none or the data is unreadable; it never throws on bad
+input and is safe on untrusted files) and `img.orient(value)` applies one:
+
+```python
+img = libstb.Image.open("IMG_0001.jpg", orient=True)     # upright
+turn = libstb.exif_orientation("IMG_0001.jpg")            # or ask first...
+img = libstb.Image.open("IMG_0001.jpg").orient(turn)      # ...and apply it yourself
+```
+
+Only the tag is read (JPEG `APP1`, PNG `eXIf`); other EXIF data and ICC profiles
+are not.
 
 **Resize filters by name.** `Image.resize(w, h, x)` and `Resizer(x)` accept a
 `Resizer.Filter`, or a case-insensitive name (`-` and space count as `_`). Any
@@ -166,6 +224,20 @@ o.edge = stb::resize_edge::wrap;
 stb::resizer r(o);                                     // also: resizer("cubic"), resizer(resize_filter::box)
 stb::image tile = img.resize(320, 240, &r);            // nullptr = default resizer; r.resize(img, w, h) works too
 
+stb::image part  = img.crop(10, 10, 200, 100);        // geometry: each returns a new image
+stb::image turned = img.rotate90();                    // clockwise; also flip_horizontal/vertical, transpose
+stb::image framed = img.pad(8, 8, 8, 8, {255, 255, 255, 255});   // fill[c] = value of channel c
+stb::image thumb = img.thumbnail(256, 256);            // fits the box, never enlarges (+ resize's filter arguments)
+stb::image gray = img.convert(1);                      // 1..4 channels; flatten() blends alpha onto a colour
+std::vector<stb::image> planes = img.split();          // stb::image::merge(planes) is the inverse
+stb::image over = img.composite(logo, 16, 16);         // "over" operator; logo may hang over the edges
+
+stb::load_options lo;                                  // EXIF orientation: JPEG APP1 / PNG eXIf
+lo.orient = true;                                      //   upright while decoding (then `flip` goes after it)
+stb::image photo = stb::image::open("IMG_0001.jpg", lo);
+int turn = stb::exif_orientation(bytes.data(), bytes.size());   // 1..8, 1 if none; never throws
+stb::image upright = raw.orient(turn);                 // or apply it yourself
+
 stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-safe
 stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
 stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
@@ -183,6 +255,11 @@ stb's decode buffer (adopted, not copied) or memory somebody else owns
 A copy is always spelled `copy()`. The four output formats are a closed set, so there
 is no encoder class hierarchy: each format is a `to_*` / `write_*` pair on
 `image` with its own defaulted settings, next to decoding in `src/core/image.cpp`.
+The editing operations are plain loops over the pixel buffer in `src/core/image_ops.cpp`
+(no stb involved; the arithmetic-heavy kernels are instantiated twice, portable and
+AVX2, and chosen in `src/core/simd.cpp`; build with `-DSTB_NO_SIMD_DISPATCH` to leave
+the AVX2 ones out) and the EXIF reader is `src/core/exif.cpp`: it looks only at the
+Orientation tag and checks every offset against the buffer.
 Runtime failures derive from
 `stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
 programmer errors throw `std::invalid_argument`.

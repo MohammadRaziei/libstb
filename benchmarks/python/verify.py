@@ -49,8 +49,8 @@ RESIZE_NMAE = 1e-2  # vs Pillow, same filter [libstb 2.0e-3, skimage 4.5e-3, Ope
 def _to_array(result, lib):
     if isinstance(result, np.ndarray):
         a = result
-    elif hasattr(result, "array") and hasattr(result, "channels"):  # libstb.Image
-        a = result.array
+    elif hasattr(result, "numpy") and hasattr(result, "channels"):  # libstb.Image
+        a = result.numpy()
     else:  # PIL image
         a = np.asarray(result)
     if lib == "opencv" and a.ndim == 3:

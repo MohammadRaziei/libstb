@@ -167,8 +167,13 @@ image image::decode(const void* data, std::size_t size, const load_options& opt)
                           std::to_string(hdr.height) + "x" + std::to_string(want) +
                           " exceeds max_bytes");
 
+    // With orient, a flip is done after the orientation (a vertical flip commutes with
+    // nothing else): stb flips only when no orientation has to be applied.
+    const int orientation = opt.orient ? exif_orientation(data, size) : 1;
+    const bool stb_flips = opt.flip && orientation == 1;
+
     // The _thread variant: stb's plain setter is a process-wide global.
-    stbi_set_flip_vertically_on_load_thread(opt.flip ? 1 : 0);
+    stbi_set_flip_vertically_on_load_thread(stb_flips ? 1 : 0);
 
     int w = 0, h = 0, c = 0;
     std::unique_ptr<stbi_uc, stb_free> px(stbi_load_from_memory(
@@ -179,7 +184,10 @@ image image::decode(const void* data, std::size_t size, const load_options& opt)
     // The shared_ptr owns the buffer from here on, so it is freed on any later throw too.
     stbi_uc* raw = px.get();
     std::shared_ptr<void> owner(px.release(), [](void* p) { stbi_image_free(p); });
-    return image::wrap(w, h, want, raw, std::move(owner));
+    image img = image::wrap(w, h, want, raw, std::move(owner));
+    if (orientation == 1) return img;
+    img = img.orient(orientation);
+    return opt.flip ? img.flip_vertical() : std::move(img);
 }
 
 image image::open(const std::filesystem::path& path, const load_options& opt) {

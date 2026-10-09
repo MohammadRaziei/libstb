@@ -4,6 +4,7 @@
 // only, with STB_*_STATIC, so no stbi_* symbol leaks out of libstb_core (safe
 // to link next to your own copy of stb).
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -34,10 +35,29 @@ struct image_info {
 struct load_options {
     int channels = 0;   // 0 = keep the source's, 1..4 = convert to that many
     bool flip = false;  // flip vertically while decoding (per call, thread-safe)
+    // Apply the EXIF orientation stored in the file (JPEG and PNG), so a phone
+    // photo comes out upright. The result may have width and height swapped
+    // relative to image_info. Combined with `flip`, the orientation is applied first.
+    bool orient = false;
     // Refuse to decode anything whose output would exceed this many bytes.
     // Checked from the header BEFORE any pixel memory is allocated.
     std::size_t max_bytes = std::size_t(1) << 29;  // 512 MiB
 };
+
+// The EXIF orientation (1..8, as the standard numbers them) stored in an encoded
+// JPEG or PNG, or 1 ("upright") when there is none, the format has none, or the
+// data is not readable. Never throws and never reads out of bounds, so it is safe
+// on untrusted input. Apply it with image::orient().
+int exif_orientation(const void* data, std::size_t size) noexcept;
+
+// Runtime-selected SIMD kernels. libstb's own conversion and compositing loops (convert,
+// composite, flatten) have an AVX2 version that is picked at run time when the CPU supports
+// it (x86-64 with GCC or Clang); every other CPU, and every other function, uses plain
+// portable code. Both give bit-identical results. simd_name() is "avx2" or "baseline";
+// set_simd_enabled(false) (or LIBSTB_SIMD=off in the environment) forces the portable code,
+// e.g. to compare or to measure. Thread-safe.
+const char* simd_name() noexcept;
+void set_simd_enabled(bool enabled) noexcept;
 
 // Defaults of to_png / write_png and to_jpg / write_jpg.
 inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower
@@ -118,6 +138,55 @@ public:
     // ("cubic", "linear", "nearest", ... see resize_filter_from_name).
     image resize(int width, int height, resize_filter filter) const;
     image resize(int width, int height, std::string_view filter_name) const;
+
+    // --- geometry: each returns a new image, this one is not modified ---
+    // All throw invalid_argument on an empty image or a bad argument, and
+    // limit_error if the result would exceed 2 GiB.
+
+    // The rectangle with top-left corner (x, y); it must lie inside the image.
+    image crop(int x, int y, int width, int height) const;
+    image flip_horizontal() const;  // mirror left <-> right
+    image flip_vertical() const;    // mirror top <-> bottom
+    // `turns` quarter turns clockwise (negative: counter-clockwise; any integer).
+    image rotate90(int turns = 1) const;
+    // Swap rows and columns (mirror across the main diagonal); width and height swap.
+    image transpose() const;
+    // The upright version of an image stored with this EXIF orientation (1..8,
+    // see exif_orientation): the transform a viewer applies. 1 is a copy.
+    image orient(int orientation) const;
+    // A larger image with this one in the middle of a border of the given widths
+    // (all >= 0). fill[c] is the border value of channel c (so for RGBA {r, g, b, a};
+    // for gray + alpha {gray, alpha}); the default is all zero.
+    image pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill = {}) const;
+    // Shrink to fit inside max_width x max_height, keeping the aspect ratio. An image
+    // that already fits is copied, never enlarged. The filter arguments are those of
+    // resize().
+    image thumbnail(int max_width, int max_height, const resizer* r = nullptr) const;
+    image thumbnail(int max_width, int max_height, resize_filter filter) const;
+    image thumbnail(int max_width, int max_height, std::string_view filter_name) const;
+
+    // --- channels and alpha ---
+    // The same pixels with 1 (gray), 2 (gray + alpha), 3 (RGB) or 4 (RGBA) channels.
+    // Gray comes from RGB as 0.299 R + 0.587 G + 0.114 B (on the stored values, no
+    // gamma, as Pillow does), a missing alpha is 255, and a dropped alpha is simply
+    // discarded: use flatten() to blend it onto a background instead. Same channel
+    // count: a copy. Throws invalid_argument for a channel count outside 1..4.
+    image convert(int channels) const;
+    // One single-channel image per channel; merge() puts them back together.
+    std::vector<image> split() const;
+    // 1..4 single-channel images of the same size -> one image with that many
+    // channels (in that order). Throws invalid_argument otherwise.
+    static image merge(const std::vector<const image*>& channels);
+    static image merge(const std::vector<image>& channels);
+    // This image with `overlay` blended on top at (x, y) ("over" operator, straight
+    // alpha). The overlay may hang over the edges (it is clipped), and may have any
+    // channel count: without alpha it is opaque, gray is replicated into colour. The
+    // result has this image's channel count; if that has no alpha, the overlay's alpha
+    // just weights the blend. Not fully inside: the rest of this image is a copy.
+    image composite(const image& overlay, int x = 0, int y = 0) const;
+    // Blend an alpha channel onto a solid background colour (r, g, b) and drop it:
+    // 2 -> 1 channel, 4 -> 3. Images without alpha are copied.
+    image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const;
 
     // --- accessors ---
     int width() const noexcept { return width_; }

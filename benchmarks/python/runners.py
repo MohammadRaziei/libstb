@@ -17,12 +17,12 @@ Only that callable is ever timed or memory-measured.
 Operations, and what each one is fair to compare:
 
   info          Read width/height/channels from the header only, no
-                pixel decoding. libstb.info vs Pillow (Image.open is
+                pixel decoding. libstb.iminfo vs Pillow (Image.open is
                 lazy: .size and .mode come from the header). OpenCV and
                 imageio have no header-only API, so they do not appear.
 
   decode        Encoded bytes in, uint8 pixel array out, in the file's
-                own channel count. libstb.Image.open(bytes).array,
+                own channel count. libstb.Image.open(bytes).numpy(),
                 Pillow (np.asarray of the opened image), OpenCV
                 (imdecode, IMREAD_UNCHANGED), imageio (imread, with the
                 extension given).
@@ -172,17 +172,17 @@ def _resize_target(op, inp):
 
 def _libstb(op, inp, srgb=False):
     import libstb
-    import numpy  # noqa: F401 - libstb imports it lazily on first .array; setup, not the operation
+    import numpy  # noqa: F401 - libstb imports it lazily on first .numpy(); setup, not the operation
 
     if op == "info":
         data = inp.data
-        return lambda: libstb.info(data)
+        return lambda: libstb.iminfo(data)
     if op == "decode":
         data = inp.data
-        return lambda: libstb.Image.open(data).array
+        return lambda: libstb.Image.open(data).numpy()
     if op == "load_file":
         path = inp.path
-        return lambda: libstb.load(path)
+        return lambda: libstb.imread(path)
     if op.startswith("encode_"):
         img = libstb.Image(inp.arr)  # shares the array's pixels, no copy
         fmt = op[len("encode_"):]

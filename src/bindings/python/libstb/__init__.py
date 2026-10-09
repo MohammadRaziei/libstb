@@ -25,6 +25,8 @@ except Exception:  # pragma: no cover
 from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
 from .font import Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize
 from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
+from .libstb_py import exif_orientation_bytes as _native_exif_orientation
+from .libstb_py import set_simd, simd_name
 
 _pkg_dir = _os.path.dirname(__file__)
 
@@ -34,13 +36,26 @@ def iminfo(source):
     return ImageInfo.read(source)
 
 
-def imread(source, *, channels=0, flip=False, max_bytes=DEFAULT_MAX_BYTES):
+def exif_orientation(source):
+    """The EXIF orientation (1..8) stored in a JPEG or PNG, or 1 (upright) if there is
+    none. `source` is a path or the encoded bytes. Apply it with Image.orient(), or let
+    Image.open(..., orient=True) / imread(..., orient=True) do it while decoding.
+    """
+    from .image import _read
+
+    return _native_exif_orientation(_read(source))
+
+
+def imread(source, *, channels=0, flip=False, max_bytes=DEFAULT_MAX_BYTES, orient=False):
     """Decode an image file (path) or encoded bytes straight to a uint8 ndarray
     of shape (height, width, channels). Needs numpy; use Image.open without it.
 
-    Same options as Image.open: channels (0 keeps the file's), flip, max_bytes.
+    Same options as Image.open: channels (0 keeps the file's), flip, max_bytes, orient
+    (apply the EXIF orientation).
     """
-    return Image.open(source, channels=channels, flip=flip, max_bytes=max_bytes).numpy()
+    return Image.open(
+        source, channels=channels, flip=flip, max_bytes=max_bytes, orient=orient
+    ).numpy()
 
 
 # extension -> (Image method, the options that format understands)
@@ -92,7 +107,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo",
+    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "set_simd",
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "Error", "DecodeError", "EncodeError", "LimitError",

@@ -9,7 +9,7 @@ installing anything.
 
 numpy is listed on its own for context: OpenCV, imageio and scikit-image
 depend on it (so it is inside their totals), Pillow and libstb do not. libstb
-only imports it when you ask for `img.array`, and then only if you installed
+only imports it when you ask for `img.numpy()`, and then only if you installed
 `libstb[numpy]`, so its total here is just its own wheel.
 """
 import argparse

@@ -4,6 +4,7 @@
 #include <nanobind/stl/string_view.h>
 #include <nanobind/stl/tuple.h>
 
+#include <array>
 #include <climits>
 #include <cstdint>
 #include <cstring>
@@ -86,12 +87,35 @@ stb::image image_from_array(nb::handle obj) {
     return stb::image(int(w), int(h), int(c), std::move(px));
 }
 
-stb::load_options make_options(int channels, bool flip, std::size_t max_bytes) {
+stb::load_options make_options(int channels, bool flip, std::size_t max_bytes, bool orient) {
     stb::load_options o;
     o.channels = channels;
     o.flip = flip;
     o.max_bytes = max_bytes;
+    o.orient = orient;
     return o;
+}
+
+std::uint8_t byte_of(nb::handle h) {
+    const long v = nb::cast<long>(h);
+    if (v < 0 || v > 255) throw std::invalid_argument("colour values must be in 0..255");
+    return static_cast<std::uint8_t>(v);
+}
+
+// A colour argument: an int (every value the same) or a sequence of exactly `n` ints.
+template <std::size_t N>
+std::array<std::uint8_t, N> colour_of(nb::handle obj, std::size_t n, const char* what) {
+    std::array<std::uint8_t, N> out{};
+    if (PyLong_Check(obj.ptr())) {
+        out.fill(byte_of(obj));
+        return out;
+    }
+    nb::sequence seq = nb::cast<nb::sequence>(obj);
+    if (nb::len(seq) != n)
+        throw std::invalid_argument(std::string(what) + " needs one value per channel (" + std::to_string(n) +
+                                    ") or a single int");
+    for (std::size_t i = 0; i < n; ++i) out[i] = byte_of(seq[i]);
+    return out;
 }
 
 // Buffer protocol: memoryview(img) is a writable 3-D (height, width, channels)
@@ -194,6 +218,22 @@ void bind_image(nb::module_& m) {
         },
         "data"_a);
 
+    m.def("simd_name", &stb::simd_name,
+          "\"avx2\" or \"baseline\": which kernels convert / composite / flatten run. The AVX2 ones\n"
+          "are picked at run time when the CPU supports them; both give identical results.");
+    m.def("set_simd", &stb::set_simd_enabled, "enabled"_a,
+          "set_simd(False) forces the portable kernels (same as LIBSTB_SIMD=off in the environment),\n"
+          "set_simd(True) allows AVX2 again where the CPU has it.");
+    m.def(
+        "exif_orientation_bytes",
+        [](nb::bytes data) {
+            const char* p = data.c_str();
+            const std::size_t n = data.size();
+            nb::gil_scoped_release unlock;
+            return stb::exif_orientation(p, n);
+        },
+        "data"_a);
+
     // The native Image *is* stb::image: every method below is the C++ member.
     nb::class_<image>(m, "Image", nb::type_slots(image_slots),
                       "An 8-bit image: height x width x channels (1..4) uint8 pixels.\n\n"
@@ -216,24 +256,28 @@ void bind_image(nb::module_& m) {
         // --- decoding: open(bytes-like | path, *, channels, flip, max_bytes) ---
         .def_static(
             "open",
-            [](const bytes_in& data, int channels, bool flip, std::size_t max_bytes) {
-                return image::decode(data.data(), data.size(), make_options(channels, flip, max_bytes));
+            [](const bytes_in& data, int channels, bool flip, std::size_t max_bytes, bool orient) {
+                return image::decode(data.data(), data.size(),
+                                     make_options(channels, flip, max_bytes, orient));
             },
             "source"_a, nb::kw_only(), "channels"_a = 0, "flip"_a = false,
-            "max_bytes"_a = stb::load_options{}.max_bytes, release(),
+            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false, release(),
             "Decode an image from encoded bytes (bytes, bytearray, memoryview) or from a file path.\n\n"
             "channels  : 0 keeps the file's channel count; 1..4 converts.\n"
             "flip      : flip vertically while decoding.\n"
+            "orient    : apply the EXIF orientation of a JPEG or PNG, so a phone photo comes out\n"
+            "            upright (width and height may swap; a flip is applied after it).\n"
             "max_bytes : refuse images whose decoded size would exceed this (checked from the\n"
             "            header, before any pixel allocation).\n\n"
             "Raises ValueError (bad arguments), DecodeError, LimitError, OSError (unreadable file).")
         .def_static(
             "open",
-            [](const std::filesystem::path& path, int channels, bool flip, std::size_t max_bytes) {
-                return image::open(path, make_options(channels, flip, max_bytes));
+            [](const std::filesystem::path& path, int channels, bool flip, std::size_t max_bytes,
+               bool orient) {
+                return image::open(path, make_options(channels, flip, max_bytes, orient));
             },
             "source"_a, nb::kw_only(), "channels"_a = 0, "flip"_a = false,
-            "max_bytes"_a = stb::load_options{}.max_bytes, release())
+            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false, release())
 
         // --- DLPack import: Image.from_dlpack(x), the mirror of np.from_dlpack(img) ---
         .def_static(
@@ -265,6 +309,94 @@ void bind_image(nb::module_& m) {
              "width"_a, "height"_a, "resizer"_a, release())
         .def("resize", nb::overload_cast<int, int, std::string_view>(&image::resize, nb::const_),
              "width"_a, "height"_a, "resizer"_a, release())
+
+        // --- geometry: each returns a new Image, this one is not modified ---
+        .def("crop", &image::crop, "x"_a, "y"_a, "width"_a, "height"_a, release(),
+             "The width x height rectangle whose top-left corner is (x, y).\n\n"
+             "Raises ValueError if the rectangle is not inside the image.")
+        .def("flip_horizontal", &image::flip_horizontal, release(), "Mirror left <-> right.")
+        .def("flip_vertical", &image::flip_vertical, release(), "Mirror top <-> bottom.")
+        .def("rotate90", &image::rotate90, "turns"_a = 1, release(),
+             "Rotate by `turns` quarter turns clockwise (negative: counter-clockwise).\n"
+             "Width and height swap for an odd number of turns.")
+        .def("transpose", &image::transpose, release(),
+             "Swap rows and columns (mirror across the main diagonal); width and height swap.")
+        .def("orient", &image::orient, "orientation"_a, release(),
+             "The upright version of an image stored with this EXIF orientation (1..8, see\n"
+             "libstb.exif_orientation): the transform a viewer applies. 1 is a copy.")
+        .def(
+            "pad",
+            [](const image& i, int left, int top, int right, int bottom, nb::handle fill) {
+                const auto f = colour_of<4>(fill, std::size_t(i.channels()), "fill");
+                nb::gil_scoped_release unlock;
+                return i.pad(left, top, right, bottom, f);
+            },
+            "left"_a = 0, "top"_a = 0, "right"_a = 0, "bottom"_a = 0, nb::kw_only(), "fill"_a = 0,
+            "A larger Image with this one inside a border of the given widths (all >= 0).\n\n"
+            "fill: the border value, an int for every channel or one value per channel,\n"
+            "e.g. (255, 255, 255) for white on RGB or (0, 0, 0, 0) for transparent on RGBA.")
+        .def("thumbnail", nb::overload_cast<int, int, const resizer*>(&image::thumbnail, nb::const_),
+             "max_width"_a, "max_height"_a, "resizer"_a.none() = nb::none(), release(),
+             "Shrink to fit inside max_width x max_height, keeping the aspect ratio. An image\n"
+             "that already fits is copied, never enlarged. `resizer` is as in resize().")
+        .def("thumbnail", nb::overload_cast<int, int, resize_filter>(&image::thumbnail, nb::const_),
+             "max_width"_a, "max_height"_a, "resizer"_a, release())
+        .def("thumbnail", nb::overload_cast<int, int, std::string_view>(&image::thumbnail, nb::const_),
+             "max_width"_a, "max_height"_a, "resizer"_a, release())
+
+        // --- channels and alpha ---
+        .def("convert", &image::convert, "channels"_a, release(),
+             "The same pixels with 1 (gray), 2 (gray + alpha), 3 (RGB) or 4 (RGBA) channels.\n\n"
+             "Gray is 0.299 R + 0.587 G + 0.114 B on the stored values (no gamma, as in Pillow),\n"
+             "a missing alpha is 255, and a dropped alpha is discarded: use flatten() to blend it\n"
+             "onto a background instead. The same channel count gives a copy.")
+        .def(
+            "split",
+            [](const image& i) {
+                std::vector<image> planes;
+                {
+                    nb::gil_scoped_release unlock;
+                    planes = i.split();
+                }
+                nb::list out;
+                for (auto& p : planes) out.append(nb::cast(std::move(p)));
+                return nb::tuple(out);
+            },
+            "A tuple with one single-channel Image per channel.")
+        .def_static(
+            "merge",
+            [](nb::iterable channels) {
+                std::vector<nb::object> keep;  // the Images stay alive while we point at them
+                std::vector<const image*> ptrs;
+                for (nb::handle h : channels) {
+                    image* p = nullptr;
+                    if (!nb::try_cast<image*>(h, p, /*convert=*/false) || !p)
+                        throw nb::type_error("Image.merge needs Image objects");
+                    keep.push_back(nb::borrow(h));
+                    ptrs.push_back(p);
+                }
+                nb::gil_scoped_release unlock;
+                return image::merge(ptrs);
+            },
+            "channels"_a,
+            "One Image from 1 to 4 single-channel Images of the same size, in channel order\n"
+            "(the inverse of split()). Raises ValueError otherwise.")
+        .def("composite", &image::composite, "overlay"_a, "x"_a = 0, "y"_a = 0, release(),
+             "This image with `overlay` blended on top at (x, y): the usual \"over\" operator with\n"
+             "straight alpha. The overlay may hang over the edges (it is clipped) and may have any\n"
+             "channel count: without alpha it is opaque, gray is replicated into colour. The result\n"
+             "has this image's channel count; if that has no alpha, the overlay's alpha just\n"
+             "weights the blend.")
+        .def(
+            "flatten",
+            [](const image& i, nb::handle background) {
+                const auto bg = colour_of<3>(background, 3, "background");
+                nb::gil_scoped_release unlock;
+                return i.flatten(bg);
+            },
+            "background"_a = nb::make_tuple(255, 255, 255),
+            "Blend the alpha channel onto a solid colour (r, g, b; default white, or one int) and\n"
+            "drop it: 2 -> 1 channel, 4 -> 3. An image without alpha is copied.")
 
         // --- encoding: to_* = the bytes of a file, write_* = the same written to `path` ---
         .def("to_png", &image::to_png, "compression"_a = stb::default_png_compression, release(),
