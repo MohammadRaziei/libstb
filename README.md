@@ -144,23 +144,30 @@ img = libstb.Image.open("IMG_0001.jpg").orient(turn)      # ...and apply it your
 Only the tag is read (JPEG `APP1`, PNG `eXIf`); other EXIF data and ICC profiles
 are not.
 
-**Pillow.** Pillow has neither DLPack nor a buffer export; it speaks NumPy's
-`__array_interface__`, and so does `Image`, in both directions, without numpy
-being involved:
+**Pillow.** Pillow is not a dependency: it is imported only when you call something that
+needs it, like numpy (`pip install "libstb[pillow]"`; `import libstb` never loads it).
 
 ```python
-from PIL import Image as PILImage
-pil = PILImage.fromarray(img)      # libstb -> Pillow: L, LA, RGB or RGBA by channel count (a copy)
-img = libstb.Image(pil)            # Pillow -> libstb
+pil = img.to_pil()                 # libstb -> Pillow: L, LA, RGB or RGBA by channel count (a copy)
+img = libstb.Image.from_pil(pil)   # Pillow -> libstb
 ```
 
-Only 8-bit pixels convert: `"1"`, `"I;16"`, `"I"` and `"F"` images raise `TypeError`.
-Palette (`"P"`) and `"CMYK"` images look like 1 and 4 channels of `uint8` but are
-indices and inks, not colours (the same happens through numpy): `pil.convert("RGB")`
-first. `Image(x)` accepts any object with `__array_interface__` (a writable contiguous
-address is shared and kept alive, like a NumPy array; a read-only or strided one, or
-data given as bytes, is copied and bounds-checked). The interface reports a gray image as
-`(H, W)`, which Pillow requires; `np.asarray(img)` and `img.numpy()` still give `(H, W, 1)`.
+`from_pil` takes `L`, `LA`, `RGB` and `RGBA` as they are and converts the modes that hold
+8-bit colour in another form: `1` to `L`, `P` to `RGB` (`RGBA` if the palette has
+transparency), `PA` and `RGBa` to `RGBA`, `La` to `LA`, `RGBX`, `CMYK` and `YCbCr` to `RGB`.
+Modes with no 8-bit colour (`I`, `I;16`, `F`, `LAB`, `HSV`) raise `TypeError`: convert them
+yourself.
+
+Both directions also work without those methods, because Pillow has neither DLPack nor a
+buffer export and speaks NumPy's `__array_interface__`, which `Image` implements both ways:
+`PILImage.fromarray(img)` and `libstb.Image(pil)`. That path is strict on purpose: it takes
+only 8-bit `L`, `LA`, `RGB` and `RGBA` and raises `TypeError` otherwise (a palette or CMYK
+image would otherwise be read as if its indices or inks were colours, as `np.asarray(pil)`
+does). `Image(x)` accepts any object with `__array_interface__` (a writable contiguous
+address is shared and kept alive, like a NumPy array; a read-only or strided one, or data
+given as bytes, is copied and bounds-checked; an address cannot be checked, so only hand over
+objects you trust). The interface reports a gray image as `(H, W)`, which Pillow requires;
+`np.asarray(img)` and `img.numpy()` still give `(H, W, 1)`.
 
 **Resize filters by name.** `Image.resize(w, h, x)` and `Resizer(x)` accept a
 `Resizer.Filter`, or a case-insensitive name (`-` and space count as `_`). Any

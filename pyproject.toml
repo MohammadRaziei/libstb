@@ -27,6 +27,7 @@ dependencies = []
 
 [project.optional-dependencies]
 numpy = ["numpy"]
+pillow = ["pillow"]
 test = ["pytest", "numpy", "pillow"]
 
 [project.urls]
