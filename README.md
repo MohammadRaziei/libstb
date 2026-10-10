@@ -103,15 +103,28 @@ and it does not matter). `Image.open(..., channels=n)` converts inside stb, whic
 can differ from `convert(n)` by a rounding step.
 
 **SIMD.** The loops that are limited by arithmetic rather than by memory
-(`convert`, `composite`, `flatten`) have an AVX2 version, chosen at run time:
-the same wheel runs on any x86-64 CPU and uses AVX2 where the CPU and OS have
-it (GCC/Clang builds; arm64 and MSVC builds use the portable code). Both
-versions compute the same integers, so results are bit-identical, and the tests
-check it for every channel combination. `libstb.simd_name()` says which one is
-active (`"avx2"` or `"baseline"`); `libstb.set_simd(False)` or `LIBSTB_SIMD=off`
-in the environment forces the portable code, for comparing or measuring. Flips,
-turns, `crop` and `pad` only move bytes and are limited by memory bandwidth, so
-they have no SIMD version: AVX2 would not make them faster.
+(`convert`, `composite`, `flatten`) exist in up to three builds that give
+bit-identical results and differ only in speed. `libstb.simd_backends()` lists
+the ones this CPU can run, best first, e.g. `['avx2', 'sse2', 'scalar']`:
+
+- `"avx2"`: AVX2 kernels, picked at run time when the CPU and OS support them
+  (x86-64, GCC or Clang builds). The same wheel therefore runs on any x86-64 CPU.
+- `"sse2"` (x86-64) or `"neon"` (arm64): the same loops vectorised by the compiler for
+  the platform's baseline SIMD. This is what arm64, MSVC and older x86 CPUs run.
+- `"scalar"`: the same loops with auto-vectorisation off, the plain reference. Always
+  available; the tests check every other backend against it.
+
+`libstb.simd_name()` is the backend in use (the first by default);
+`libstb.set_simd("sse2")` switches (`"auto"` restores the default; `ValueError` for
+an unknown or unavailable name); `LIBSTB_SIMD=<name>` in the environment chooses
+the initial one (`off` means `scalar`). It is for comparing and measuring, not
+something you need to set. How much each helps depends on the loop: on 16 MP,
+AVX2 makes `convert` to gray about 1.8x faster and RGBA `composite` about 2.6x
+faster than scalar, while SSE2 only helps the RGBA `composite` (about 1.9x) and is
+no faster than scalar for `convert` or for `composite` onto RGB (measured on one
+core of a shared machine: expect other numbers on yours). Flips, turns, `crop` and
+`pad` only move bytes and are limited by memory bandwidth, so they have no SIMD
+variants: AVX2 would not make them faster.
 
 **EXIF orientation.** Phone photos are stored sideways and carry an EXIF tag
 saying how to turn them; stb ignores it. `Image.open(path, orient=True)` (and
@@ -130,6 +143,24 @@ img = libstb.Image.open("IMG_0001.jpg").orient(turn)      # ...and apply it your
 
 Only the tag is read (JPEG `APP1`, PNG `eXIf`); other EXIF data and ICC profiles
 are not.
+
+**Pillow.** Pillow has neither DLPack nor a buffer export; it speaks NumPy's
+`__array_interface__`, and so does `Image`, in both directions, without numpy
+being involved:
+
+```python
+from PIL import Image as PILImage
+pil = PILImage.fromarray(img)      # libstb -> Pillow: L, LA, RGB or RGBA by channel count (a copy)
+img = libstb.Image(pil)            # Pillow -> libstb
+```
+
+Only 8-bit pixels convert: `"1"`, `"I;16"`, `"I"` and `"F"` images raise `TypeError`.
+Palette (`"P"`) and `"CMYK"` images look like 1 and 4 channels of `uint8` but are
+indices and inks, not colours (the same happens through numpy): `pil.convert("RGB")`
+first. `Image(x)` accepts any object with `__array_interface__` (a writable contiguous
+address is shared and kept alive, like a NumPy array; a read-only or strided one, or
+data given as bytes, is copied and bounds-checked). The interface reports a gray image as
+`(H, W)`, which Pillow requires; `np.asarray(img)` and `img.numpy()` still give `(H, W, 1)`.
 
 **Resize filters by name.** `Image.resize(w, h, x)` and `Resizer(x)` accept a
 `Resizer.Filter`, or a case-insensitive name (`-` and space count as `_`). Any
@@ -256,8 +287,9 @@ A copy is always spelled `copy()`. The four output formats are a closed set, so 
 is no encoder class hierarchy: each format is a `to_*` / `write_*` pair on
 `image` with its own defaulted settings, next to decoding in `src/core/image.cpp`.
 The editing operations are plain loops over the pixel buffer in `src/core/image_ops.cpp`
-(no stb involved; the arithmetic-heavy kernels are instantiated twice, portable and
-AVX2, and chosen in `src/core/simd.cpp`; build with `-DSTB_NO_SIMD_DISPATCH` to leave
+(no stb involved; the arithmetic-heavy kernels are `src/core/image_kernels.hpp`, instantiated
+three times - AVX2, baseline SIMD, and `image_kernels_scalar.cpp` with auto-vectorisation off -
+and the backend is chosen in `src/core/simd.cpp`; build with `-DSTB_NO_SIMD_DISPATCH` to leave
 the AVX2 ones out) and the EXIF reader is `src/core/exif.cpp`: it looks only at the
 Orientation tag and checks every offset against the buffer.
 Runtime failures derive from

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
@@ -416,15 +417,15 @@ UTEST(libstb_edit_tests, test_composite_of_one_colour_over_itself_keeps_that_col
     ASSERT_EQ(23, r(0, 0, 3));
 }
 
-// ------------------------------------------------- SIMD kernels == portable
+// ------------------------------------------------------ SIMD backends are identical
 
 namespace {
 
-// RAII: force one kernel set, put the previous choice back.
+// RAII: run with one backend, put the previous one back.
 struct simd_mode {
-    bool was_avx2;
-    explicit simd_mode(bool enable) : was_avx2(std::string(stb::simd_name()) == "avx2") { stb::set_simd_enabled(enable); }
-    ~simd_mode() { stb::set_simd_enabled(was_avx2); }
+    std::string was;
+    explicit simd_mode(const std::string& name) : was(stb::simd_name()) { stb::set_simd(name); }
+    ~simd_mode() { stb::set_simd(was); }
 };
 
 stb::image random_image(int w, int h, int c, unsigned seed) {
@@ -473,35 +474,54 @@ stb::image composite_reference(const stb::image& base, const stb::image& over, i
 
 }  // namespace
 
-UTEST(libstb_simd_tests, test_simd_name_is_known_and_can_be_switched) {
-    simd_mode keep(true);
-    const std::string n = stb::simd_name();
-    ASSERT_TRUE(n == "avx2" || n == "baseline");
-    stb::set_simd_enabled(false);
-    ASSERT_TRUE(std::string(stb::simd_name()) == "baseline");
-    stb::set_simd_enabled(true);
-    ASSERT_TRUE(std::string(stb::simd_name()) == n);  // back to what the CPU allows
+UTEST(libstb_simd_tests, test_backends_are_listed_best_first_and_end_with_scalar) {
+    const std::vector<std::string> all = stb::simd_backends();
+    ASSERT_TRUE(!all.empty());
+    ASSERT_TRUE(all.back() == "scalar");
+    for (const std::string& n : all) ASSERT_TRUE(n == "avx2" || n == "avx512" || n == "avx" || n == "sse2" || n == "neon" || n == "scalar");
+    for (std::size_t i = 0; i < all.size(); ++i)
+        for (std::size_t j = i + 1; j < all.size(); ++j) ASSERT_TRUE(all[i] != all[j]);  // no duplicates
 }
 
-UTEST(libstb_simd_tests, test_convert_is_identical_with_and_without_avx2_for_every_pair) {
+UTEST(libstb_simd_tests, test_set_simd_switches_to_a_listed_backend_and_rejects_the_rest) {
+    simd_mode keep(stb::simd_name());
+    const std::vector<std::string> all = stb::simd_backends();
+    for (const std::string& n : all) {
+        ASSERT_TRUE(stb::set_simd(n));
+        ASSERT_TRUE(std::string(stb::simd_name()) == n);
+    }
+    ASSERT_TRUE(stb::set_simd("auto"));
+    ASSERT_TRUE(std::string(stb::simd_name()) == all.front());  // the default is the best one
+
+    stb::set_simd("scalar");
+    for (const char* bad : {"", "AVX2", "avx3", "sse9", "off", "auto ", "neon2"}) {
+        if (std::find(all.begin(), all.end(), bad) != all.end()) continue;  // "neon" etc. are real on some CPUs
+        ASSERT_FALSE(stb::set_simd(bad));
+        ASSERT_TRUE(std::string(stb::simd_name()) == "scalar");  // a failed switch changes nothing
+    }
+}
+
+UTEST(libstb_simd_tests, test_convert_is_identical_in_every_backend_for_every_pair) {
     for (int sc = 1; sc <= 4; ++sc)
         for (int dc = 1; dc <= 4; ++dc) {
             const stb::image src = random_image(1003, 7, sc, unsigned(sc * 10 + dc));  // 1003: not a multiple of 8
-            stb::image fast = [&] { simd_mode m(true); return src.convert(dc); }();
-            stb::image slow = [&] { simd_mode m(false); return src.convert(dc); }();
-            ASSERT_TRUE(same(fast, slow));
+            const stb::image want = [&] { simd_mode m("scalar"); return src.convert(dc); }();
+            for (const std::string& be : stb::simd_backends()) {
+                simd_mode m(be);
+                ASSERT_TRUE(same(want, src.convert(dc)));
+            }
         }
 }
 
-UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_channel_combination) {
+UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_in_every_backend_for_every_channel_combination) {
     for (int dc = 1; dc <= 4; ++dc)
         for (int sc = 1; sc <= 4; ++sc) {
             const stb::image base = random_image(317, 11, dc, unsigned(dc * 7 + sc));
             const stb::image over = random_image(211, 9, sc, unsigned(dc * 13 + sc + 100));
             for (const auto& off : {std::pair<int, int>{0, 0}, {5, 2}, {-17, -3}, {200, 8}}) {
                 const stb::image want = composite_reference(base, over, off.first, off.second);
-                for (bool avx : {true, false}) {
-                    simd_mode m(avx);
+                for (const std::string& be : stb::simd_backends()) {
+                    simd_mode m(be);
                     ASSERT_TRUE(same(want, base.composite(over, off.first, off.second)));
                 }
             }
@@ -510,8 +530,8 @@ UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_cha
 
 UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_pair_of_alphas_and_colours) {
     // Exhaustive in (source alpha, destination alpha); the colours span the extremes and the middle.
-    for (bool avx : {true, false}) {
-        simd_mode m(avx);
+    for (const std::string& be : stb::simd_backends()) {
+        simd_mode m(be);
         for (int sca : {0, 1, 77, 128, 255}) {
             stb::image base(256, 256, 4), over(256, 256, 4);
             for (int sa = 0; sa < 256; ++sa)
@@ -528,11 +548,13 @@ UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_pai
     }
 }
 
-UTEST(libstb_simd_tests, test_flatten_is_identical_with_and_without_avx2) {
+UTEST(libstb_simd_tests, test_flatten_is_identical_in_every_backend) {
     const stb::image rgba = random_image(999, 13, 4, 5), ga = random_image(999, 13, 2, 6);
     for (const stb::image* src : {&rgba, &ga}) {
-        stb::image fast = [&] { simd_mode m(true); return src->flatten({20, 40, 160}); }();
-        stb::image slow = [&] { simd_mode m(false); return src->flatten({20, 40, 160}); }();
-        ASSERT_TRUE(same(fast, slow));
+        const stb::image want = [&] { simd_mode m("scalar"); return src->flatten({20, 40, 160}); }();
+        for (const std::string& be : stb::simd_backends()) {
+            simd_mode m(be);
+            ASSERT_TRUE(same(want, src->flatten({20, 40, 160})));
+        }
     }
 }

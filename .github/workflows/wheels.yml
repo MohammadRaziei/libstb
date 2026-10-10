@@ -68,3 +68,63 @@ jobs:
         name: wheelhouse-${{ matrix.os }}
         path: wheelhouse/*.whl
         overwrite: false
+
+  # The Linux wheel carries AVX2 kernels next to the portable ones and picks one at run
+  # time from the CPU it finds (backends: avx2, sse2, scalar; see libstb.simd_backends()). The
+  # runners that build and test the wheels all have AVX2,
+  # so this job runs the very same wheel on emulated CPUs (QEMU user mode): one without AVX
+  # (Nehalem: SSE4.2 only), where it must fall back to the portable kernels and pass every
+  # test, and one with AVX2 (Haswell), where it must pick the AVX2 ones.
+  test_cpu_features:
+    name: Wheel on emulated CPUs (without / with AVX2)
+    needs: build_wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v6
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+
+    - uses: actions/download-artifact@v8
+      with:
+        name: wheelhouse-ubuntu-latest
+        path: wheelhouse
+
+    - name: Install QEMU user-mode emulation
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq qemu-user
+
+    - name: Install the manylinux wheel (3.12, abi3) with its test dependencies
+      run: |
+        wheels=(wheelhouse/libstb-*-cp312-abi3-manylinux*x86_64*.whl)
+        [ ${#wheels[@]} -eq 1 ] && [ -f "${wheels[0]}" ] || { echo "expected exactly one manylinux cp312-abi3 wheel, found: ${wheels[*]}"; exit 1; }
+        python -m venv venv
+        venv/bin/pip install "${wheels[0]}[test]"
+
+    - name: No AVX (Nehalem) - only the portable backends may be offered
+      run: |
+        qemu-x86_64 -cpu Nehalem venv/bin/python - <<'PY'
+        import libstb
+        print("simd_backends:", libstb.simd_backends(), "| in use:", libstb.simd_name())
+        assert libstb.simd_backends() == ["sse2", "scalar"], libstb.simd_backends()
+        assert libstb.simd_name() == "sse2", libstb.simd_name()
+        PY
+
+    - name: No AVX (Nehalem) - the whole test suite (covers the sse2 and scalar backends)
+      working-directory: ${{ runner.temp }}
+      run: qemu-x86_64 -cpu Nehalem ${{ github.workspace }}/venv/bin/python -m pytest ${{ github.workspace }}/tests/python -q -p no:cacheprovider
+
+    - name: AVX2 (Haswell) - avx2 must be offered and picked, and equal the other backends
+      working-directory: ${{ runner.temp }}
+      run: |
+        qemu-x86_64 -cpu Haswell ${{ github.workspace }}/venv/bin/python - <<'PY' 2>&1 | grep -v "TCG doesn't support"
+        import libstb
+        print("simd_backends:", libstb.simd_backends(), "| in use:", libstb.simd_name())
+        assert libstb.simd_backends() == ["avx2", "sse2", "scalar"], libstb.simd_backends()
+        assert libstb.simd_name() == "avx2", libstb.simd_name()
+        PY
+        qemu-x86_64 -cpu Haswell ${{ github.workspace }}/venv/bin/python -m pytest ${{ github.workspace }}/tests/python/test_simd.py -q -p no:cacheprovider 2>&1 | grep -v "TCG doesn't support"
+        exit "${PIPESTATUS[0]}"

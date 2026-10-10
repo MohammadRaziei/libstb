@@ -26,7 +26,7 @@ from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
 from .font import Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize
 from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
-from .libstb_py import set_simd, simd_name
+from .libstb_py import set_simd, simd_backends, simd_name
 
 _pkg_dir = _os.path.dirname(__file__)
 
@@ -107,7 +107,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "set_simd",
+    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd",
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "Error", "DecodeError", "EncodeError", "LimitError",

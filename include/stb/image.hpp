@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -50,14 +51,22 @@ struct load_options {
 // on untrusted input. Apply it with image::orient().
 int exif_orientation(const void* data, std::size_t size) noexcept;
 
-// Runtime-selected SIMD kernels. libstb's own conversion and compositing loops (convert,
-// composite, flatten) have an AVX2 version that is picked at run time when the CPU supports
-// it (x86-64 with GCC or Clang); every other CPU, and every other function, uses plain
-// portable code. Both give bit-identical results. simd_name() is "avx2" or "baseline";
-// set_simd_enabled(false) (or LIBSTB_SIMD=off in the environment) forces the portable code,
-// e.g. to compare or to measure. Thread-safe.
+// SIMD backends. libstb's own conversion and compositing loops (convert, composite, flatten)
+// exist in up to three builds that give bit-identical results and differ only in speed:
+//   "avx2"            AVX2 kernels, picked at run time when the CPU supports them (x86-64,
+//                     GCC or Clang builds)
+//   "sse2" / "neon"   the same loops vectorised by the compiler for the platform's baseline
+//                     SIMD (x86-64 / arm64)
+//   "scalar"          the same loops with auto-vectorisation switched off: the plain reference
+// simd_backends() lists those this build can run on this CPU, best first (it always ends
+// with "scalar"); simd_name() is the one in use, the first by default. set_simd("avx2") (or
+// any listed name; "auto" restores the default) switches, and returns false, changing nothing,
+// for an unknown or unavailable name. LIBSTB_SIMD=<name> in the environment chooses the
+// initial backend ("off" means "scalar"). Flips, turns, crop and pad only move bytes and have
+// no SIMD variants. Thread-safe.
+std::vector<std::string> simd_backends();
 const char* simd_name() noexcept;
-void set_simd_enabled(bool enabled) noexcept;
+bool set_simd(std::string_view name) noexcept;
 
 // Defaults of to_png / write_png and to_jpg / write_jpg.
 inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower

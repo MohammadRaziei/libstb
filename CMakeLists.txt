@@ -75,6 +75,17 @@ target_compile_options(libstb_core PRIVATE
 )
 apply_optimization_flags(libstb_core)
 
+# image_kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
+# compiler's auto-vectoriser off. (MSVC has no such switch: there it may still vectorise,
+# with identical results.)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
+        PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-fno-tree-slp-vectorize")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
+        PROPERTIES COMPILE_OPTIONS "-fno-vectorize;-fno-slp-vectorize")
+endif()
+
 # --- install (find_package(libstb) -> libstb::core) ---
 include(CMakePackageConfigHelpers)
 install(TARGETS libstb_core EXPORT libstbTargets ARCHIVE DESTINATION ${_libstb_lib_dest})

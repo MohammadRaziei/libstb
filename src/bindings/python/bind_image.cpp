@@ -1,9 +1,11 @@
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #include <nanobind/stl/string_view.h>
 #include <nanobind/stl/tuple.h>
 
+#include <algorithm>
 #include <array>
 #include <climits>
 #include <cstdint>
@@ -54,10 +56,97 @@ std::shared_ptr<void> keep_alive(nb::handle obj) {
 // Image(array): a uint8 array of shape (H, W) or (H, W, 1..4).
 //  - writable and C-contiguous: the image views the array's memory (no copy);
 //  - anything else (read-only, strided, e.g. arr[::-1]): copied.
+// A new image from `src` read with the given strides (in bytes; h x w x c pixels).
+stb::image copy_pixels(const std::uint8_t* src, std::size_t h, std::size_t w, std::size_t c, std::int64_t s0,
+                       std::int64_t s1, std::int64_t s2) {
+    std::vector<std::uint8_t> px(h * w * c);
+    if (s2 == 1 && s1 == std::int64_t(c) && s0 == std::int64_t(w * c)) {
+        if (!px.empty()) std::memcpy(px.data(), src, px.size());  // contiguous (maybe read-only)
+    } else {
+        for (std::size_t y = 0; y < h; ++y)  // strided, e.g. arr[::-1] or a transposed view
+            for (std::size_t x = 0; x < w; ++x)
+                for (std::size_t k = 0; k < c; ++k)
+                    px[(y * w + x) * c + k] = src[std::int64_t(y) * s0 + std::int64_t(x) * s1 + std::int64_t(k) * s2];
+    }
+    return stb::image(int(w), int(h), int(c), std::move(px));
+}
+
+struct py_buffer {  // releases a Py_buffer however the scope is left
+    Py_buffer view{};
+    bool ok = false;
+    ~py_buffer() {
+        if (ok) PyBuffer_Release(&view);
+    }
+};
+
+// An object that only speaks NumPy's __array_interface__ (version 3), e.g. a Pillow image:
+// {"shape", "typestr", "data", "strides", "offset"}. `data` is (address, read-only flag), as
+// NumPy arrays give it, or an object with the buffer protocol, as Pillow gives (bytes).
+// A writable C-contiguous address is shared (the image keeps `obj` alive, like for NumPy
+// arrays); everything else is copied. As with NumPy itself, an address cannot be checked:
+// only hand over objects you trust. A buffer is bounds-checked against shape and strides.
+stb::image image_from_array_interface(nb::handle obj) {
+    nb::dict ai = nb::cast<nb::dict>(obj.attr("__array_interface__"));
+    if (!ai.contains("typestr") || !ai.contains("shape"))
+        throw std::invalid_argument("__array_interface__ needs 'shape' and 'typestr'");
+    const std::string typestr = nb::cast<std::string>(ai["typestr"]);
+    if (typestr != "|u1" && typestr != "<u1" && typestr != ">u1") throw nb::type_error("Image needs a uint8 array");
+
+    nb::sequence shape = nb::cast<nb::sequence>(ai["shape"]);
+    const std::size_t ndim = nb::len(shape);
+    if (ndim != 2 && ndim != 3) throw std::invalid_argument("expected shape (H, W) or (H, W, 1..4)");
+    const std::int64_t h = nb::cast<std::int64_t>(shape[0]), w = nb::cast<std::int64_t>(shape[1]);
+    const std::int64_t c = ndim == 3 ? nb::cast<std::int64_t>(shape[2]) : 1;
+    if (c < 1 || c > 4) throw std::invalid_argument("expected shape (H, W) or (H, W, 1..4)");
+    if (h < 1 || w < 1) throw std::invalid_argument("image is empty");
+    if (h > INT_MAX || w > INT_MAX) throw std::invalid_argument("image dimensions too large");
+
+    std::int64_t s0 = w * c, s1 = c, s2 = 1;
+    if (ai.contains("strides") && !ai["strides"].is_none()) {
+        nb::sequence st = nb::cast<nb::sequence>(ai["strides"]);
+        if (nb::len(st) != ndim) throw std::invalid_argument("__array_interface__: strides do not match shape");
+        s0 = nb::cast<std::int64_t>(st[0]);
+        s1 = nb::cast<std::int64_t>(st[1]);
+        s2 = ndim == 3 ? nb::cast<std::int64_t>(st[2]) : 1;
+    }
+    const bool contiguous = s2 == 1 && s1 == c && s0 == w * c;
+    const std::int64_t offset = ai.contains("offset") ? nb::cast<std::int64_t>(ai["offset"]) : 0;
+
+    nb::object data = ai.contains("data") ? nb::object(ai["data"]) : nb::object(nb::none());
+    if (data.is_none()) data = nb::borrow(obj);  // the spec: the object itself exposes the buffer
+
+    if (nb::isinstance<nb::tuple>(data)) {  // (address, read-only)
+        nb::tuple t = nb::cast<nb::tuple>(data);
+        if (nb::len(t) != 2) throw std::invalid_argument("__array_interface__: bad 'data' tuple");
+        const auto addr = nb::cast<std::uintptr_t>(t[0]);
+        const bool readonly = nb::cast<bool>(t[1]);
+        if (!addr) throw std::invalid_argument("__array_interface__: null data address");
+        auto* base = reinterpret_cast<std::uint8_t*>(addr);
+        if (contiguous && !readonly) return stb::image::wrap(int(w), int(h), int(c), base, keep_alive(obj));
+        return copy_pixels(base, std::size_t(h), std::size_t(w), std::size_t(c), s0, s1, s2);
+    }
+
+    py_buffer buf;
+    if (PyObject_GetBuffer(data.ptr(), &buf.view, PyBUF_SIMPLE) != 0) throw nb::python_error();
+    buf.ok = true;
+    // Every byte the strides can reach must lie inside the buffer.
+    const std::int64_t lo = offset + std::min<std::int64_t>(0, (h - 1) * s0) + std::min<std::int64_t>(0, (w - 1) * s1) +
+                            std::min<std::int64_t>(0, (c - 1) * s2);
+    const std::int64_t hi = offset + std::max<std::int64_t>(0, (h - 1) * s0) + std::max<std::int64_t>(0, (w - 1) * s1) +
+                            std::max<std::int64_t>(0, (c - 1) * s2);
+    if (lo < 0 || hi >= std::int64_t(buf.view.len))
+        throw std::invalid_argument("__array_interface__: the data is shorter than shape and strides need");
+    return copy_pixels(static_cast<const std::uint8_t*>(buf.view.buf) + offset, std::size_t(h), std::size_t(w),
+                       std::size_t(c), s0, s1, s2);
+}
+
 stb::image image_from_array(nb::handle obj) {
     array_ro a;
-    if (!nb::try_cast(obj, a, /*convert=*/false))
+    if (!nb::try_cast(obj, a, /*convert=*/false)) {
+        // Not a buffer / DLPack object: maybe one that only has NumPy's array interface (Pillow).
+        if (nb::hasattr(obj, "__array_interface__")) return image_from_array_interface(obj);
         throw nb::type_error("Image needs a uint8 array");
+    }
     if (a.dtype() != nb::dtype<std::uint8_t>())
         throw nb::type_error("Image needs a uint8 array");
     if (a.ndim() != 2 && a.ndim() != 3)
@@ -73,18 +162,7 @@ stb::image image_from_array(nb::handle obj) {
     if (contiguous && nb::try_cast(obj, rw, /*convert=*/false))
         return stb::image::wrap(int(w), int(h), int(c), static_cast<std::uint8_t*>(rw.data()),
                                 keep_alive(obj));
-
-    const auto* src = static_cast<const std::uint8_t*>(a.data());
-    std::vector<std::uint8_t> px(h * w * c);
-    if (contiguous) {
-        if (!px.empty()) std::memcpy(px.data(), src, px.size());  // read-only but contiguous
-    } else {
-        for (std::size_t y = 0; y < h; ++y)  // strided, e.g. arr[::-1] or a transposed view
-            for (std::size_t x = 0; x < w; ++x)
-                for (std::size_t k = 0; k < c; ++k)
-                    px[(y * w + x) * c + k] = src[std::int64_t(y) * s0 + std::int64_t(x) * s1 + std::int64_t(k) * s2];
-    }
-    return stb::image(int(w), int(h), int(c), std::move(px));
+    return copy_pixels(static_cast<const std::uint8_t*>(a.data()), h, w, c, s0, s1, s2);
 }
 
 stb::load_options make_options(int channels, bool flip, std::size_t max_bytes, bool orient) {
@@ -218,12 +296,25 @@ void bind_image(nb::module_& m) {
         },
         "data"_a);
 
-    m.def("simd_name", &stb::simd_name,
-          "\"avx2\" or \"baseline\": which kernels convert / composite / flatten run. The AVX2 ones\n"
-          "are picked at run time when the CPU supports them; both give identical results.");
-    m.def("set_simd", &stb::set_simd_enabled, "enabled"_a,
-          "set_simd(False) forces the portable kernels (same as LIBSTB_SIMD=off in the environment),\n"
-          "set_simd(True) allows AVX2 again where the CPU has it.");
+    m.def("simd_backends", &stb::simd_backends,
+          "The SIMD backends convert / composite / flatten can run on this CPU, best first, e.g.\n"
+          "['avx2', 'sse2', 'scalar'] (x86-64) or ['neon', 'scalar'] (arm64). All give identical\n"
+          "results; they differ in speed. 'scalar' (the plain reference) is always last.");
+    m.def("simd_name", &stb::simd_name, "The SIMD backend in use: the first of simd_backends() unless changed.");
+    m.def(
+        "set_simd",
+        [](std::string_view name) {
+            if (!stb::set_simd(name)) {
+                std::string have;
+                for (const auto& b : stb::simd_backends()) have += (have.empty() ? "'" : ", '") + b + "'";
+                throw std::invalid_argument("unknown or unavailable SIMD backend '" + std::string(name) +
+                                            "' (available: " + have + ", or 'auto')");
+            }
+        },
+        "name"_a,
+        "Choose the SIMD backend by name (one of simd_backends()), or 'auto' for the default.\n"
+        "ValueError for an unknown or unavailable name (for example 'avx2' on a CPU without it).\n"
+        "The environment variable LIBSTB_SIMD=<name> chooses the initial one.");
     m.def(
         "exif_orientation_bytes",
         [](nb::bytes data) {
@@ -469,6 +560,24 @@ void bind_image(nb::module_& m) {
                  return a;
              },
              "dtype"_a = nb::none(), "copy"_a = nb::none())
+        .def_prop_ro(
+            "__array_interface__",
+            [](nb::handle self) {
+                const auto& i = nb::cast<const image&>(self);
+                nb::dict d;
+                d["version"] = 3;
+                // A gray image is reported as (H, W): the shape Pillow (and NumPy's own
+                // conventions for single-channel images) expect. np.asarray(img) and
+                // img.numpy() still give (H, W, 1): NumPy reads the buffer protocol first.
+                d["shape"] = i.channels() == 1 ? nb::make_tuple(i.height(), i.width())
+                                               : nb::make_tuple(i.height(), i.width(), i.channels());
+                d["typestr"] = "|u1";
+                d["data"] = nb::make_tuple(reinterpret_cast<std::uintptr_t>(i.data()), false);
+                d["strides"] = nb::none();
+                return d;
+            },
+            "NumPy's array interface (version 3): lets Pillow, and anything else that reads it,\n"
+            "take the pixels: PIL.Image.fromarray(img). Keep the Image alive while using the address.")
         .def("numpy",
              [](nb::handle self, nb::object dtype, bool copy) -> nb::object {
                  return self.attr("__array__")(dtype, copy);

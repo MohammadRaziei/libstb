@@ -1,3 +1,4 @@
 libstb
 numpy
+pillow
 # optional, for 07_dlpack.py: jax or torch

@@ -1,6 +1,6 @@
 #pragma once
 
-// Internal: which kernel set to run. See stb::simd_name() / set_simd_enabled() in image.hpp.
+// Internal: which kernel set to run. See stb::simd_backends() / set_simd() in image.hpp.
 
 // Compile with -DSTB_NO_SIMD_DISPATCH to leave the AVX2 kernels out (they are only built for
 // x86-64 with GCC or Clang anyway; arm64 and MSVC builds always use the portable ones).
@@ -12,9 +12,13 @@
 namespace stb {
 namespace detail {
 
-// True when the AVX2 kernels exist in this build, the CPU (and OS) support AVX2, and
-// the portable code was not forced.
-bool use_avx2() noexcept;
+enum class backend {
+    avx2,    // the kernels built with the AVX2 target attribute (run-time dispatch)
+    vector,  // the same loops, vectorised by the compiler for the platform baseline (SSE2 / NEON)
+    scalar,  // the same loops with auto-vectorisation off
+};
+
+backend current_backend() noexcept;
 
 }  // namespace detail
 }  // namespace stb
