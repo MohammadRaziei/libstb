@@ -93,3 +93,105 @@ def test_the_alpha_regression_grid_is_right_in_every_backend(backend):
         over = libstb.Image(np.stack([np.full(da.shape, c)] * 3 + [sa], -1).astype(np.uint8))
         out = under(backend, lambda: base.composite(over).numpy())
         np.testing.assert_array_equal(out[..., :3], c)
+
+
+# ---------------------------------------------------------------- per-thread override
+
+
+def test_simd_context_sets_the_backend_for_the_block_only():
+    default = libstb.simd_name()
+    with libstb.simd("scalar"):
+        assert libstb.simd_name() == "scalar"
+    assert libstb.simd_name() == default
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_simd_context_gives_the_same_pixels_as_set_simd(backend):
+    img = libstb.Image(rand(7, 1003, 4, 3))
+    want = under("scalar", lambda: img.convert(1).numpy())
+    with libstb.simd(backend):
+        np.testing.assert_array_equal(img.convert(1).numpy(), want)
+
+
+def test_simd_contexts_nest_and_restore_even_after_an_exception():
+    default = libstb.simd_name()
+    with libstb.simd("scalar"):
+        with libstb.simd("auto"):
+            assert libstb.simd_name() == BACKENDS[0]
+        assert libstb.simd_name() == "scalar"
+        with pytest.raises(RuntimeError, match="boom"):
+            with libstb.simd(BACKENDS[0]):
+                raise RuntimeError("boom")
+        assert libstb.simd_name() == "scalar"
+    assert libstb.simd_name() == default
+
+
+def test_simd_context_wins_over_set_simd_and_set_simd_still_applies_outside():
+    libstb.set_simd("scalar")
+    with libstb.simd("auto"):
+        assert libstb.simd_name() == BACKENDS[0]
+        libstb.set_simd("scalar")  # changes the global, not what this block uses
+        assert libstb.simd_name() == BACKENDS[0]
+    assert libstb.simd_name() == "scalar"
+
+
+def test_simd_context_does_not_leak_into_other_threads():
+    import threading
+
+    seen = {}
+
+    def other():
+        seen["name"] = libstb.simd_name()
+        with libstb.simd("scalar"):
+            seen["inside"] = libstb.simd_name()
+
+    with libstb.simd("scalar"):
+        t = threading.Thread(target=other)
+        t.start()
+        t.join()
+        assert libstb.simd_name() == "scalar"
+    assert seen["name"] == BACKENDS[0]  # the other thread follows the global, not our block
+    assert seen["inside"] == "scalar"
+    assert libstb.simd_name() == BACKENDS[0]  # and its own block did not touch ours
+
+
+@pytest.mark.parametrize("bad", ["", "AVX2", "avx3", "sse9", "fast"])
+def test_simd_context_rejects_unknown_names_when_created(bad):
+    if bad in BACKENDS:
+        pytest.skip("a real backend on this CPU")
+    with pytest.raises(ValueError, match="available"):
+        libstb.simd(bad)
+
+
+def test_simd_context_cannot_be_entered_twice_at_once():
+    ctx = libstb.simd("scalar")
+    with ctx:
+        with pytest.raises(RuntimeError, match="already active"):
+            ctx.__enter__()
+    with ctx:  # but it can be reused afterwards
+        assert libstb.simd_name() == "scalar"
+
+
+def _run_with_env(value):
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, LIBSTB_SIMD=value)
+    code = "import libstb; print(libstb.simd_name(), libstb.simd_backends()[0])"
+    return subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=120)
+
+
+def test_an_unknown_env_backend_warns_once_on_stderr_and_falls_back_to_auto():
+    r = _run_with_env("avx9000")
+    assert r.returncode == 0
+    name, best = r.stdout.split()
+    assert name == best
+    assert r.stderr.count("\n") == 1 and "LIBSTB_SIMD=avx9000" in r.stderr and "available" in r.stderr
+
+
+@pytest.mark.parametrize("value", ["scalar", "off", "auto"])
+def test_a_valid_env_backend_prints_nothing(value):
+    r = _run_with_env(value)
+    assert r.returncode == 0 and r.stderr == ""
+    assert r.stdout.split()[0] == ("scalar" if value != "auto" else BACKENDS[0])

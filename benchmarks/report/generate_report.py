@@ -110,6 +110,32 @@ OP_META = {
                         "note": RESIZE_NOTE + " scikit-image has no box filter."},
     "resize_up_linear": {"title": "resize, double size, linear (triangle)", "note": RESIZE_NOTE},
     "resize_up_cubic": {"title": "resize, double size, cubic (Catmull-Rom)", "note": RESIZE_NOTE},
+    "crop": {
+        "title": "crop: the central half of each side",
+        "note": "A new, independent image in every library (an OpenCV slice is a view, so it is copied). "
+                "This is mostly memory bandwidth. 3-channel images only.",
+    },
+    "rotate90": {
+        "title": "rotate: a clockwise quarter turn",
+        "note": "Pillow's transpose(ROTATE_270) and cv2.rotate against libstb's rotate90. A turn reads rows "
+                "and writes columns, so it is about memory access patterns. 3-channel images only.",
+    },
+    "flip_horizontal": {
+        "title": "flip left to right",
+        "note": "Pillow's transpose(FLIP_LEFT_RIGHT) and cv2.flip against libstb's flip_horizontal. 3-channel images only.",
+    },
+    "convert_gray": {
+        "title": "convert: RGB to gray",
+        "note": "libstb and Pillow use the same integer formula and give identical pixels; OpenCV's BGR2GRAY "
+                "rounds slightly differently. libstb runs the fastest SIMD backend of the CPU it is measured on "
+                "(<code>libstb.simd_name()</code>). 3-channel images only.",
+    },
+    "composite": {
+        "title": "composite: RGBA over RGBA, straight alpha",
+        "note": "An RGBA image laid over its own upside-down copy, against Pillow's <code>Image.alpha_composite</code> "
+                "(OpenCV has no equivalent). The alpha channel is identical; the colour is within one level where the "
+                "pixel is visible. 4-channel images only, so only the graphics images take part.",
+    },
 }
 
 SECTIONS = [
@@ -125,6 +151,10 @@ SECTIONS = [
      "lede": "Half size and double size, with linear, cubic and box filters.",
      "ops": ["resize_down_linear", "resize_down_cubic", "resize_down_box",
              "resize_up_linear", "resize_up_cubic"], "dataset": "throughput"},
+    {"id": "editing", "kicker": "Editing", "title": "Editing images",
+     "lede": "Crop, quarter turn, flip, RGB to gray and alpha compositing: the operations libstb added for "
+             "working on pixels without leaving the library, against Pillow and OpenCV where they have one.",
+     "ops": ["crop", "rotate90", "flip_horizontal", "convert_gray", "composite"], "dataset": "throughput"},
 ]
 
 SCALING_TITLES = {

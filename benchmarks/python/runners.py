@@ -57,6 +57,20 @@ Operations, and what each one is fair to compare:
                 different things in different libraries (premultiplied
                 or not), which would not be a like-for-like comparison.
 
+  crop, rotate90, flip_horizontal, convert_gray, composite
+                libstb's editing operations against the same operation in
+                Pillow and OpenCV (OpenCV has no alpha compositing, so it is
+                absent from composite). Raw pixels in, a new pixel array or
+                image out; the result is an independent copy in every
+                library (no lazy views). crop takes the central half of each
+                side, rotate90 is a clockwise quarter turn, convert_gray is
+                RGB to one channel (Pillow's "L", OpenCV's BGR2GRAY: libstb
+                uses Pillow's integer formula, OpenCV's rounds slightly
+                differently), and composite lays an RGBA image (the same one
+                flipped upside down) over itself with straight alpha:
+                Pillow's alpha_composite. crop, rotate90, flip_horizontal
+                and convert_gray take 3-channel images, composite 4-channel.
+
 Everything runs single-threaded (cv2.setNumThreads(1)): libstb and
 Pillow are single-threaded, and a benchmark where one contestant quietly
 uses every core is measuring the machine, not the library.
@@ -82,6 +96,8 @@ RESIZE_OPS = {
     "resize_up_cubic": ("up", "cubic"),
 }
 
+EDIT_OPS = ("crop", "rotate90", "flip_horizontal", "convert_gray", "composite")
+
 # Ordered: this is also the order sections appear in the report.
 OPS = {
     "info": ["libstb", "pillow"],
@@ -92,13 +108,20 @@ OPS = {
     "encode_bmp": ["libstb", "pillow", "opencv", "imageio"],
     "encode_tga": ["libstb", "pillow", "opencv", "imageio"],
     **{op: ["libstb", "libstb_srgb", "pillow", "opencv", "skimage"] for op in RESIZE_OPS},
+    "crop": ["libstb", "pillow", "opencv"],
+    "rotate90": ["libstb", "pillow", "opencv"],
+    "flip_horizontal": ["libstb", "pillow", "opencv"],
+    "convert_gray": ["libstb", "pillow", "opencv"],
+    "composite": ["libstb", "pillow"],
 }
 
 # These start from raw pixels, so they run once per image (on the png
 # entry), not once per file format.
-CANONICAL_OPS = {op for op in OPS if op.startswith("encode_") or op.startswith("resize_")}
-# JPEG and BMP have no portable alpha; resize is only compared on 3-channel data.
-RGB_ONLY_OPS = {"encode_jpg", "encode_bmp"} | set(RESIZE_OPS)
+CANONICAL_OPS = {op for op in OPS if op.startswith("encode_") or op.startswith("resize_")} | set(EDIT_OPS)
+# JPEG and BMP have no portable alpha; resize and the editing operations are only compared on
+# 3-channel data, except composite, which needs an alpha channel.
+RGB_ONLY_OPS = {"encode_jpg", "encode_bmp"} | set(RESIZE_OPS) | (set(EDIT_OPS) - {"composite"})
+RGBA_ONLY_OPS = {"composite"}
 
 
 class Unavailable(Exception):
@@ -110,6 +133,8 @@ def applies(op, entry):
     if op in CANONICAL_OPS and not entry.get("canonical"):
         return False
     if op in RGB_ONLY_OPS and entry.get("raw_channels", entry["channels"]) != 3:
+        return False
+    if op in RGBA_ONLY_OPS and entry.get("raw_channels", entry["channels"]) != 4:
         return False
     return True
 
@@ -168,6 +193,19 @@ def _resize_target(op, inp):
     return (max(1, w // 2), max(1, h // 2)) if direction == "down" else (w * 2, h * 2)
 
 
+def _crop_box(inp):
+    """(x, y, width, height) of the central half of each side."""
+    w, h = inp.target
+    cw, ch = max(1, w // 2), max(1, h // 2)
+    return (w - cw) // 2, (h - ch) // 2, cw, ch
+
+
+def _overlay(inp):
+    """The image laid over itself by composite: the same pixels flipped upside down."""
+    import numpy as np
+    return np.ascontiguousarray(inp.arr[::-1])
+
+
 # ------------------------------------------------------------- libstb --
 
 def _libstb(op, inp, srgb=False):
@@ -200,6 +238,19 @@ def _libstb(op, inp, srgb=False):
         _, filt = RESIZE_OPS[op]
         r = libstb.Resizer(filt, srgb=srgb)
         return lambda: img.resize(w, h, r)
+    if op in EDIT_OPS:
+        img = libstb.Image(inp.arr)
+        if op == "crop":
+            x, y, cw, ch = _crop_box(inp)
+            return lambda: img.crop(x, y, cw, ch)
+        if op == "rotate90":
+            return lambda: img.rotate90(1)
+        if op == "flip_horizontal":
+            return lambda: img.flip_horizontal()
+        if op == "convert_gray":
+            return lambda: img.convert(1)
+        over = libstb.Image(_overlay(inp))
+        return lambda: img.composite(over)
     raise Unavailable(f"no libstb runner for {op}")
 
 
@@ -251,6 +302,19 @@ def _pillow(op, inp):
         _, filt = RESIZE_OPS[op]
         resample = {"linear": Image.BILINEAR, "cubic": Image.BICUBIC, "box": Image.BOX}[filt]
         return lambda: im.resize((w, h), resample=resample)
+    if op in EDIT_OPS:
+        im = Image.fromarray(inp.arr)
+        if op == "crop":
+            x, y, cw, ch = _crop_box(inp)
+            return lambda: im.crop((x, y, x + cw, y + ch))
+        if op == "rotate90":
+            return lambda: im.transpose(Image.Transpose.ROTATE_270)  # clockwise
+        if op == "flip_horizontal":
+            return lambda: im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        if op == "convert_gray":
+            return lambda: im.convert("L")
+        over = Image.fromarray(_overlay(inp))
+        return lambda: Image.alpha_composite(im, over)
     raise Unavailable(f"no Pillow runner for {op}")
 
 
@@ -307,6 +371,18 @@ def _opencv(op, inp):
             "box": cv2.INTER_AREA,
         }[filt]
         return lambda: cv2.resize(bgr, (w, h), interpolation=interp)
+    if op in EDIT_OPS:
+        bgr = inp.bgr
+        if op == "crop":
+            x, y, cw, ch = _crop_box(inp)
+            return lambda: bgr[y:y + ch, x:x + cw].copy()  # a slice is a view: copy it, like the others
+        if op == "rotate90":
+            return lambda: cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+        if op == "flip_horizontal":
+            return lambda: cv2.flip(bgr, 1)
+        if op == "convert_gray":
+            return lambda: cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        raise Unavailable("OpenCV has no alpha compositing")
     raise Unavailable(f"OpenCV has no {op} (no header-only read)" if op == "info" else f"no OpenCV runner for {op}")
 
 

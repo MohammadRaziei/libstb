@@ -11,7 +11,10 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -315,6 +318,41 @@ void bind_image(nb::module_& m) {
         "Choose the SIMD backend by name (one of simd_backends()), or 'auto' for the default.\n"
         "ValueError for an unknown or unavailable name (for example 'avx2' on a CPU without it).\n"
         "The environment variable LIBSTB_SIMD=<name> chooses the initial one.");
+    // `with libstb.simd("scalar"):`: the backend for this thread only (stb::simd_scope).
+    struct SimdContext {
+        std::string name;
+        std::optional<stb::simd_scope> scope;
+        std::thread::id owner;
+    };
+    nb::class_<SimdContext>(m, "_SimdContext")
+        .def("__init__",
+             [](SimdContext* self, std::string name) {
+                 const auto have = stb::simd_backends();
+                 if (name != "auto" && std::find(have.begin(), have.end(), name) == have.end()) {
+                     std::string list;
+                     for (const auto& b : have) list += (list.empty() ? "'" : ", '") + b + "'";
+                     throw std::invalid_argument("unknown or unavailable SIMD backend '" + name +
+                                                 "' (available: " + list + ", or 'auto')");
+                 }
+                 new (self) SimdContext{std::move(name), std::nullopt, {}};
+             },
+             "name"_a)
+        .def("__enter__",
+             [](nb::handle self) {
+                 auto& c = nb::cast<SimdContext&>(self);
+                 if (c.scope) throw std::runtime_error("this simd() context is already active");
+                 c.owner = std::this_thread::get_id();
+                 c.scope.emplace(c.name);
+                 return self;
+             })
+        .def("__exit__", [](SimdContext& c, nb::args) {
+            if (!c.scope) return false;
+            if (c.owner != std::this_thread::get_id())
+                throw std::runtime_error("a simd() context must be left on the thread that entered it");
+            c.scope.reset();
+            return false;
+        });
+
     m.def(
         "exif_orientation_bytes",
         [](nb::bytes data) {

@@ -1,8 +1,10 @@
 #include "simd.hpp"
 
 #include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -62,14 +64,20 @@ const std::vector<entry>& entries() {
     return e;
 }
 
-// LIBSTB_SIMD=<backend name> | auto | off (off, 0 and false mean "scalar"); anything else: auto.
+// LIBSTB_SIMD=<backend name> | auto | off (off, 0 and false mean "scalar"). An unknown or
+// unavailable name falls back to auto, with one line on stderr so a typo does not go unnoticed.
 std::size_t initial() {
     const char* e = std::getenv("LIBSTB_SIMD");
     if (!e || !*e) return 0;
     const std::string_view want = e;
+    if (want == "auto") return 0;
     if (want == "off" || want == "0" || want == "false") return entries().size() - 1;
     for (std::size_t i = 0; i < entries().size(); ++i)
         if (want == entries()[i].name) return i;
+    std::string have;
+    for (const entry& en : entries()) have += (have.empty() ? "" : ", ") + std::string(en.name);
+    std::fprintf(stderr, "libstb: LIBSTB_SIMD=%s is not an available SIMD backend (available: %s); using %s\n", e,
+                 have.c_str(), entries().front().name);
     return 0;
 }
 
@@ -78,10 +86,27 @@ std::atomic<std::size_t>& current() {
     return c;
 }
 
+// Per-thread override (simd_scope): an index into entries(), or npos for "follow the global".
+constexpr std::size_t npos = std::size_t(-1);
+thread_local std::size_t tl_override = npos;
+
+// The index in use on the calling thread.
+std::size_t effective() noexcept {
+    return tl_override != npos ? tl_override : current().load(std::memory_order_relaxed);
+}
+
+// Position of `name` in entries() ("auto" is 0, the best); npos if there is no such backend.
+std::size_t find(std::string_view name) {
+    if (name == "auto") return 0;
+    for (std::size_t i = 0; i < entries().size(); ++i)
+        if (name == entries()[i].name) return i;
+    return npos;
+}
+
 }  // namespace
 
 namespace detail {
-backend current_backend() noexcept { return entries()[current().load(std::memory_order_relaxed)].be; }
+backend current_backend() noexcept { return entries()[effective()].be; }
 }  // namespace detail
 
 std::vector<std::string> simd_backends() {
@@ -90,19 +115,27 @@ std::vector<std::string> simd_backends() {
     return out;
 }
 
-const char* simd_name() noexcept { return entries()[current().load(std::memory_order_relaxed)].name; }
+const char* simd_name() noexcept { return entries()[effective()].name; }
 
 bool set_simd(std::string_view name) noexcept {
-    if (name == "auto") {
-        current().store(0, std::memory_order_relaxed);
-        return true;
-    }
-    for (std::size_t i = 0; i < entries().size(); ++i)
-        if (name == entries()[i].name) {
-            current().store(i, std::memory_order_relaxed);
-            return true;
-        }
-    return false;
+    const std::size_t i = find(name);
+    if (i == npos) return false;
+    current().store(i, std::memory_order_relaxed);
+    return true;
 }
+
+simd_scope::simd_scope(std::string_view name) {
+    const std::size_t i = find(name);
+    if (i == npos) {
+        std::string have;
+        for (const entry& en : entries()) have += (have.empty() ? "'" : ", '") + std::string(en.name) + "'";
+        throw std::invalid_argument("unknown or unavailable SIMD backend '" + std::string(name) +
+                                    "' (available: " + have + ", or 'auto')");
+    }
+    previous_ = tl_override;
+    tl_override = i;
+}
+
+simd_scope::~simd_scope() { tl_override = previous_; }
 
 }  // namespace stb

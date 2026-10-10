@@ -23,6 +23,14 @@ images (so a swapped width/height cannot hide) and checks the output:
 Differences are measured as nmae, the mean absolute difference divided
 by 255 (1e-4 is 0.0255 of one 8-bit level).
   info                 width, height and channels are right.
+  crop, rotate90,      the output has the right shape and, for the geometry
+  flip_horizontal      operations, equals Pillow's result exactly.
+  convert_gray         right shape; within GRAY_NMAE of Pillow's "L" (libstb
+                       and Pillow use the same integer formula, OpenCV's
+                       rounds a little differently).
+  composite            right shape; within COMPOSITE_NMAE of Pillow's
+                       alpha_composite (the colour of a nearly transparent
+                       pixel is ill-defined, so it is a mean, not exact).
 
 Failures exit non-zero, which stops the CMake build before any
 benchmark runs. A library that cannot do an operation at all
@@ -43,6 +51,8 @@ from corpus import gen_gradient, gen_graphics, gen_photo, manifest_entries
 
 # One limit per kind of comparison, shared by every library (measured worst cases in brackets).
 JPEG_NMAE = 5e-4    # decode vs Pillow [libstb 3.2e-4, the rest 0]; encode loss vs Pillow's [libstb -3.2e-5]
+GRAY_NMAE = 1e-3       # convert_gray vs Pillow [libstb 0, OpenCV about 1 level on a few pixels]
+COMPOSITE_NMAE = 2e-3  # composite vs Pillow's alpha_composite [libstb: alpha exact, colour within 1 level]
 RESIZE_NMAE = 1e-2  # vs Pillow, same filter [libstb 2.0e-3, skimage 4.5e-3, OpenCV 6.6e-3 (no antialiasing)]
 
 
@@ -109,6 +119,20 @@ def _check_resize(op, lib, entry, out, arr):
     return None if d <= RESIZE_NMAE else f"nmae {d:.2e} vs Pillow with the same filter (limit {RESIZE_NMAE:.0e})"
 
 
+def _check_edit(op, lib, entry, out, arr):
+    """The editing operations: the right shape, and the same pixels as Pillow's (exactly for the
+    pure geometry ones, within a small mean error for the arithmetic ones)."""
+    a = _to_array(out, lib)
+    ref = _to_array(runners.prepare(op, "pillow", runners.Inputs(entry))(), "pillow")
+    if a.ndim == 3 and a.shape[2] == 1:  # (H, W, 1) and (H, W) are the same gray image
+        a = a[..., 0]
+    if a.shape != ref.shape:
+        return f"output shape {a.shape} != Pillow's {ref.shape}"
+    d = _nmae(a, ref)
+    limit = {"convert_gray": GRAY_NMAE, "composite": COMPOSITE_NMAE}.get(op, 0.0)
+    return None if d <= limit else f"nmae {d:.2e} vs Pillow (limit {limit:.0e})"
+
+
 def run(tmp):
     entries = []
     for genre, gen, (h, w) in (("gradient", gen_gradient, (72, 104)),
@@ -151,6 +175,8 @@ def run(tmp):
                     err = _check_decode(op, lib, entry, out, want)
                 elif op.startswith("encode_"):
                     err = _check_encode(op, entry, out, raw)
+                elif op in runners.EDIT_OPS:
+                    err = _check_edit(op, lib, entry, out, raw)
                 else:
                     err = _check_resize(op, lib, entry, out, raw)
                 rec["status"] = "ok" if err is None else "FAIL"

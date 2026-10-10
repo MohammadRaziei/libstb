@@ -33,6 +33,7 @@ np.from_dlpack(img)                                 # DLPack: also torch/jax/cup
 libstb.Image.from_dlpack(tensor)                    # and back: a torch/jax/cupy/numpy uint8 array -> Image
 pixels = libstb.imread("photo.png")                 # just the ndarray (same options as Image.open)
 libstb.imwrite("out.jpg", pixels, quality=80)       # an ndarray or an Image; format from the extension
+small = libstb.imresize(pixels, 320, 240)           # resize an ndarray, get an ndarray (no Image needed)
 libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
 libstb.Image(np.zeros((8, 8, 4), np.uint8))         # from your own uint8 array (no copy, see below)
 img.copy()                                          # an independent image (deep copy)
@@ -110,20 +111,33 @@ the ones this CPU can run, best first, e.g. `['avx2', 'sse2', 'scalar']`:
 - `"avx2"`: AVX2 kernels, picked at run time when the CPU and OS support them
   (x86-64, GCC or Clang builds). The same wheel therefore runs on any x86-64 CPU.
 - `"sse2"` (x86-64) or `"neon"` (arm64): the same loops vectorised by the compiler for
-  the platform's baseline SIMD. This is what arm64, MSVC and older x86 CPUs run.
+  the platform's baseline SIMD (on x86-64, hand-written SSE2 kernels for the gray
+  conversions and RGBA over RGB). This is what arm64, MSVC and older x86 CPUs run.
 - `"scalar"`: the same loops with auto-vectorisation off, the plain reference. Always
   available; the tests check every other backend against it.
 
-`libstb.simd_name()` is the backend in use (the first by default);
-`libstb.set_simd("sse2")` switches (`"auto"` restores the default; `ValueError` for
-an unknown or unavailable name); `LIBSTB_SIMD=<name>` in the environment chooses
-the initial one (`off` means `scalar`). It is for comparing and measuring, not
-something you need to set. How much each helps depends on the loop: on 16 MP,
-AVX2 makes `convert` to gray about 1.8x faster and RGBA `composite` about 2.6x
-faster than scalar, while SSE2 only helps the RGBA `composite` (about 1.9x) and is
-no faster than scalar for `convert` or for `composite` onto RGB (measured on one
-core of a shared machine: expect other numbers on yours). Flips, turns, `crop` and
-`pad` only move bytes and are limited by memory bandwidth, so they have no SIMD
+`libstb.simd_name()` is the backend in use on the calling thread (the first by
+default). To change it from code:
+
+- `with libstb.simd("scalar"):` uses a backend for the calling thread only, for the
+  length of the block; other threads are not affected and blocks nest. In C++ the
+  same is `stb::simd_scope guard("scalar");`. Prefer this in a library or a thread pool.
+- `libstb.set_simd("sse2")` switches the whole process (`"auto"` restores the
+  default).
+
+Both raise `ValueError` (C++: `std::invalid_argument` / `false`) for an unknown or
+unavailable name. The environment variable `LIBSTB_SIMD=<name>` chooses the initial
+backend (`off` means `scalar`) and is for diagnosis, such as comparing two runs of a
+program you do not want to edit; a name that is unknown or unavailable on the CPU
+prints one line on stderr and falls back to `auto`. None of this is something you need
+to set: the default is the fastest backend. How much each helps depends on the loop. On
+a 4 MP image (one core of a shared machine: expect other numbers on yours) `convert` to
+gray from RGB or RGBA is about 1.9x to 3x faster than scalar with SSE2 and about the
+same with AVX2, RGBA `composite` onto RGB is about 2x faster with either, and RGBA
+`composite` onto RGBA is about 2.4x faster with SSE2 and 5x with AVX2. The "sse2" backend
+runs hand-written SSE2 kernels for the gray conversions and for RGBA over RGB (where the
+compiler's vectoriser struggles with 3-byte pixels), and the compiler-vectorised loops for
+the other pairs. Flips, turns, `crop` and `pad` only move bytes and are limited by memory bandwidth, so they have no SIMD
 variants: AVX2 would not make them faster.
 
 **EXIF orientation.** Phone photos are stored sideways and carry an EXIF tag

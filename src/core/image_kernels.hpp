@@ -143,5 +143,11 @@ STB_INLINE void composite_row(const std::uint8_t* s, std::uint8_t* d, std::size_
 row_fn pick_convert_scalar(int sc, int dc);
 row_fn pick_composite_scalar(int sc, int dc);  // sc is 2 or 4
 
+// Hand-written SSE2 kernels (image_kernels_sse2.cpp) for the pairs the compiler does not
+// vectorise well; nullptr when there is none for the pair (or no SSE2 in this build), and
+// the caller then uses the compiler-vectorised loop.
+row_fn pick_convert_sse2(int sc, int dc);
+row_fn pick_composite_sse2(int sc, int dc);
+
 }  // namespace detail
 }  // namespace stb

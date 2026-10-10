@@ -56,17 +56,37 @@ int exif_orientation(const void* data, std::size_t size) noexcept;
 //   "avx2"            AVX2 kernels, picked at run time when the CPU supports them (x86-64,
 //                     GCC or Clang builds)
 //   "sse2" / "neon"   the same loops vectorised by the compiler for the platform's baseline
-//                     SIMD (x86-64 / arm64)
+//                     SIMD (x86-64 / arm64); on x86-64 the gray conversions and RGBA over RGB
+//                     are hand-written SSE2 kernels (the "avx2" backend uses those too)
 //   "scalar"          the same loops with auto-vectorisation switched off: the plain reference
 // simd_backends() lists those this build can run on this CPU, best first (it always ends
 // with "scalar"); simd_name() is the one in use, the first by default. set_simd("avx2") (or
 // any listed name; "auto" restores the default) switches, and returns false, changing nothing,
 // for an unknown or unavailable name. LIBSTB_SIMD=<name> in the environment chooses the
-// initial backend ("off" means "scalar"). Flips, turns, crop and pad only move bytes and have
-// no SIMD variants. Thread-safe.
+// initial backend ("off" means "scalar"); it is meant for diagnosis (a name that is unknown or
+// unavailable falls back to auto and prints one line on stderr), code should use set_simd or
+// simd_scope. Flips, turns, crop and pad only move bytes and have no SIMD variants. Thread-safe.
+//
+// set_simd changes the backend for the whole process. simd_scope changes it for the calling
+// thread only, for as long as the object lives (scopes nest, and take precedence over
+// set_simd): other threads are not affected, so it is the one to use in a library or a
+// thread pool. "auto" means the best backend. The constructor throws std::invalid_argument
+// for an unknown or unavailable name. Create and destroy a scope on the same thread.
+// simd_name() reports what the calling thread uses.
 std::vector<std::string> simd_backends();
 const char* simd_name() noexcept;
 bool set_simd(std::string_view name) noexcept;
+
+class simd_scope {
+public:
+    explicit simd_scope(std::string_view name);
+    ~simd_scope();
+    simd_scope(const simd_scope&) = delete;
+    simd_scope& operator=(const simd_scope&) = delete;
+
+private:
+    std::size_t previous_;
+};
 
 // Defaults of to_png / write_png and to_jpg / write_jpg.
 inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower

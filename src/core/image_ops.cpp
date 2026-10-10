@@ -137,6 +137,9 @@ STB_TARGET_AVX2 void composite_avx2(const std::uint8_t* s, std::uint8_t* d, std:
 
 row_fn pick_convert(int sc, int dc, backend be) {
     if (be == backend::scalar) return pick_convert_scalar(sc, dc);
+    // The hand-written SSE2 kernels also beat the AVX2-compiled loops for these pairs (every x86-64
+    // CPU that has AVX2 has SSE2), so the avx2 backend uses them too.
+    if (const row_fn f = detail::pick_convert_sse2(sc, dc)) return f;
     const bool avx = be == backend::avx2;
     (void)avx;
     switch (sc * 10 + dc) {
@@ -147,6 +150,7 @@ row_fn pick_convert(int sc, int dc, backend be) {
 
 row_fn pick_composite(int sc, int dc, backend be) {  // sc is 2 or 4
     if (be == backend::scalar) return pick_composite_scalar(sc, dc);
+    if (const row_fn f = detail::pick_composite_sse2(sc, dc)) return f;
     const bool avx = be == backend::avx2;
     (void)avx;
     switch (sc * 10 + dc) {

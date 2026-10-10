@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -501,6 +502,46 @@ UTEST(libstb_simd_tests, test_set_simd_switches_to_a_listed_backend_and_rejects_
     }
 }
 
+UTEST(libstb_simd_tests, test_simd_scope_changes_this_thread_only_and_restores_on_exit) {
+    simd_mode keep(stb::simd_name());
+    const std::vector<std::string> all = stb::simd_backends();
+    ASSERT_TRUE(stb::set_simd("auto"));
+    std::string other_before, other_inside;
+    {
+        stb::simd_scope outer("scalar");
+        ASSERT_TRUE(std::string(stb::simd_name()) == "scalar");
+        {
+            stb::simd_scope inner("auto");
+            ASSERT_TRUE(std::string(stb::simd_name()) == all.front());
+        }
+        ASSERT_TRUE(std::string(stb::simd_name()) == "scalar");
+        ASSERT_TRUE(stb::set_simd("scalar"));  // the global changes; the scope still decides here
+        stb::set_simd("auto");
+        std::thread t([&] {
+            other_before = stb::simd_name();
+            stb::simd_scope s("scalar");
+            other_inside = stb::simd_name();
+        });
+        t.join();
+        ASSERT_TRUE(std::string(stb::simd_name()) == "scalar");
+    }
+    ASSERT_TRUE(std::string(stb::simd_name()) == all.front());
+    ASSERT_TRUE(other_before == all.front());  // another thread follows the global
+    ASSERT_TRUE(other_inside == "scalar");
+}
+
+UTEST(libstb_simd_tests, test_simd_scope_rejects_an_unknown_name_and_changes_nothing) {
+    stb::simd_scope s("scalar");
+    bool threw = false;
+    try {
+        stb::simd_scope bad("avx9000");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    ASSERT_TRUE(threw);
+    ASSERT_TRUE(std::string(stb::simd_name()) == "scalar");
+}
+
 UTEST(libstb_simd_tests, test_convert_is_identical_in_every_backend_for_every_pair) {
     for (int sc = 1; sc <= 4; ++sc)
         for (int dc = 1; dc <= 4; ++dc) {
@@ -509,6 +550,30 @@ UTEST(libstb_simd_tests, test_convert_is_identical_in_every_backend_for_every_pa
             for (const std::string& be : stb::simd_backends()) {
                 simd_mode m(be);
                 ASSERT_TRUE(same(want, src.convert(dc)));
+            }
+        }
+}
+
+// The hand-written SSE2 kernels read 16 bytes at a time and finish the last pixels one by one:
+// every width from 1 to 70 puts the end of the row at a different place in a vector. Run under
+// AddressSanitizer this also catches a read or a write past the end of the (exactly sized) image.
+UTEST(libstb_simd_tests, test_every_small_width_is_identical_in_every_backend_and_stays_inside_the_buffer) {
+    for (int w = 1; w <= 70; ++w)
+        for (int h : {1, 3}) {
+            for (int sc : {3, 4}) {
+                const stb::image src = random_image(w, h, sc, unsigned(w * 31 + h * 7 + sc));
+                const stb::image want = [&] { simd_mode m("scalar"); return src.convert(1); }();
+                for (const std::string& be : stb::simd_backends()) {
+                    simd_mode m(be);
+                    ASSERT_TRUE(same(want, src.convert(1)));
+                }
+            }
+            const stb::image base = random_image(w, h, 3, unsigned(w * 17 + h));
+            const stb::image over = random_image(w, h, 4, unsigned(w * 19 + h + 500));
+            const stb::image want = [&] { simd_mode m("scalar"); return base.composite(over); }();
+            for (const std::string& be : stb::simd_backends()) {
+                simd_mode m(be);
+                ASSERT_TRUE(same(want, base.composite(over)));
             }
         }
 }

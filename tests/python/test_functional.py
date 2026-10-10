@@ -99,3 +99,40 @@ def test_old_names_are_gone():
     assert not hasattr(libstb, "load")
     assert not hasattr(libstb, "info")
     assert not hasattr(libstb.Image, "array")
+
+
+# ------------------------------------------------------------------ imresize
+
+
+@pytest.mark.parametrize("resizer", [None, "box", "mitchell", libstb.Resizer("cubic")])
+def test_imresize_equals_image_resize(resizer):
+    src = np.random.default_rng(3).integers(0, 256, (20, 30, 3), dtype=np.uint8)
+    want = libstb.Image(src).resize(12, 9, resizer).numpy()
+    got = libstb.imresize(src, 12, 9, resizer)
+    assert got.shape == (9, 12, 3) and got.dtype == np.uint8
+    np.testing.assert_array_equal(got, want)
+
+
+@pytest.mark.parametrize("c", [1, 2, 4])
+def test_imresize_keeps_the_channel_count(c):
+    src = np.random.default_rng(c).integers(0, 256, (8, 10, c), dtype=np.uint8)
+    assert libstb.imresize(src, 5, 4).shape == (4, 5, c)
+
+
+def test_imresize_of_a_2d_array_is_2d():
+    g = np.arange(12, dtype=np.uint8).reshape(3, 4)
+    assert libstb.imresize(g, 8, 6).shape == (6, 8)
+
+
+def test_imresize_takes_an_image_and_returns_an_array():
+    out = libstb.imresize(libstb.Image(SRC), 3, 2)
+    assert isinstance(out, np.ndarray) and out.shape == (2, 3, 3)
+
+
+def test_imresize_reports_bad_input_like_image():
+    with pytest.raises(ValueError):
+        libstb.imresize(SRC, 0, 4)
+    with pytest.raises(TypeError):
+        libstb.imresize(SRC.astype(np.float32), 3, 3)
+    with pytest.raises(ValueError):
+        libstb.imresize(SRC, 3, 3, "no-such-filter")

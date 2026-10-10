@@ -26,9 +26,23 @@ from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
 from .font import Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize
 from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
-from .libstb_py import set_simd, simd_backends, simd_name
+from .libstb_py import _SimdContext, set_simd, simd_backends, simd_name
 
 _pkg_dir = _os.path.dirname(__file__)
+
+
+def simd(name):
+    """Use one SIMD backend for the calling thread inside a `with` block:
+
+        with libstb.simd("scalar"):
+            out = img.convert(1)      # runs the scalar kernels, on this thread only
+
+    Unlike set_simd (the whole process), other threads are not affected and the previous
+    backend comes back on exit; blocks nest. `name` is one of simd_backends() or "auto"
+    (the best one); ValueError for anything else. Enter and leave the block on the same
+    thread.
+    """
+    return _SimdContext(name)
 
 
 def iminfo(source):
@@ -56,6 +70,19 @@ def imread(source, *, channels=0, flip=False, max_bytes=DEFAULT_MAX_BYTES, orien
     return Image.open(
         source, channels=channels, flip=flip, max_bytes=max_bytes, orient=orient
     ).numpy()
+
+
+def imresize(array, width, height, resizer=None):
+    """Resize a uint8 array of shape (H, W) or (H, W, 1..4) (or an Image) to `width` x `height`
+    and return a new ndarray, for code that works on arrays and never touches Image.
+
+    `resizer` is whatever Image.resize takes: None (the default Resizer), a Resizer, a
+    Resizer.Filter or a filter name such as "box" or "mitchell". The result has the input's
+    number of dimensions: (height, width) for a 2-D array, (height, width, channels) else.
+    Needs numpy.
+    """
+    out = (array if isinstance(array, Image) else Image(array)).resize(width, height, resizer).numpy()
+    return out[..., 0] if getattr(array, "ndim", None) == 2 else out
 
 
 # extension -> (Image method, the options that format understands)
@@ -107,7 +134,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd",
+    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "imresize",
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "Error", "DecodeError", "EncodeError", "LimitError",
