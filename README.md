@@ -347,7 +347,7 @@ ctest --test-dir build --output-on-failure
 `tests/python/test_memory.py` repeats each operation on a real image and fails if memory
 allocated by it (native allocations included) is still alive afterwards, and checks that
 `Image(array)`, `from_dlpack`, `crop` and `convert` do not make hidden copies. The limits
-are on by default whenever `pytest-memray` is installed (`tests/python/conftest.py` switches
+are on by default whenever `pytest-memray` can be imported (it is in the `test` extra on the platforms that have a wheel for it; `tests/python/conftest.py` switches
 `--memray` on; `LIBSTB_NO_MEMRAY=1` turns it off), and the module is skipped when the plugin is
 missing, as on Windows.
 
