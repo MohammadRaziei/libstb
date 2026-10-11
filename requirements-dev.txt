@@ -10,6 +10,6 @@ twine
 
 # testing dependencies
 pytest
-numpy
+numpy; sys_platform != "win32" or platform_machine != "ARM64" or python_version >= "3.11"
 pillow
 pytest-memray; sys_platform != "win32" and (platform_machine == "x86_64" or platform_machine == "arm64")  # memory-leak and allocation checks (tests/python/test_memory.py)
