@@ -12,3 +12,4 @@ twine
 pytest
 numpy
 pillow
+pytest-memray; sys_platform != "win32"  # memory-leak and allocation checks (tests/python/test_memory.py)

@@ -344,6 +344,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+`tests/python/test_memory.py` repeats each operation on a real image and fails if memory
+allocated by it (native allocations included) is still alive afterwards, and checks that
+`Image(array)`, `from_dlpack`, `crop` and `convert` do not make hidden copies. The limits
+are on by default whenever `pytest-memray` is installed (`tests/python/conftest.py` switches
+`--memray` on; `LIBSTB_NO_MEMRAY=1` turns it off), and the module is skipped when the plugin is
+missing, as on Windows.
+
 Wheels: abi3 (`cp312-abi3`, covers 3.12+) plus one wheel each for cp39-cp311;
 see `.github/workflows/wheels.yml`. Free-threaded builds are not supported.
 

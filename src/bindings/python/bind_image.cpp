@@ -44,16 +44,27 @@ using array_rw = nb::ndarray<nb::device::cpu>;          // only writable arrays 
 using array_ro = nb::ndarray<nb::ro, nb::device::cpu>;  // read-only ones too
 using bytes_in = nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
-// Keeps a Python object alive for as long as an image views its memory. The
-// last reference may be dropped from any thread, hence the GIL.
-std::shared_ptr<void> keep_alive(nb::handle obj) {
-    auto* ref = new nb::object(nb::borrow(obj));
-    return std::shared_ptr<void>(ref, [](nb::object* p) {
+// Keeps a Python object alive for as long as an image views its memory. The last
+// reference may be dropped from any thread, hence the GIL.
+//
+// The deleter carries the object so that the image's tp_traverse can show the garbage
+// collector this otherwise hidden reference (image_traverse below). Without that, an
+// object whose class lives in the same module as the image that views it (its methods
+// reach the module's globals, which hold the image) forms a cycle the collector cannot
+// see, and the image is never freed.
+struct KeepAlive {
+    nb::object* obj;
+    void operator()(nb::object* p) const {
         if (Py_IsInitialized()) {  // otherwise the interpreter is gone: leak, do not touch it
             nb::gil_scoped_acquire gil;
             delete p;
         }
-    });
+    }
+};
+
+std::shared_ptr<void> keep_alive(nb::handle obj) {
+    auto* ref = new nb::object(nb::borrow(obj));
+    return std::shared_ptr<void>(ref, KeepAlive{ref});
 }
 
 // Image(array): a uint8 array of shape (H, W) or (H, W, 1..4).
@@ -240,7 +251,26 @@ int image_getbuffer(PyObject* exporter, Py_buffer* view, int flags) {
 
 void image_releasebuffer(PyObject*, Py_buffer* view) { delete static_cast<buffer_meta*>(view->internal); }
 
+// Garbage-collector support: an image that views a Python object (Image(array), from_dlpack)
+// holds a reference to it that Python cannot see, so report it. An image is move-only, so
+// each such reference is held by exactly one live image and is reported once.
+int image_traverse(PyObject* self, visitproc visit, void* arg) {
+    Py_VISIT(Py_TYPE(self));  // heap types must be visited (Python 3.9+)
+    if (!nb::inst_ready(self)) return 0;
+    if (const auto* k = nb::inst_ptr<stb::image>(self)->owner_deleter<KeepAlive>()) Py_VISIT(k->obj->ptr());
+    return 0;
+}
+
+// Called only when the collector has found the image to be part of unreachable garbage:
+// drop the pixels and the reference so the cycle is broken.
+int image_clear(PyObject* self) {
+    if (nb::inst_ready(self)) *nb::inst_ptr<stb::image>(self) = stb::image();
+    return 0;
+}
+
 const PyType_Slot image_slots[] = {
+    {Py_tp_traverse, reinterpret_cast<void*>(image_traverse)},
+    {Py_tp_clear, reinterpret_cast<void*>(image_clear)},
     {Py_bf_getbuffer, reinterpret_cast<void*>(image_getbuffer)},
     {Py_bf_releasebuffer, reinterpret_cast<void*>(image_releasebuffer)},
     {0, nullptr},

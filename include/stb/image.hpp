@@ -132,6 +132,14 @@ public:
     // A deep copy that owns its own pixels (also when this image is a wrap).
     image copy() const;
 
+    // The deleter of type D that was given to the shared_ptr passed as `keep_alive` to wrap(), or
+    // nullptr if the pixels are held by something else. It lets a binding reach what the image keeps
+    // alive (for a garbage collector to see it) without the image knowing about the host language.
+    template <class D>
+    D* owner_deleter() const noexcept {
+        return std::get_deleter<D>(data_);
+    }
+
     // --- decoding (throws invalid_argument, decode_error, limit_error) ---
     static image decode(const void* data, std::size_t size, const load_options& opt = {});
     // Also throws io_error.
