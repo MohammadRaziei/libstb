@@ -28,7 +28,7 @@ dependencies = []
 [project.optional-dependencies]
 numpy = ["numpy"]
 pillow = ["pillow"]
-test = ["pytest", "numpy", "pillow", "pytest-memray; sys_platform != 'win32'"]
+test = ["pytest", "numpy", "pillow", "pytest-memray; sys_platform != 'win32' and (platform_machine == 'x86_64' or platform_machine == 'arm64')"]
 
 [project.urls]
 Homepage = "https://github.com/MohammadRaziei/libstb"
