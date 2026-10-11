@@ -208,12 +208,12 @@ UTEST(libstb_edit_tests, test_thumbnail_keeps_the_aspect_ratio_and_touches_the_l
 }
 
 UTEST(libstb_edit_tests, test_thumbnail_never_enlarges_and_never_makes_a_side_zero) {
-    const stb::image small = gradient(10, 5, 3);
-    stb::image same_size = small.thumbnail(100, 100);
-    ASSERT_TRUE(same(small, same_size));
-    ASSERT_TRUE(same_size.data() != small.data());
-    stb::image exact = small.thumbnail(10, 5);
-    ASSERT_TRUE(same(small, exact));
+    const stb::image tiny = gradient(10, 5, 3);
+    stb::image same_size = tiny.thumbnail(100, 100);
+    ASSERT_TRUE(same(tiny, same_size));
+    ASSERT_TRUE(same_size.data() != tiny.data());
+    stb::image exact = tiny.thumbnail(10, 5);
+    ASSERT_TRUE(same(tiny, exact));
     stb::image line = gradient(1000, 3, 1).thumbnail(10, 10);
     ASSERT_EQ(10, line.width());
     ASSERT_EQ(1, line.height());

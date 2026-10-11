@@ -14,6 +14,7 @@
 #define LIBSTB_VERSION_PATCH 0
 
 #ifdef __cplusplus
+#include "stb/env.hpp"
 #include "stb/error.hpp"
 #include "stb/utf8.hpp"
 #include "stb/image.hpp"

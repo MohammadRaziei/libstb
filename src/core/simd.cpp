@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "stb/env.hpp"
 #include "stb/image.hpp"
 
 namespace stb {
@@ -67,8 +68,8 @@ const std::vector<entry>& entries() {
 // LIBSTB_SIMD=<backend name> | auto | off (off, 0 and false mean "scalar"). An unknown or
 // unavailable name falls back to auto, with one line on stderr so a typo does not go unnoticed.
 std::size_t initial() {
-    const char* e = std::getenv("LIBSTB_SIMD");
-    if (!e || !*e) return 0;
+    const std::string e = stb::env("LIBSTB_SIMD");
+    if (e.empty()) return 0;
     const std::string_view want = e;
     if (want == "auto") return 0;
     if (want == "off" || want == "0" || want == "false") return entries().size() - 1;
@@ -76,7 +77,7 @@ std::size_t initial() {
         if (want == entries()[i].name) return i;
     std::string have;
     for (const entry& en : entries()) have += (have.empty() ? "" : ", ") + std::string(en.name);
-    std::fprintf(stderr, "libstb: LIBSTB_SIMD=%s is not an available SIMD backend (available: %s); using %s\n", e,
+    std::fprintf(stderr, "libstb: LIBSTB_SIMD=%s is not an available SIMD backend (available: %s); using %s\n", e.c_str(),
                  have.c_str(), entries().front().name);
     return 0;
 }
