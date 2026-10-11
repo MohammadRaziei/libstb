@@ -33,10 +33,10 @@ print("source        :", img.width, "x", img.height)
 face = img.crop(8, 8, 40, 40)
 print("crop          :", face.width, "x", face.height)
 
-# Flips and quarter turns. rotate90 turns clockwise; a negative count turns the other way.
+# Flips and quarter turns. rotate90 turns counter-clockwise (like np.rot90); a negative count turns the other way.
 flipped_h = img.flip_horizontal()
 flipped_v = img.flip_vertical()
-turned = img.rotate90()            # clockwise: 160x100 becomes 100x160
+turned = img.rotate90()            # counter-clockwise: 160x100 becomes 100x160
 turned_back = turned.rotate90(-1)  # and back
 print("rotate90      :", turned.width, "x", turned.height, "| back to the original:",
       np.array_equal(turned_back.numpy(), img.numpy()))

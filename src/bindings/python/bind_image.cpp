@@ -476,7 +476,8 @@ void bind_image(nb::module_& m) {
         .def("flip_horizontal", &image::flip_horizontal, release(), "Mirror left <-> right.")
         .def("flip_vertical", &image::flip_vertical, release(), "Mirror top <-> bottom.")
         .def("rotate90", &image::rotate90, "turns"_a = 1, release(),
-             "Rotate by `turns` quarter turns clockwise (negative: counter-clockwise).\n"
+             "Rotate by `turns` quarter turns counter-clockwise, like numpy.rot90 and Pillow's\n"
+             "ROTATE_90 (negative: clockwise).\n"
              "Width and height swap for an odd number of turns.")
         .def("transpose", &image::transpose, release(),
              "Swap rows and columns (mirror across the main diagonal); width and height swap.")

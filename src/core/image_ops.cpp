@@ -204,9 +204,9 @@ image image::transpose() const { return apply(*this, op::transpose); }
 image image::rotate90(int turns) const {
     need_pixels(*this);
     switch (((turns % 4) + 4) % 4) {
-        case 1: return apply(*this, op::rot90);
+        case 1: return apply(*this, op::rot270);  // counter-clockwise, like numpy.rot90 and Pillow
         case 2: return apply(*this, op::rot180);
-        case 3: return apply(*this, op::rot270);
+        case 3: return apply(*this, op::rot90);   // op::rot90 turns clockwise
         default: return copy();
     }
 }

@@ -29,10 +29,10 @@ def from_pil(p):
 CASES = [
     ("flip_horizontal", lambda i: i.flip_horizontal(), T.FLIP_LEFT_RIGHT),
     ("flip_vertical", lambda i: i.flip_vertical(), T.FLIP_TOP_BOTTOM),
-    ("rotate90", lambda i: i.rotate90(), T.ROTATE_270),  # Pillow's ROTATE_270 is clockwise
+    ("rotate90", lambda i: i.rotate90(), T.ROTATE_90),  # Pillow's ROTATE_90 is counter-clockwise, like ours
     ("rotate90(2)", lambda i: i.rotate90(2), T.ROTATE_180),
-    ("rotate90(3)", lambda i: i.rotate90(3), T.ROTATE_90),
-    ("rotate90(-1)", lambda i: i.rotate90(-1), T.ROTATE_90),
+    ("rotate90(3)", lambda i: i.rotate90(3), T.ROTATE_270),
+    ("rotate90(-1)", lambda i: i.rotate90(-1), T.ROTATE_270),
     ("transpose", lambda i: i.transpose(), T.TRANSPOSE),
 ]
 
@@ -182,3 +182,10 @@ def test_thumbnail_is_close_to_pillows_thumbnail_in_size():
         p = PILImage.new("RGB", (w, h))
         p.thumbnail((30, 30))
         assert abs(ours.width - p.width) <= 1 and abs(ours.height - p.height) <= 1
+
+
+@pytest.mark.parametrize("c", [1, 2, 3, 4])
+@pytest.mark.parametrize("turns", [-5, -2, -1, 0, 1, 2, 3, 4, 7])
+def test_rotate90_follows_numpy_rot90(c, turns):
+    a = np.random.default_rng(c * 10 + turns).integers(0, 256, (5, 8, c), dtype=np.uint8)
+    np.testing.assert_array_equal(libstb.Image(a).rotate90(turns).numpy(), np.rot90(a, turns))

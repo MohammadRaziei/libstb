@@ -41,9 +41,13 @@ jobs:
     name: Wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      # One platform failing must not hide how the others do: each of them is its own wheel set.
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # ubuntu-latest / windows-latest are x86-64; the *-arm runners are native arm64 (no
+        # emulation, so the wheels are built and tested on the real architecture). macos-latest
+        # is arm64 and builds the universal2 wheel (x86-64 + arm64) for both.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
 
     steps:
     - uses: actions/checkout@v6
@@ -75,11 +79,14 @@ jobs:
   # so this job runs the very same wheel on emulated CPUs (QEMU user mode): one without AVX
   # (Nehalem: SSE4.2 only), where it must fall back to the portable kernels and pass every
   # test, and one with AVX2 (Haswell), where it must pick the AVX2 ones.
-  test_cpu_features:
-    name: Wheel on emulated CPUs (without / with AVX2)
+  emulate:
+    name: emulate
     needs: build_wheels
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # pytest-memray (installed by the [test] extra) does not run under QEMU user mode.
+      LIBSTB_NO_MEMRAY: "1"
     steps:
     - uses: actions/checkout@v6
 
@@ -99,8 +106,9 @@ jobs:
 
     - name: Install the manylinux wheel (3.12, abi3) with its test dependencies
       run: |
-        wheels=(wheelhouse/libstb-*-cp312-abi3-manylinux*x86_64*.whl)
-        [ ${#wheels[@]} -eq 1 ] && [ -f "${wheels[0]}" ] || { echo "expected exactly one manylinux cp312-abi3 wheel, found: ${wheels[*]}"; exit 1; }
+        echo "wheelhouse contains:"; find wheelhouse -type f | sort
+        mapfile -t wheels < <(find wheelhouse -type f -name 'libstb-*-cp312-abi3-manylinux*x86_64*.whl')
+        [ ${#wheels[@]} -eq 1 ] || { echo "expected exactly one manylinux cp312-abi3 x86_64 wheel, found ${#wheels[@]}: ${wheels[*]}"; exit 1; }
         python -m venv venv
         venv/bin/pip install "${wheels[0]}[test]"
 

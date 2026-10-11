@@ -184,7 +184,7 @@ public:
     image crop(int x, int y, int width, int height) const;
     image flip_horizontal() const;  // mirror left <-> right
     image flip_vertical() const;    // mirror top <-> bottom
-    // `turns` quarter turns clockwise (negative: counter-clockwise; any integer).
+    // `turns` quarter turns counter-clockwise, like numpy.rot90 and Pillow (negative: clockwise; any integer).
     image rotate90(int turns = 1) const;
     // Swap rows and columns (mirror across the main diagonal); width and height swap.
     image transpose() const;

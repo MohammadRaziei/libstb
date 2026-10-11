@@ -43,7 +43,7 @@ upright = libstb.Image(px)
 
 # A phone held sideways stores the picture turned and writes orientation 6 ("turn 90 degrees
 # clockwise to see it upright"). Store it turned the opposite way and tag it.
-sideways = upright.rotate90(-1)
+sideways = upright.rotate90(1)
 photo = png_with_orientation(sideways.to_png(), 6)
 (OUT / "photo_orientation6.png").write_bytes(photo)
 (OUT / "photo_orientation6.jpg").write_bytes(jpeg_with_orientation(sideways.to_jpg(quality=95), 6))

@@ -63,7 +63,7 @@ Operations, and what each one is fair to compare:
                 absent from composite). Raw pixels in, a new pixel array or
                 image out; the result is an independent copy in every
                 library (no lazy views). crop takes the central half of each
-                side, rotate90 is a clockwise quarter turn, convert_gray is
+                side, rotate90 is a counter-clockwise quarter turn, convert_gray is
                 RGB to one channel (Pillow's "L", OpenCV's BGR2GRAY: libstb
                 uses Pillow's integer formula, OpenCV's rounds slightly
                 differently), and composite lays an RGBA image (the same one
@@ -308,7 +308,7 @@ def _pillow(op, inp):
             x, y, cw, ch = _crop_box(inp)
             return lambda: im.crop((x, y, x + cw, y + ch))
         if op == "rotate90":
-            return lambda: im.transpose(Image.Transpose.ROTATE_270)  # clockwise
+            return lambda: im.transpose(Image.Transpose.ROTATE_90)  # counter-clockwise
         if op == "flip_horizontal":
             return lambda: im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         if op == "convert_gray":
@@ -377,7 +377,7 @@ def _opencv(op, inp):
             x, y, cw, ch = _crop_box(inp)
             return lambda: bgr[y:y + ch, x:x + cw].copy()  # a slice is a view: copy it, like the others
         if op == "rotate90":
-            return lambda: cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+            return lambda: cv2.rotate(bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
         if op == "flip_horizontal":
             return lambda: cv2.flip(bgr, 1)
         if op == "convert_gray":

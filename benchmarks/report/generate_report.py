@@ -116,8 +116,8 @@ OP_META = {
                 "This is mostly memory bandwidth. 3-channel images only.",
     },
     "rotate90": {
-        "title": "rotate: a clockwise quarter turn",
-        "note": "Pillow's transpose(ROTATE_270) and cv2.rotate against libstb's rotate90. A turn reads rows "
+        "title": "rotate: a counter-clockwise quarter turn",
+        "note": "Pillow's transpose(ROTATE_90) and cv2.rotate against libstb's rotate90. A turn reads rows "
                 "and writes columns, so it is about memory access patterns. 3-channel images only.",
     },
     "flip_horizontal": {

@@ -63,19 +63,22 @@ UTEST(libstb_edit_tests, test_flips_move_pixels_to_the_mirrored_position) {
             }
 }
 
-UTEST(libstb_edit_tests, test_rotate90_is_clockwise) {
-    // 2 wide, 3 tall:  a b      clockwise ->  e c a
-    //                  c d                    f d b
+UTEST(libstb_edit_tests, test_rotate90_is_counter_clockwise_like_numpy_and_pillow) {
+    // 2 wide, 3 tall:  a b      counter-clockwise ->  b d f      clockwise (-1) ->  e c a
+    //                  c d                            a c e                         f d b
     //                  e f
     const stb::image src = make(2, 3, 1, {'a', 'b', 'c', 'd', 'e', 'f'});
     const stb::image r = src.rotate90();
     ASSERT_EQ(3, r.width());
     ASSERT_EQ(2, r.height());
-    const char expect[] = {'e', 'c', 'a', 'f', 'd', 'b'};
+    const char expect[] = {'b', 'd', 'f', 'a', 'c', 'e'};
     for (int i = 0; i < 6; ++i) ASSERT_EQ(expect[i], r.data()[i]);
+    const stb::image cw = src.rotate90(-1);
+    const char expect_cw[] = {'e', 'c', 'a', 'f', 'd', 'b'};
+    for (int i = 0; i < 6; ++i) ASSERT_EQ(expect_cw[i], cw.data()[i]);
 }
 
-UTEST(libstb_edit_tests, test_rotate90_turns_wrap_and_negative_means_counter_clockwise) {
+UTEST(libstb_edit_tests, test_rotate90_turns_wrap_and_negative_means_clockwise) {
     const stb::image src = gradient(5, 3, 4);
     ASSERT_TRUE(same(src, src.rotate90(0)));
     ASSERT_TRUE(same(src, src.rotate90(4)));
@@ -109,7 +112,7 @@ UTEST(libstb_edit_tests, test_turns_work_on_images_larger_than_one_tile_for_ever
         ASSERT_EQ(77, r.height());
         for (int y = 0; y < r.height(); y += 7)
             for (int x = 0; x < r.width(); x += 5)
-                for (int k = 0; k < c; ++k) ASSERT_EQ(src(y, 44 - x, k), r(x, y, k));
+                for (int k = 0; k < c; ++k) ASSERT_EQ(src(76 - y, x, k), r(x, y, k));
         ASSERT_TRUE(same(src, src.rotate90(3).rotate90(1)));
     }
 }
@@ -129,9 +132,9 @@ UTEST(libstb_edit_tests, test_orient_is_the_transform_that_makes_the_image_uprig
     ASSERT_TRUE(same(s.rotate90(2), s.orient(3)));
     ASSERT_TRUE(same(s.flip_vertical(), s.orient(4)));
     ASSERT_TRUE(same(s.transpose(), s.orient(5)));
-    ASSERT_TRUE(same(s.rotate90(1), s.orient(6)));
+    ASSERT_TRUE(same(s.rotate90(-1), s.orient(6)));  // orientation 6: turn clockwise to see it upright
     ASSERT_TRUE(same(s.transpose().rotate90(2), s.orient(7)));  // across the anti-diagonal
-    ASSERT_TRUE(same(s.rotate90(3), s.orient(8)));
+    ASSERT_TRUE(same(s.rotate90(1), s.orient(8)));
     ASSERT_THROWS(s.orient(0), std::invalid_argument);
     ASSERT_THROWS(s.orient(9), std::invalid_argument);
     ASSERT_THROWS(s.orient(-1), std::invalid_argument);

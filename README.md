@@ -82,7 +82,7 @@ alone; `ValueError` on a bad argument, `LimitError` if a result would exceed
 ```python
 img.crop(x, y, width, height)         # must lie inside the image
 img.flip_horizontal(); img.flip_vertical()
-img.rotate90(turns=1)                 # clockwise quarter turns, negative = counter-clockwise
+img.rotate90(turns=1)                 # counter-clockwise quarter turns (like np.rot90), negative = clockwise
 img.transpose()                       # swap rows and columns
 img.pad(left, top, right, bottom, fill=(255, 255, 255))   # fill: an int, or one value per channel
 img.thumbnail(256, 256)               # fit inside the box, aspect ratio kept, never enlarges
@@ -277,7 +277,7 @@ stb::resizer r(o);                                     // also: resizer("cubic")
 stb::image tile = img.resize(320, 240, &r);            // nullptr = default resizer; r.resize(img, w, h) works too
 
 stb::image part  = img.crop(10, 10, 200, 100);        // geometry: each returns a new image
-stb::image turned = img.rotate90();                    // clockwise; also flip_horizontal/vertical, transpose
+stb::image turned = img.rotate90();                    // counter-clockwise; also flip_horizontal/vertical, transpose
 stb::image framed = img.pad(8, 8, 8, 8, {255, 255, 255, 255});   // fill[c] = value of channel c
 stb::image thumb = img.thumbnail(256, 256);            // fits the box, never enlarges (+ resize's filter arguments)
 stb::image gray = img.convert(1);                      // 1..4 channels; flatten() blends alpha onto a colour
