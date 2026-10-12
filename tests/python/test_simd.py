@@ -194,4 +194,7 @@ def test_an_unknown_env_backend_warns_once_on_stderr_and_falls_back_to_auto():
 def test_a_valid_env_backend_prints_nothing(value):
     r = _run_with_env(value)
     assert r.returncode == 0 and r.stderr == ""
-    assert r.stdout.split()[0] == ("scalar" if value != "auto" else BACKENDS[0])
+    # Compare the child with itself, not with this process: under an emulator (QEMU user mode with
+    # -cpu Nehalem) only the parent is emulated, and the child it starts runs on the real CPU.
+    name, best = r.stdout.split()
+    assert name == (best if value == "auto" else "scalar")
