@@ -40,12 +40,13 @@ cmake.build-type = "Release"
 cmake.define.LIBSTB_BUILD_PYTHON = "ON"
 cmake.define.LIBSTB_BUILD_TESTS = "OFF"
 
-# NOTE: wheel.py-api (abi3 tag) is intentionally NOT set here. nanobind's
-# STABLE_ABI only takes effect on Python >= 3.12 (below that it silently
-# builds a normal per-version extension), so a global py-api would mistag the
-# 3.9-3.11 wheels as abi3. It is set per-build instead: CIBW_ENVIRONMENT_CP312
-# in .github/workflows/wheels.yml enables it for the 3.12 build only, and that
-# single cp312-abi3 wheel covers 3.12+.
+# Stable ABI (abi3): nanobind's STABLE_ABI only takes effect on Python >= 3.12 (below that it
+# silently builds a normal per-version extension), so the abi3 tag is set only for 3.12+. That
+# gives one cp312-abi3 wheel that covers 3.12 and every newer interpreter; 3.9-3.11 get a
+# regular wheel each.
+[[tool.scikit-build.overrides]]
+if.python-version = ">=3.12"
+wheel.py-api = "cp312"
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
