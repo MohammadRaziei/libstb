@@ -11,7 +11,8 @@ import io
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
 
 from libstb import Image
 
@@ -44,13 +45,13 @@ def make(kind, h, w, c, seed=0):
 
 
 def pil_array(data):
-    a = np.asarray(PILImage.open(io.BytesIO(data)))
+    a = np.asarray(PIL.Image.open(io.BytesIO(data)))
     return a[..., None] if a.ndim == 2 else a
 
 
 def pil_bytes(arr, fmt, **kw):
     buf = io.BytesIO()
-    PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr).save(buf, fmt, **kw)
+    PIL.Image.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr).save(buf, fmt, **kw)
     return buf.getvalue()
 
 

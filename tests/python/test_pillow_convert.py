@@ -6,7 +6,8 @@ import textwrap
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
 
 import libstb
 
@@ -28,7 +29,7 @@ def pixels(pil, c):
 def test_to_pil_has_the_mode_the_channels_say_and_the_same_pixels(c):
     a = rand(5, 7, c)
     pil = libstb.Image(a.copy()).to_pil()
-    assert isinstance(pil, PILImage.Image)
+    assert isinstance(pil, PIL.Image.Image)
     assert pil.mode == MODES[c] and pil.size == (7, 5)
     np.testing.assert_array_equal(pixels(pil, c), a)
 
@@ -48,7 +49,7 @@ def test_to_pil_is_a_copy():
 @pytest.mark.parametrize("c", [1, 2, 3, 4])
 def test_from_pil_takes_the_four_native_modes_as_they_are(c):
     a = rand(5, 7, c, seed=c)
-    pil = PILImage.fromarray(a[..., 0] if c == 1 else a)
+    pil = PIL.Image.fromarray(a[..., 0] if c == 1 else a)
     img = libstb.Image.from_pil(pil)
     assert (img.width, img.height, img.channels) == (7, 5, c)
     np.testing.assert_array_equal(img.numpy(), a)
@@ -59,7 +60,7 @@ def test_from_pil_takes_the_four_native_modes_as_they_are(c):
     [("1", "L"), ("La", "LA"), ("RGBa", "RGBA"), ("RGBX", "RGB"), ("CMYK", "RGB"), ("YCbCr", "RGB"), ("PA", "RGBA")],
 )
 def test_from_pil_converts_the_modes_that_have_8_bit_colour(mode, expected_mode):
-    pil = PILImage.new(mode, (5, 4))
+    pil = PIL.Image.new(mode, (5, 4))
     pil.putpixel((1, 2), {"1": 1, "La": (7, 200), "RGBa": (10, 20, 30, 100), "RGBX": (1, 2, 3, 0),
                           "CMYK": (10, 20, 30, 40), "YCbCr": (50, 60, 70), "PA": (3, 120)}[mode])
     img = libstb.Image.from_pil(pil)
@@ -69,7 +70,7 @@ def test_from_pil_converts_the_modes_that_have_8_bit_colour(mode, expected_mode)
 
 
 def test_from_pil_converts_a_palette_image_to_its_colours():
-    pil = PILImage.new("P", (4, 3))
+    pil = PIL.Image.new("P", (4, 3))
     pil.putpalette([255, 0, 0, 0, 255, 0, 0, 0, 255] + [0] * (256 * 3 - 9))
     pil.putpixel((1, 0), 1)
     pil.putpixel((2, 0), 2)
@@ -82,7 +83,7 @@ def test_from_pil_converts_a_palette_image_to_its_colours():
 
 
 def test_from_pil_keeps_the_transparency_of_a_palette_image():
-    pil = PILImage.new("P", (3, 2))
+    pil = PIL.Image.new("P", (3, 2))
     pil.putpalette([10, 20, 30, 40, 50, 60] + [0] * (256 * 3 - 6))
     pil.putpixel((1, 0), 1)
     pil.info["transparency"] = 0  # palette index 0 is transparent
@@ -95,7 +96,7 @@ def test_from_pil_keeps_the_transparency_of_a_palette_image():
 @pytest.mark.parametrize("mode", ["I", "I;16", "F", "LAB", "HSV"])
 def test_from_pil_refuses_modes_without_8_bit_colour(mode):
     with pytest.raises(TypeError, match="8-bit colour"):
-        libstb.Image.from_pil(PILImage.new(mode, (3, 2)))
+        libstb.Image.from_pil(PIL.Image.new(mode, (3, 2)))
 
 
 @pytest.mark.parametrize("bad", [None, 3, "photo.png", np.zeros((2, 2, 3), np.uint8), object()])
@@ -107,7 +108,7 @@ def test_from_pil_needs_a_pillow_image(bad):
 def test_image_of_a_palette_or_cmyk_image_is_not_silently_read_as_colour():
     # Image(pil) stays strict; from_pil is the forgiving one.
     with pytest.raises(TypeError):
-        libstb.Image(PILImage.new("F", (2, 2)))
+        libstb.Image(PIL.Image.new("F", (2, 2)))
 
 
 def test_a_round_trip_through_both_methods():
@@ -119,8 +120,8 @@ def test_a_round_trip_through_both_methods():
 def test_from_pil_works_on_an_image_opened_from_a_file(tmp_path):
     a = rand(8, 8, 3, 4)
     p = tmp_path / "x.png"
-    PILImage.fromarray(a).save(p)
-    np.testing.assert_array_equal(libstb.Image.from_pil(PILImage.open(p)).numpy(), a)  # lazy-loaded pixels
+    PIL.Image.fromarray(a).save(p)
+    np.testing.assert_array_equal(libstb.Image.from_pil(PIL.Image.open(p)).numpy(), a)  # lazy-loaded pixels
 
 
 # ------------------------------------------------------------------ lazy import

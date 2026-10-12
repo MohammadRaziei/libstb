@@ -4,8 +4,9 @@ import io
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
-from PIL import ImageOps
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
+pytest.importorskip("PIL.ImageOps")
 
 import libstb
 
@@ -13,11 +14,11 @@ ARR = np.random.default_rng(7).integers(0, 256, (6, 9, 3), dtype=np.uint8)
 
 
 def encode(fmt, orientation=None, arr=ARR):
-    exif = PILImage.Exif()
+    exif = PIL.Image.Exif()
     if orientation is not None:
         exif[0x0112] = orientation
     buf = io.BytesIO()
-    PILImage.fromarray(arr).save(buf, fmt, exif=exif.tobytes() if orientation is not None else b"")
+    PIL.Image.fromarray(arr).save(buf, fmt, exif=exif.tobytes() if orientation is not None else b"")
     return buf.getvalue()
 
 
@@ -30,7 +31,7 @@ def test_exif_orientation_reads_what_pillow_wrote(fmt, orientation):
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "BMP"])
 def test_no_exif_means_upright(fmt):
     buf = io.BytesIO()
-    PILImage.fromarray(ARR).save(buf, fmt)
+    PIL.Image.fromarray(ARR).save(buf, fmt)
     assert libstb.exif_orientation(buf.getvalue()) == 1
 
 
@@ -65,7 +66,7 @@ def test_exif_orientation_survives_truncation_and_corruption():
 @pytest.mark.parametrize("orientation", range(1, 9))
 def test_png_orient_matches_pillows_exif_transpose_exactly(orientation):
     data = encode("PNG", orientation)
-    want = np.asarray(ImageOps.exif_transpose(PILImage.open(io.BytesIO(data))))
+    want = np.asarray(PIL.ImageOps.exif_transpose(PIL.Image.open(io.BytesIO(data))))
     np.testing.assert_array_equal(libstb.imread(data, orient=True), want)
     np.testing.assert_array_equal(libstb.Image.open(data, orient=True).numpy(), want)
 

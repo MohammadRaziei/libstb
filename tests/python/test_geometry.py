@@ -2,12 +2,13 @@
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
-from PIL import ImageOps
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
+pytest.importorskip("PIL.ImageOps")
 
 import libstb
 
-T = PILImage.Transpose
+T = PIL.Image.Transpose
 MODES = {1: "L", 2: "LA", 3: "RGB", 4: "RGBA"}
 
 
@@ -18,7 +19,7 @@ def rand(h, w, c, seed=0):
 
 def to_pil(a):
     # The mode is inferred from the shape (passing mode= is deprecated since Pillow 11.3).
-    return PILImage.fromarray(a[..., 0] if a.shape[2] == 1 else a)
+    return PIL.Image.fromarray(a[..., 0] if a.shape[2] == 1 else a)
 
 
 def from_pil(p):
@@ -113,7 +114,7 @@ def test_pad_matches_pillows_expand(channels, fill):
     got = libstb.Image(a.copy()).pad(2, 1, 3, 4, fill=fill).numpy()
     # An int means every channel here; Pillow would put it in the first channel only.
     pil_fill = (fill,) * channels if isinstance(fill, int) and channels > 1 else fill
-    want = ImageOps.expand(to_pil(a), (2, 1, 3, 4), fill=pil_fill)
+    want = PIL.ImageOps.expand(to_pil(a), (2, 1, 3, 4), fill=pil_fill)
     np.testing.assert_array_equal(got, from_pil(want))
 
 
@@ -179,7 +180,7 @@ def test_thumbnail_is_close_to_pillows_thumbnail_in_size():
     for size in [(37, 91), (200, 120), (64, 64)]:
         h, w = size
         ours = libstb.Image(np.zeros((h, w, 3), np.uint8)).thumbnail(30, 30)
-        p = PILImage.new("RGB", (w, h))
+        p = PIL.Image.new("RGB", (w, h))
         p.thumbnail((30, 30))
         assert abs(ours.width - p.width) <= 1 and abs(ours.height - p.height) <= 1
 

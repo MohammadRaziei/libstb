@@ -2,7 +2,8 @@
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
 
 import libstb
 
@@ -15,7 +16,7 @@ def rand(h, w, c, seed=0):
 
 def to_pil(a):
     # The mode is inferred from the shape (passing mode= is deprecated since Pillow 11.3).
-    return PILImage.fromarray(a[..., 0] if a.shape[2] == 1 else a)
+    return PIL.Image.fromarray(a[..., 0] if a.shape[2] == 1 else a)
 
 
 def from_pil(p):
@@ -90,9 +91,9 @@ def test_merge_rejects_wrong_input():
 
 def alpha_composite_reference(base, over, x=0, y=0):
     """Pillow's alpha_composite of `over` placed at (x, y) on `base`, both RGBA arrays."""
-    layer = PILImage.new("RGBA", (base.shape[1], base.shape[0]), (0, 0, 0, 0))
-    layer.paste(PILImage.fromarray(over), (x, y))
-    return np.asarray(PILImage.alpha_composite(PILImage.fromarray(base), layer))
+    layer = PIL.Image.new("RGBA", (base.shape[1], base.shape[0]), (0, 0, 0, 0))
+    layer.paste(PIL.Image.fromarray(over), (x, y))
+    return np.asarray(PIL.Image.alpha_composite(PIL.Image.fromarray(base), layer))
 
 
 @pytest.mark.parametrize("x, y", [(0, 0), (3, 2), (-2, 1), (5, -3), (-100, 0), (100, 100)])

@@ -64,7 +64,6 @@ test-extras = ["test"]
 # numpy has no Windows arm64 wheel for 3.9 and 3.10, so the "test" extra leaves it out there (see
 # [project.optional-dependencies]); the test modules that need it skip themselves
 # (pytest.importorskip) and the rest, such as test_no_numpy.py, still run on those wheels.
-test-skip = ["*universal2:arm64"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

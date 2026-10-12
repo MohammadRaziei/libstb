@@ -4,7 +4,8 @@ import gc
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
 
 import libstb
 
@@ -30,14 +31,14 @@ class OnlyInterface:
 @pytest.mark.parametrize("c", [1, 2, 3, 4])
 def test_pillow_reads_an_image_directly(c):
     a = rand(5, 7, c)
-    pil = PILImage.fromarray(libstb.Image(a.copy()))
+    pil = PIL.Image.fromarray(libstb.Image(a.copy()))
     assert pil.mode == MODES[c] and pil.size == (7, 5)
     np.testing.assert_array_equal(np.asarray(pil).reshape(5, 7, c), a)
 
 
 def test_the_pillow_image_is_independent_of_the_libstb_one():
     img = libstb.Image(np.zeros((2, 2, 3), np.uint8))
-    pil = PILImage.fromarray(img)
+    pil = PIL.Image.fromarray(img)
     img.numpy()[:] = 255
     assert pil.getpixel((0, 0)) == (0, 0, 0)
 
@@ -65,7 +66,7 @@ def test_numpy_still_gets_h_w_c_because_the_buffer_protocol_comes_first(c):
 @pytest.mark.parametrize("c", [1, 2, 3, 4])
 def test_an_image_reads_a_pillow_image_directly(c):
     a = rand(5, 7, c, seed=c)
-    pil = PILImage.fromarray(a[..., 0] if c == 1 else a)
+    pil = PIL.Image.fromarray(a[..., 0] if c == 1 else a)
     img = libstb.Image(pil)
     assert (img.width, img.height, img.channels) == (7, 5, c)
     np.testing.assert_array_equal(img.numpy(), a)
@@ -75,12 +76,12 @@ def test_an_image_reads_a_pillow_image_directly(c):
 @pytest.mark.parametrize("mode", ["1", "I;16", "I", "F"])
 def test_pillow_modes_that_are_not_uint8_are_rejected(mode):
     with pytest.raises(TypeError, match="uint8"):
-        libstb.Image(PILImage.new(mode, (3, 2)))
+        libstb.Image(PIL.Image.new(mode, (3, 2)))
 
 
 def test_a_pillow_round_trip_through_both_directions():
     a = rand(6, 9, 4, 11)
-    back = libstb.Image(PILImage.fromarray(libstb.Image(a.copy())))
+    back = libstb.Image(PIL.Image.fromarray(libstb.Image(a.copy())))
     np.testing.assert_array_equal(back.numpy(), a)
 
 

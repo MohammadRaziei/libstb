@@ -18,7 +18,8 @@ import io
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
 
 import libstb
 from libstb import Image, Resizer
@@ -65,14 +66,14 @@ def photo(c=3, w=131, h=97):
 
 
 def pil_bytes(arr, fmt, **kw):
-    im = PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
+    im = PIL.Image.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
     buf = io.BytesIO()
     im.save(buf, fmt, **kw)
     return buf.getvalue()
 
 
 def pil_array(data):
-    a = np.asarray(PILImage.open(io.BytesIO(data)))
+    a = np.asarray(PIL.Image.open(io.BytesIO(data)))
     return a[..., None] if a.ndim == 2 else a
 
 
@@ -102,7 +103,7 @@ def test_rle_tga_decode_is_pixel_exact(c):
 
 def test_palette_and_one_bit_pngs_expand_like_pillow():
     rgb = photo(3)
-    pal = PILImage.fromarray(rgb).quantize(64)
+    pal = PIL.Image.fromarray(rgb).quantize(64)
     buf = io.BytesIO()
     pal.save(buf, "PNG")
     np.testing.assert_array_equal(Image.open(buf.getvalue()).numpy(), np.asarray(pal.convert("RGB")))
@@ -115,7 +116,7 @@ def test_palette_and_one_bit_pngs_expand_like_pillow():
     np.testing.assert_array_equal(mine, np.asarray(with_trns.convert("RGBA")))
     assert (mine[..., 3] == 0).any()
 
-    bw = PILImage.fromarray(photo(1)[..., 0]).convert("1")
+    bw = PIL.Image.fromarray(photo(1)[..., 0]).convert("1")
     buf = io.BytesIO()
     bw.save(buf, "PNG")
     np.testing.assert_array_equal(Image.open(buf.getvalue()).numpy()[..., 0],
@@ -143,7 +144,7 @@ def test_grayscale_jpeg_decode_matches_pillow():
 def test_info_and_load_agree_with_pillow(fmt, c, tmp_path):
     src = photo(c, 83, 61)
     data = pil_bytes(src, fmt)
-    ref = PILImage.open(io.BytesIO(data))
+    ref = PIL.Image.open(io.BytesIO(data))
     width, height, channels = libstb.iminfo(data)
     assert (width, height) == ref.size
     assert channels == len(ref.getbands())
@@ -214,11 +215,11 @@ def test_both_decoders_agree_on_libstbs_own_jpeg():
 
 # ------------------------------------------------------------------ resize --
 
-PIL_FILTERS = {"linear": PILImage.BILINEAR, "cubic": PILImage.BICUBIC, "box": PILImage.BOX}
+PIL_FILTERS = {"linear": PIL.Image.BILINEAR, "cubic": PIL.Image.BICUBIC, "box": PIL.Image.BOX}
 
 
 def pil_resize(arr, w, h, filt):
-    im = PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
+    im = PIL.Image.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
     out = np.asarray(im.resize((w, h), resample=PIL_FILTERS[filt]))
     return out[..., None] if out.ndim == 2 else out
 

@@ -16,7 +16,8 @@ import io
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
-from PIL import Image as PILImage
+PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
+pytest.importorskip("PIL.Image")
 
 from libstb import Image, Resizer
 from tolerances import JPEG_MAX_DIFF, JPEG_NMAE
@@ -38,11 +39,11 @@ def photo(h, w, c, seed=0):
 
 
 def pil_image(arr):
-    return PILImage.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
+    return PIL.Image.fromarray(arr[..., 0] if arr.shape[2] == 1 else arr)
 
 
 def pil_array(data):
-    a = np.asarray(PILImage.open(io.BytesIO(data)))
+    a = np.asarray(PIL.Image.open(io.BytesIO(data)))
     return (a[..., None] if a.ndim == 2 else a).astype(int)
 
 
@@ -197,7 +198,7 @@ def pil_resize(arr, w, h, pil_filter):
 
 
 @pytest.mark.parametrize("c", [1, 3])
-@pytest.mark.parametrize("name,pil_filter", [("linear", PILImage.BILINEAR), ("cubic", PILImage.BICUBIC)])
+@pytest.mark.parametrize("name,pil_filter", [("linear", PIL.Image.BILINEAR), ("cubic", PIL.Image.BICUBIC)])
 @pytest.mark.parametrize("size", SIZES)
 def test_resize_is_close_to_pillow(c, name, pil_filter, size):
     src = photo(96, 128, c, seed=3)
