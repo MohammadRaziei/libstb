@@ -2,8 +2,8 @@
 
 import gc
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 from PIL import Image as PILImage
 
 import libstb

@@ -9,8 +9,8 @@ images). A decoder other than libstb's own (Pillow / zlib) must accept every str
 """
 import io
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 from PIL import Image as PILImage
 
 from libstb import Image

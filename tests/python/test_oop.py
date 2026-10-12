@@ -1,5 +1,5 @@
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb
 from libstb import Image, ImageInfo

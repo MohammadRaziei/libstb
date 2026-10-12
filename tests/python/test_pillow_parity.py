@@ -16,8 +16,8 @@ Images are non-square on purpose, so a swapped width and height cannot hide.
 """
 import io
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 from PIL import Image as PILImage
 
 import libstb

@@ -15,8 +15,8 @@ call cannot fully settle.
 
 import gc
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 pytest.importorskip("pytest_memray")
 

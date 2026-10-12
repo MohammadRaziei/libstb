@@ -8,6 +8,8 @@ import subprocess
 import sys
 import textwrap
 
+import pytest
+
 
 def _run(body):
     code = "import sys\nsys.modules['numpy'] = None\n" + textwrap.dedent(body)
@@ -71,7 +73,7 @@ def test_using_libstb_does_not_import_numpy():
 def test_buffer_view_is_zero_copy_and_keeps_the_image_alive():
     import gc
 
-    import numpy as np
+    np = pytest.importorskip("numpy")  # numpy is installed here on purpose: this one is about the buffer view
 
     import libstb
 

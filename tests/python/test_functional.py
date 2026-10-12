@@ -1,7 +1,7 @@
 """imread / imwrite / iminfo: the functional API over Image."""
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb
 

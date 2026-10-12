@@ -61,9 +61,10 @@ result = "{major}.{minor}.{patch}"
 [tool.cibuildwheel]
 test-command = "pytest {project}/tests/python"
 test-extras = ["test"]
-# numpy has no Windows arm64 wheel for 3.9 and 3.10 (the "test" extra leaves it out there, see above),
-# and the tests need it: those two wheels are built and not tested.
-test-skip = ["*universal2:arm64", "cp39-win_arm64", "cp310-win_arm64"]
+# numpy has no Windows arm64 wheel for 3.9 and 3.10, so the "test" extra leaves it out there (see
+# [project.optional-dependencies]); the test modules that need it skip themselves
+# (pytest.importorskip) and the rest, such as test_no_numpy.py, still run on those wheels.
+test-skip = ["*universal2:arm64"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

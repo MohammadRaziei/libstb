@@ -1,7 +1,7 @@
 """Every SIMD backend (avx2 where the CPU has it, sse2 / neon, scalar) gives identical results."""
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb
 

@@ -14,8 +14,8 @@ headroom, with the measurement in the comment next to it. Two kinds of reference
 """
 import io
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 from PIL import Image as PILImage
 
 from libstb import Image, Resizer

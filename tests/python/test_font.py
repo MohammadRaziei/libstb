@@ -6,8 +6,8 @@ is exactly 0.1 px, so every expectation below is exact.
 import pathlib
 import threading
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb
 from libstb import Font
