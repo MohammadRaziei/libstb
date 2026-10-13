@@ -1,0 +1,20 @@
+            <div class="code-wrap">
+                <div class="code-label">
+                    <div class="code-lang-row"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-lang">c++</span></div>
+                    <button class="copy-btn" onclick="copyCode(this)"><i class="fa-regular fa-copy"></i> copy</button>
+                </div>
+                <pre><code class="language-cpp">#include &lt;stb.h&gt;
+
+int main() {
+    stb::image img = stb::image::open("in.png");        // throws stb::error subclasses
+
+    stb::image small = img.resize(320, 240, "cubic");   // filter by name
+    stb::image part  = img.crop(10, 10, 200, 100);      // editing returns a new image
+    stb::image turned = img.rotate90();                 // counter-clockwise
+    stb::image gray  = img.convert(1);                  // 1..4 channels
+
+    small.write("small.jpg");                           // format from the extension
+    stb::font f = stb::font::open("font.ttf");
+    stb::text_bitmap t = f.render("hello", 32);         // 1-channel image out
+}</code></pre>
+            </div>

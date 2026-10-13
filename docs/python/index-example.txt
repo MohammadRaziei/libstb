@@ -1,0 +1,17 @@
+            <div class="code-wrap">
+                <div class="code-label">
+                    <div class="code-lang-row"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-lang">python</span></div>
+                    <button class="copy-btn" onclick="copyCode(this)"><i class="fa-regular fa-copy"></i> copy</button>
+                </div>
+                <pre><code class="language-python">import libstb
+
+img = libstb.Image.open("photo.jpg", orient=True)   # apply the EXIF orientation
+small = img.resize(320, 240, "cubic")               # filter by name
+gray = small.convert(1)                             # editing returns a new Image
+gray.write("photo_gray.png")                        # format from the extension
+
+pixels = libstb.imread("photo.png")                 # ndarray (needs numpy)
+libstb.imwrite("out.jpg", pixels, quality=80)
+
+libstb.Font.open("font.ttf").render("Hi", 32).bitmap.write("hi.png")</code></pre>
+            </div>

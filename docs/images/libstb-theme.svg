@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 214">
+  <!-- Placeholder logo for the Doxygen header: replace with the real artwork (keep the file name). -->
+  <rect x="10" y="10" width="194" height="194" rx="28" fill="none" stroke="#4dabf7" stroke-width="16"/>
+  <text x="107" y="132" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="84" font-weight="700" fill="#4dabf7">stb</text>
+  <text x="240" y="132" font-family="Inter, Arial, sans-serif" font-size="96" font-weight="700" fill="#4dabf7">libstb</text>
+</svg>

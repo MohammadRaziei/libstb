@@ -21,6 +21,7 @@ include(Optimize)
 
 option(LIBSTB_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(LIBSTB_BUILD_PYTHON "Build Python bindings" ${PROJECT_IS_TOP_LEVEL})
+option(LIBSTB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 
 # --- libstb C++ core ---
 # stb headers are vendored (committed) under src/third_party/stb and are only
@@ -119,4 +120,9 @@ if(LIBSTB_BUILD_TESTS)
     enable_testing()
     set(CMAKE_CTEST_ARGUMENTS "--output-on-failure" "-V")
     add_subdirectory(${PROJECT_SOURCE_DIR}/tests)
+endif()
+
+# Documentation (Doxygen + Sphinx). Needs the Python extension: the Sphinx build imports it.
+if(LIBSTB_BUILD_DOCS)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/docs)
 endif()

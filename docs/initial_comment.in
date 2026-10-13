@@ -1,0 +1,15 @@
+<!--
+LIBSTB_ASCII_ART
+
+  libstb - C++17 image I/O, resizing and font rendering on top of the stb
+  single-header libraries, with a Python (nanobind) binding.
+
+  Author  : Mohammad Raziei
+  Email   : mohammadraziei1375@gmail.com
+  GitHub  : https://github.com/MohammadRaziei/libstb
+  License : MIT
+  Version : LIBSTB_VERSION
+
+  Generated automatically by the libstb build system.
+  Do not edit manually.
+-->
