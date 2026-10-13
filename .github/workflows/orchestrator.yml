@@ -87,3 +87,41 @@ jobs:
         with:
           password: ${{ secrets.PYPI_PASSWORD }}
           user: ${{ secrets.PYPI_USERNAME }}
+
+  # Publishes the docs site with the coverage dashboard under /coverage. Needs GitHub Pages
+  # enabled in the repository settings (Source: GitHub Actions).
+  deploy-pages:
+    needs: [cmake]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+    - name: Download documentation artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: cmake-documentation
+        path: ./pages
+
+    - name: Download coverage artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: cmake-coverage-report
+        path: ./pages/coverage
+
+    - name: List pages directory
+      run: tree --du -shaC pages
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./pages
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

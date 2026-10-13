@@ -42,6 +42,9 @@ This file was generated from the git history (42 commits, tags `v0.3.0`, `v0.4.0
 - CI: QEMU user-mode job (`emulate`) that checks the fallback to portable SIMD backends on a CPU
   without AVX2 (Nehalem) and the use of AVX2 kernels when available (Haswell).
 - CI: native ARM64 runners (Linux and Windows) in the wheel matrix.
+- CI: `build-docs` and `build-coverage` jobs in `cmake.yml` (coverage is also sent to Codecov), and a
+  `deploy-pages` job in the orchestrator that publishes the docs with the coverage dashboard under
+  `/coverage`.
 
 ### Changed
 - The scalar backend is compiled without compiler auto-vectorization, so it is really scalar.

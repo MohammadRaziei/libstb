@@ -37,3 +37,96 @@ jobs:
     # the find_package consumer test all run under ctest.
     - name: Run tests
       run: ctest --test-dir build -C Release --output-on-failure
+
+
+  build-docs:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Install apt dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.11"
+        cache: "pip"
+
+    - name: Install python deps
+      run: pip install -r requirements-dev.txt
+
+    # The Sphinx build imports the freshly built extension, so the Python binding is needed.
+    - name: Configure CMake
+      run: |
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLIBSTB_BUILD_TESTS=OFF \
+          -DLIBSTB_BUILD_PYTHON=ON \
+          -DLIBSTB_BUILD_DOCS=ON
+
+    - name: Build documentation
+      run: cmake --build build --target libstb_docs
+
+    - name: List docs directory
+      run: tree --du -shaC build/docs/out
+
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: cmake-documentation
+        path: build/docs/out
+        retention-days: 5
+
+  build-coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.11"
+        cache: "pip"
+
+    - name: Install python dependencies
+      run: pip install -r requirements-dev.txt
+
+    - name: Install coverage tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lcov
+
+    - name: Configure CMake
+      run: |
+        cmake -S . -B build \
+          -DLIBSTB_BUILD_TESTS=ON \
+          -DLIBSTB_BUILD_PYTHON=ON \
+          -DLIBSTB_BUILD_DOCS=OFF
+
+    # C++ (lcov, on an instrumented copy of the core), Python (coverage.py) and the merged total.
+    - name: Generate coverage report
+      run: cmake --build build --target libstb_coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: build/coverage/total/coverage.lcov
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        verbose: true
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: cmake-coverage-report
+        path: build/coverage/
+        retention-days: 5
