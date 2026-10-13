@@ -1,0 +1,128 @@
+# Changelog
+
+All notable changes to libstb are listed here, newest first. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Dates are commit dates.
+
+This file was generated from the git history (42 commits, tags `v0.3.0`, `v0.4.0`, `v0.5.0`).
+
+## [Unreleased] (after 0.5.0)
+
+### Breaking
+- `Image.rotate90(turns=1)` (C++: `stb::image::rotate90`) now turns **counter-clockwise**, like
+  `numpy.rot90` and Pillow. A negative `turns` turns clockwise. Before, positive meant clockwise.
+  `orient()` (EXIF) is unchanged.
+
+### Added
+- Image editing API on `Image` and `stb::image`: `crop`, `flip_horizontal`, `flip_vertical`,
+  `rotate90`, `transpose`, `orient`, `pad`, `thumbnail`, `convert`, `split`, `Image.merge`,
+  `composite`, `flatten`. Every operation returns a new image.
+- EXIF orientation support (`exif_orientation`, `orient`).
+- Channel and alpha handling (gray, RGB, RGBA conversion and compositing).
+- `libstb.imresize(array, width, height, resizer=None)`: ndarray in, ndarray out.
+- Runtime SIMD backend selection: `simd_backends()`, `simd_name()`, `set_simd()`, the `LIBSTB_SIMD`
+  environment variable (an unknown or unavailable name prints one line on stderr and falls back to
+  auto), and a per-thread override: `with libstb.simd("scalar"):` (C++: `stb::simd_scope`).
+- Hand-written SSE2 kernels (RGB/RGBA to gray, RGBA over RGB), bit identical to the scalar backend.
+- `stb::env()` in `include/stb/env.hpp`: cross-platform, copy-returning environment variable reader
+  (uses `_dupenv_s` on MSVC).
+- `Image.to_pil()` / `Image.from_pil()`. Pillow is loaded only when these are called
+  (`pip install "libstb[pillow]"`). Only 8-bit L/RGBA modes are supported, others raise `TypeError`.
+- Examples 08 to 11 (geometry, channels and alpha, EXIF orientation, Pillow) and the notebook
+  `04_edit_and_orient`.
+- Tests: edit, EXIF, channels, geometry, SIMD, array interface, functional, Pillow conversion,
+  garbage collection (`test_gc.py`) and allocation checks with `pytest-memray` (`test_memory.py`).
+- `tests/python/test_torch.py`: DLPack in both directions with real torch (CPU). torch is not a
+  test dependency: the module is skipped when it cannot be imported.
+- CI: QEMU user-mode job (`emulate`) that checks the fallback to portable SIMD backends on a CPU
+  without AVX2 (Nehalem) and the use of AVX2 kernels when available (Haswell).
+- CI: native ARM64 runners (Linux and Windows) in the wheel matrix.
+
+### Changed
+- The scalar backend is compiled without compiler auto-vectorization, so it is really scalar.
+- Wheel matrix runs with `fail-fast: false`.
+- Python 3.12+ builds use the stable ABI: `wheel.py-api = "cp312"` is set in `pyproject.toml`, giving
+  one `cp312-abi3` wheel for 3.12 and newer.
+- `pytest-memray` is only required on x86_64 and arm64, and not on Windows. `numpy` is not required
+  for the test extra on Windows ARM64 with Python < 3.11; the test modules use
+  `pytest.importorskip` for numpy and Pillow.
+- Benchmarks: new `imresize` and editing runners (`crop`, `rotate90`, `flip_horizontal`,
+  `convert_gray`, `composite`).
+- README: image manipulation, EXIF, SIMD diagnosis, memory checks and GC support are documented.
+
+### Fixed
+- `nanobind: leaked 1 instances!` at interpreter exit. An `Image` that views a Python object holds a
+  reference the GC cannot see, which could form an uncollectable cycle. `Image` now implements
+  `tp_traverse` / `tp_clear` and the keep-alive deleter reports the object it holds
+  (`image::owner_deleter<D>()` in `image.hpp`).
+- Windows build: a test variable named `small` collided with the `small` macro from Windows headers
+  (renamed to `tiny`).
+- `test_simd.py`: emulator backend detection in an assertion.
+
+## [0.5.0] - 2026-10-07
+
+### Added
+- DLPack interop (`Image.from_dlpack`, `__dlpack__`) and image I/O helpers `imread` / `imwrite`.
+- Examples `06_imread_imwrite.py` and `07_dlpack.py`, and updated notebooks.
+- Tests for DLPack and the functional API.
+
+### Changed
+- Legacy DLPack behavior on numpy < 2.1 (read-only views, no `copy=` / `device=` arguments) is
+  handled and documented; the affected tests are skipped on those versions.
+- README API examples updated.
+
+## [0.4.0] - 2026-10-04
+
+### Added
+- Standalone benchmark suite (`benchmarks/`) with its own build system and an HTML report, with
+  LaTeX formulas rendered by KaTeX (inlined, so the report stays self-contained).
+- Pillow as a test-only dependency, with image format parity tests.
+- Exhaustive PNG roundtrip exactness tests (noise, flat, gradient, tiled, sparse, photo-like,
+  degenerate sizes, more than 64K deflate tokens), a lossy tolerance test and a JPEG golden test.
+- `Font.open()` accepts a file path and uses memory mapping on Unix and macOS.
+- Getting Started, resize filters and font rendering example notebooks and the first Python examples
+  (`01` to `05`).
+
+### Changed
+- Faster font loading (memory mapping, fast integer conversion).
+- Faster JPEG encoding on GCC/Clang (`-fno-trapping-math` enables vectorized float to int
+  conversion) and a faster PNG encoder in the bundled `stb_image_write.h`. The default PNG
+  compression level is 8 (was 6).
+- libdeflate was vendored and then removed again within this cycle; the PNG path uses the optimized
+  `stb_image_write.h`.
+- Lossy tolerances in tests are standardized; benchmarks and `verify.py` use normalized mean
+  absolute error (NMAE).
+- Documentation states that the optimized JPEG encoder is not guaranteed to be byte-identical across
+  compilers and flags (rare rounding ties, for example Apple clang on ARM64 or x86 with `-mfma`).
+  A tool, `tests/tools/jpeg_vs_upstream.py`, checks equivalence for identical build settings.
+
+## [0.3.0] - 2026-09-30
+
+### Added
+- Python binding: errors map OS error codes to `FileNotFoundError`, `PermissionError` and similar;
+  the GIL is released during font rendering (`render_glyph`, `render`, `make_atlas`).
+
+### Changed
+- C++ namespace and headers renamed from `libstb` to `stb` (`include/libstb.h` became
+  `include/stb.h`, `include/libstb/` became `include/stb/`). The Python package is still `libstb`.
+- The abstract encoder hierarchy (`PngEncoder`, `JpegEncoder`, ...) was removed in favor of direct
+  methods on the image type (`to_png`, `write_jpg`, ...).
+- `save()` was replaced by `write()`; the format is detected from the file extension
+  (case-insensitive).
+- Resize accepts a filter by name (for example `"cubic"`).
+- Documentation clarifies the move-only semantics of `stb::image` and pixel memory ownership, and
+  the difference between numpy views and copies.
+
+### Fixed
+- Windows: `utest.h` macro collision, and the `NOMINMAX` / `WIN32_LEAN_AND_MEAN` guards in the test
+  headers.
+
+## Initial commit - 2026-09-28 (tag `__beta__`)
+
+First state: C++17 core over the stb single-header libraries with image decoding and
+encoding (PNG, JPEG, BMP, TGA), resizing with selectable filters, TrueType font rendering, and a
+nanobind Python binding.
+
+[Unreleased]: https://github.com/mohammadraziei/libstb/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mohammadraziei/libstb/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/mohammadraziei/libstb/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/mohammadraziei/libstb/compare/__beta__...v0.3.0
