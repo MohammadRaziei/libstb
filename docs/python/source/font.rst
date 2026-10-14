@@ -3,10 +3,10 @@ Fonts
 
 .. code-block:: python
 
-   import libstb
+   import libstb as stb
 
-   font = libstb.Font.open("font.ttf")
-   libstb.Font.open("font.ttf").render("Hi", 32).bitmap.write("hi.png")
+   font = stb.Font.open("font.ttf")
+   stb.Font.open("font.ttf").render("Hi", 32).bitmap.write("hi.png")
 
 .. autoclass:: libstb.Font
    :members:

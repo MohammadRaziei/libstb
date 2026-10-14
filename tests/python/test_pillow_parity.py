@@ -21,7 +21,7 @@ np = pytest.importorskip("numpy")  # the tests below need numpy: without it this
 PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
 pytest.importorskip("PIL.Image")
 
-import libstb
+import libstb as stb
 from libstb import Image, Resizer
 from tolerances import JPEG_MAX_DIFF, JPEG_NMAE
 
@@ -145,14 +145,14 @@ def test_info_and_load_agree_with_pillow(fmt, c, tmp_path):
     src = photo(c, 83, 61)
     data = pil_bytes(src, fmt)
     ref = PIL.Image.open(io.BytesIO(data))
-    width, height, channels = libstb.iminfo(data)
+    width, height, channels = stb.iminfo(data)
     assert (width, height) == ref.size
     assert channels == len(ref.getbands())
 
     path = tmp_path / f"x.{fmt.lower()}"
     path.write_bytes(data)
-    np.testing.assert_array_equal(libstb.imread(path), Image.open(path).numpy())
-    np.testing.assert_array_equal(libstb.imread(path), Image.open(data).numpy())
+    np.testing.assert_array_equal(stb.imread(path), Image.open(path).numpy())
+    np.testing.assert_array_equal(stb.imread(path), Image.open(data).numpy())
 
 
 # ------------------------------------------------------------------ encode --
@@ -200,7 +200,7 @@ def test_jpeg_grayscale_encode_matches_pillows_loss():
     # grayscale file), so the result decodes to RGB; it must still be grey and lose as little.
     src = photo(1)
     data = Image(src).to_jpg(quality=90)
-    assert libstb.iminfo(data).channels == 3
+    assert stb.iminfo(data).channels == 3
     mine = pil_array(data)
     assert max_diff(mine, np.repeat(mine[..., :1], 3, axis=2)) == 0  # the three planes are identical
     theirs = pil_array(pil_bytes(src, "JPEG", quality=90))

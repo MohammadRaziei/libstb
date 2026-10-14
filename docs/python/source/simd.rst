@@ -7,10 +7,10 @@ name prints one line on stderr and falls back to the best backend.
 
 .. code-block:: python
 
-   import libstb
+   import libstb as stb
 
-   libstb.simd_backends()          # e.g. ['avx2', 'sse2', 'scalar']
-   with libstb.simd("scalar"):     # this thread only, nests
+   stb.simd_backends()             # e.g. ['avx2', 'sse2', 'scalar']
+   with stb.simd("scalar"):        # this thread only, nests
        out = img.convert(1)
 
 .. autofunction:: libstb.simd_backends

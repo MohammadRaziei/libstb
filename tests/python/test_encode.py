@@ -3,7 +3,7 @@ import threading
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
-import libstb
+import libstb as stb
 from libstb import Image
 
 
@@ -118,7 +118,7 @@ def test_write_to_missing_directory_raises_oserror(tmp_path):
 
 def test_the_encoder_classes_are_gone():
     for name in ("Encoder", "PngEncoder", "JpegEncoder", "BmpEncoder", "TgaEncoder"):
-        assert not hasattr(libstb, name)
+        assert not hasattr(stb, name)
 
 
 def test_encoding_accepts_non_contiguous_arrays():

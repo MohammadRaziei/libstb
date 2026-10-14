@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import numpy as np
-import libstb
+import libstb as stb
 
 OUT = Path(__file__).parent / "output"
 OUT.mkdir(exist_ok=True)
@@ -13,7 +13,7 @@ def make_image(width=320, height=200):
     r = (x * 255 // (width - 1)).astype(np.uint8)
     g = (y * 255 // (height - 1)).astype(np.uint8)
     b = ((x // 16 + y // 16) % 2 * 255).astype(np.uint8)
-    return libstb.Image(np.dstack([r, g, b]))
+    return stb.Image(np.dstack([r, g, b]))
 
 
 img = make_image()
@@ -43,5 +43,5 @@ except ValueError as e:
     print("ValueError:", e)
 
 # PNG is lossless: decoding it gives back exactly the same pixels.
-back = libstb.Image.open(img.to_png())
+back = stb.Image.open(img.to_png())
 print("png round trip exact:", np.array_equal(back.numpy(), img.numpy()))

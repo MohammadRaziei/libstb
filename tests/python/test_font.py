@@ -9,7 +9,7 @@ import threading
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
-import libstb
+import libstb as stb
 from libstb import Font
 
 FONT_PATH = pathlib.Path(__file__).parent.parent / "data" / "libstb-test.ttf"
@@ -74,14 +74,14 @@ def test_render_multiline(font):
 def test_render_result_can_be_saved(font, tmp_path):
     p = tmp_path / "text.png"
     font.render("AB", 100).bitmap.write(p)
-    back = libstb.Image.open(p)
+    back = stb.Image.open(p)
     assert back.shape == (100, 100, 1)
 
 
 def test_render_errors(font):
     with pytest.raises(ValueError):
         font.render("", 100)
-    with pytest.raises(libstb.LimitError):
+    with pytest.raises(stb.LimitError):
         font.render("A", 100, max_bytes=10)
     with pytest.raises(ValueError):
         font.render_glyph("AB", 100)  # two characters
@@ -107,7 +107,7 @@ def test_atlas(font):
 
 
 def test_atlas_errors(font):
-    with pytest.raises(libstb.LimitError):
+    with pytest.raises(stb.LimitError):
         font.make_atlas("AB", 100, 16, 16)
     with pytest.raises(ValueError):
         font.make_atlas("", 100, 64, 64)
@@ -116,13 +116,13 @@ def test_atlas_errors(font):
 
 
 def test_loading_errors():
-    with pytest.raises(libstb.DecodeError):
+    with pytest.raises(stb.DecodeError):
         Font.open(b"definitely not a font")
-    with pytest.raises(libstb.DecodeError):
+    with pytest.raises(stb.DecodeError):
         Font.open(b"")
     with pytest.raises(ValueError):
         Font.open(FONT_PATH, index=-1)
-    with pytest.raises(libstb.DecodeError):
+    with pytest.raises(stb.DecodeError):
         Font.open(FONT_PATH, index=1)  # single-face file
     with pytest.raises(FileNotFoundError):
         Font.open(FONT_PATH.with_name("missing.ttf"))

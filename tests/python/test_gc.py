@@ -13,7 +13,7 @@ import weakref
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
-import libstb
+import libstb as stb
 
 
 class Wrapper:
@@ -39,7 +39,7 @@ def pixels():
 
 def test_a_cycle_through_an_image_viewing_a_dlpack_object_is_collected():
     obj = Wrapper(pixels())
-    obj.image = libstb.Image.from_dlpack(obj)  # obj -> image -> (hidden) obj
+    obj.image = stb.Image.from_dlpack(obj)  # obj -> image -> (hidden) obj
     ref = weakref.ref(obj)
     del obj
     gc.collect()
@@ -48,7 +48,7 @@ def test_a_cycle_through_an_image_viewing_a_dlpack_object_is_collected():
 
 def test_a_cycle_through_an_image_viewing_a_numpy_subclass_is_collected():
     arr = pixels().view(Box)
-    arr.image = libstb.Image(arr)
+    arr.image = stb.Image(arr)
     ref = weakref.ref(arr)
     del arr
     gc.collect()
@@ -59,23 +59,23 @@ def test_collecting_does_not_touch_images_that_are_still_in_use():
     keep = []
     for i in range(20):
         obj = Wrapper(pixels() + np.uint8(i))
-        keep.append((i, libstb.Image.from_dlpack(obj), obj))
+        keep.append((i, stb.Image.from_dlpack(obj), obj))
     cyc = Wrapper(pixels())
-    cyc.image = libstb.Image.from_dlpack(cyc)
+    cyc.image = stb.Image.from_dlpack(cyc)
     del cyc
     for _ in range(3):
         gc.collect()
     for i, img, obj in keep:
         np.testing.assert_array_equal(img.numpy(), pixels() + np.uint8(i))
     # an image that is the only holder of the object it views keeps it alive through a collection
-    img = libstb.Image.from_dlpack(Wrapper(pixels()))
+    img = stb.Image.from_dlpack(Wrapper(pixels()))
     gc.collect()
     np.testing.assert_array_equal(img.numpy(), pixels())
 
 
 def test_decoded_and_copied_images_are_unaffected_by_collection():
-    png = libstb.Image(pixels()).to_png()
-    img = libstb.Image.open(png)
+    png = stb.Image(pixels()).to_png()
+    img = stb.Image.open(png)
     other = img.copy()
     gc.collect()
     np.testing.assert_array_equal(img.numpy(), pixels())
@@ -93,13 +93,13 @@ def test_no_leak_report_at_exit_when_the_image_outlives_the_script(keep_global):
     # that hold the image: the exact shape that used to print "nanobind: leaked 1 instances!".
     r = _run(
         f"""
-        import numpy as np, libstb
+        import numpy as np, libstb as stb
         class W:
             def __init__(self, a): self.a = a
             def __dlpack__(self, *args, **kw): return self.a.__dlpack__(*args, **kw)
             def __dlpack_device__(self): return self.a.__dlpack_device__()
         a = np.zeros((4, 4, 3), np.uint8)
-        {'obj = W(a); img = libstb.Image.from_dlpack(obj)' if keep_global == 'obj_and_img' else 'img = libstb.Image.from_dlpack(W(a))'}
+        {'obj = W(a); img = stb.Image.from_dlpack(obj)' if keep_global == 'obj_and_img' else 'img = stb.Image.from_dlpack(W(a))'}
         """
     )
     assert r.returncode == 0

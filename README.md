@@ -6,7 +6,7 @@ system dependencies and no Python dependencies**. The C++ library is usable from
 CMake too.
 
 numpy is optional: `pip install "libstb[numpy]"` if you want `img.numpy()` /
-`libstb.imread()`. It is imported only when one of those is first
+`stb.imread()`. It is imported only when one of those is first
 used, never by `import libstb`, and without it they raise an `ImportError` that
 says so. Everything else works without numpy, including `Image(array)` from any
 buffer (a `memoryview`, `array.array`, a `bytearray`, a PIL-exported buffer...),
@@ -24,18 +24,18 @@ and `img.tobytes()` and `memoryview(img)` give you the pixels with no numpy at a
 
 ```python
 import numpy as np
-import libstb
+import libstb as stb
 
-img = libstb.Image.open("photo.png")                # or bytes; also: channels=4, flip=True
+img = stb.Image.open("photo.png")                   # or bytes; also: channels=4, flip=True
 img.width, img.height, img.channels                 # 640, 480, 3
 img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
 np.from_dlpack(img)                                 # DLPack: also torch/jax/cupy.from_dlpack(img), zero-copy
-libstb.Image.from_dlpack(tensor)                    # and back: a torch/jax/cupy/numpy uint8 array -> Image
-pixels = libstb.imread("photo.png")                 # just the ndarray (same options as Image.open)
-libstb.imwrite("out.jpg", pixels, quality=80)       # an ndarray or an Image; format from the extension
-small = libstb.imresize(pixels, 320, 240)           # resize an ndarray, get an ndarray (no Image needed)
-libstb.ImageInfo.read("photo.png")                  # header only: (width, height, channels)
-libstb.Image(np.zeros((8, 8, 4), np.uint8))         # from your own uint8 array (no copy, see below)
+stb.Image.from_dlpack(tensor)                       # and back: a torch/jax/cupy/numpy uint8 array -> Image
+pixels = stb.imread("photo.png")                    # just the ndarray (same options as Image.open)
+stb.imwrite("out.jpg", pixels, quality=80)          # an ndarray or an Image; format from the extension
+small = stb.imresize(pixels, 320, 240)              # resize an ndarray, get an ndarray (no Image needed)
+stb.ImageInfo.read("photo.png")                     # header only: (width, height, channels)
+stb.Image(np.zeros((8, 8, 4), np.uint8))            # from your own uint8 array (no copy, see below)
 img.copy()                                          # an independent image (deep copy)
 
 img.write("out.jpg")                                 # format from the extension, default settings
@@ -44,18 +44,18 @@ data = img.to_png(compression=9)                    # -> bytes (to_png / to_jpg 
 
 small = img.resize(320, 240)                        # new Image; default Resizer()
 small = img.resize(320, 240, "cubic")               # filter by name (see the table below)
-libstb.Resizer("cubic")                             # same name works on Resizer itself
-libstb.Resizer(libstb.Resizer.Filter.MITCHELL, libstb.Resizer.Edge.WRAP, srgb=False)
-img.resize(320, 240, libstb.Resizer("linear", srgb=False))  # name + other options
+stb.Resizer("cubic")                                # same name works on Resizer itself
+stb.Resizer(stb.Resizer.Filter.MITCHELL, stb.Resizer.Edge.WRAP, srgb=False)
+img.resize(320, 240, stb.Resizer("linear", srgb=False))  # name + other options
 
-font = libstb.Font.open("font.ttf")                 # trusted fonts only, see below
+font = stb.Font.open("font.ttf")                    # trusted fonts only, see below
 text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
 text.bitmap.write("hello.png")
 font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measure("Hello", 32)
 font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_offset, advance)
 atlas = font.make_atlas("ABCabc123", 32, 256, 256)  # Atlas: .image and atlas["A"] -> AtlasGlyph
 
-libstb.iminfo("photo.png")                          # shortcut: ImageInfo.read(...)
+stb.iminfo("photo.png")                             # shortcut: ImageInfo.read(...)
 ```
 
 **Encoding.** Every format has a pair of methods with its own settings, all
@@ -67,11 +67,11 @@ truncated file). `write(path)` is the shortcut: it picks the format from the
 extension (`.png .jpg .jpeg .bmp .tga`, case-insensitive; `ValueError` for
 anything else) and uses the defaults. For other settings call `write_*`.
 
-`libstb.imwrite(path, image, *, quality=None, compression=None, rle=None)` is
+`stb.imwrite(path, image, *, quality=None, compression=None, rle=None)` is
 the functional form: it takes an `Image` or a uint8 array, picks the format
 from the extension, and passes the options that format has (`quality` for jpg,
 `compression` for png, `rle` for tga). An option the format does not have is a
-`ValueError`, not silently ignored. `libstb.imread(source, *, channels, flip,
+`ValueError`, not silently ignored. `stb.imread(source, *, channels, flip,
 max_bytes, orient)` is its counterpart and returns an ndarray.
 
 **Editing.** Every operation returns a new `Image` and leaves the source
@@ -105,7 +105,7 @@ can differ from `convert(n)` by a rounding step.
 
 **SIMD.** The loops that are limited by arithmetic rather than by memory
 (`convert`, `composite`, `flatten`) exist in up to three builds that give
-bit-identical results and differ only in speed. `libstb.simd_backends()` lists
+bit-identical results and differ only in speed. `stb.simd_backends()` lists
 the ones this CPU can run, best first, e.g. `['avx2', 'sse2', 'scalar']`:
 
 - `"avx2"`: AVX2 kernels, picked at run time when the CPU and OS support them
@@ -116,13 +116,13 @@ the ones this CPU can run, best first, e.g. `['avx2', 'sse2', 'scalar']`:
 - `"scalar"`: the same loops with auto-vectorisation off, the plain reference. Always
   available; the tests check every other backend against it.
 
-`libstb.simd_name()` is the backend in use on the calling thread (the first by
+`stb.simd_name()` is the backend in use on the calling thread (the first by
 default). To change it from code:
 
-- `with libstb.simd("scalar"):` uses a backend for the calling thread only, for the
+- `with stb.simd("scalar"):` uses a backend for the calling thread only, for the
   length of the block; other threads are not affected and blocks nest. In C++ the
   same is `stb::simd_scope guard("scalar");`. Prefer this in a library or a thread pool.
-- `libstb.set_simd("sse2")` switches the whole process (`"auto"` restores the
+- `stb.set_simd("sse2")` switches the whole process (`"auto"` restores the
   default).
 
 Both raise `ValueError` (C++: `std::invalid_argument` / `false`) for an unknown or
@@ -145,14 +145,14 @@ saying how to turn them; stb ignores it. `Image.open(path, orient=True)` (and
 `imread(..., orient=True)`) applies it while decoding, for JPEG and PNG (`eXIf`
 chunk); width and height may swap, and `flip=True` is applied after it. It is
 off by default so decoding keeps returning the stored pixels, and `iminfo` keeps
-reporting the stored size. `libstb.exif_orientation(source)` returns the 1..8
+reporting the stored size. `stb.exif_orientation(source)` returns the 1..8
 value (1 when there is none or the data is unreadable; it never throws on bad
 input and is safe on untrusted files) and `img.orient(value)` applies one:
 
 ```python
-img = libstb.Image.open("IMG_0001.jpg", orient=True)     # upright
-turn = libstb.exif_orientation("IMG_0001.jpg")            # or ask first...
-img = libstb.Image.open("IMG_0001.jpg").orient(turn)      # ...and apply it yourself
+img = stb.Image.open("IMG_0001.jpg", orient=True)     # upright
+turn = stb.exif_orientation("IMG_0001.jpg")               # or ask first...
+img = stb.Image.open("IMG_0001.jpg").orient(turn)         # ...and apply it yourself
 ```
 
 Only the tag is read (JPEG `APP1`, PNG `eXIf`); other EXIF data and ICC profiles
@@ -163,7 +163,7 @@ needs it, like numpy (`pip install "libstb[pillow]"`; `import libstb` never load
 
 ```python
 pil = img.to_pil()                 # libstb -> Pillow: L, LA, RGB or RGBA by channel count (a copy)
-img = libstb.Image.from_pil(pil)   # Pillow -> libstb
+img = stb.Image.from_pil(pil)      # Pillow -> libstb
 ```
 
 `from_pil` takes `L`, `LA`, `RGB` and `RGBA` as they are and converts the modes that hold
@@ -174,7 +174,7 @@ yourself.
 
 Both directions also work without those methods, because Pillow has neither DLPack nor a
 buffer export and speaks NumPy's `__array_interface__`, which `Image` implements both ways:
-`PILImage.fromarray(img)` and `libstb.Image(pil)`. That path is strict on purpose: it takes
+`PILImage.fromarray(img)` and `stb.Image(pil)`. That path is strict on purpose: it takes
 only 8-bit `L`, `LA`, `RGB` and `RGBA` and raises `TypeError` otherwise (a palette or CMYK
 image would otherwise be read as if its indices or inks were colours, as `np.asarray(pil)`
 does). `Image(x)` accepts any object with `__array_interface__` (a writable contiguous
@@ -206,15 +206,15 @@ author writes "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT
 FILES". Load your own or vetted system fonts, never user uploads. (Images are
 different: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
 
-Errors mirror the C++ hierarchy: `libstb.Error` (a `RuntimeError`) with
+Errors mirror the C++ hierarchy: `stb.Error` (a `RuntimeError`) with
 `DecodeError`, `EncodeError`, `LimitError` below it, so a single
-`except libstb.Error` catches every libstb failure. Bad arguments raise
+`except stb.Error` catches every libstb failure. Bad arguments raise
 `ValueError`, unreadable files `OSError` (`FileNotFoundError`, `PermissionError`,
 ... as the OS says). Images whose decoded size would
 exceed `max_bytes` (default 512 MiB) are rejected from the header, before any
 pixel memory is allocated.
 
-`libstb.Image` is `stb::image` itself, not a wrapper: `open`, `resize`, `to_*` and
+`stb.Image` is `stb::image` itself, not a wrapper: `open`, `resize`, `to_*` and
 `write*` are the C++ members, run without the GIL. `img.numpy()` / `np.asarray(img)`
 are numpy views of its pixels (kept alive by the view); `memoryview(img)` is the
 same zero-copy view as a plain 3-D `memoryview` (numpy reads it too), and
@@ -228,7 +228,7 @@ channels)`, on the CPU (`dl_device` other than the CPU is a `BufferError`).
 The view keeps the image alive. It is writable with numpy 2.1 or newer (older
 numpy, the last one on Python 3.9 being 2.0.2, imports every DLPack view
 read-only and has no `copy=` argument; `img.numpy()` is always writable).
-Asking for `copy=True` gives an independent copy. The other way round, `libstb.Image.from_dlpack(x)` takes any
+Asking for `copy=True` gives an independent copy. The other way round, `stb.Image.from_dlpack(x)` takes any
 DLPack object holding `uint8` pixels of shape `(H, W)` or `(H, W, 1..4)` (a
 torch, jax, cupy or numpy array, another `Image`): a writable C-contiguous CPU
 array is shared, anything else is copied, and `copy=True` always copies.
@@ -248,7 +248,7 @@ you want an independent image, say so: `img.copy()` (also `copy.copy` and
 
 ```cmake
 # after `pip install libstb`
-execute_process(COMMAND ${Python3_EXECUTABLE} -c "import libstb; print(libstb.get_cmake_dir())"
+execute_process(COMMAND ${Python3_EXECUTABLE} -c "import libstb as stb; print(stb.get_cmake_dir())"
     OUTPUT_VARIABLE libstb_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
 find_package(libstb CONFIG REQUIRED)
 target_link_libraries(app PRIVATE libstb::core)

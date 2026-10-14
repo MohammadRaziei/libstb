@@ -6,13 +6,13 @@ torch and cupy work the same way and are shown in comments.
 from pathlib import Path
 
 import numpy as np
-import libstb
+import libstb as stb
 
 OUT = Path(__file__).parent / "output"
 OUT.mkdir(exist_ok=True)
 
 y, x = np.mgrid[0:64, 0:96]
-img = libstb.Image(np.dstack([
+img = stb.Image(np.dstack([
     (x * 255 // 95).astype(np.uint8),
     (y * 255 // 63).astype(np.uint8),
     np.full((64, 96), 128, np.uint8),
@@ -55,22 +55,22 @@ else:
 # ---- framework -> Image --------------------------------------------------------------
 # Any DLPack object holding uint8 (H, W) or (H, W, 1..4) pixels on the CPU.
 # A writable, C-contiguous array is shared; anything else (read-only, strided) is copied.
-shared = libstb.Image.from_dlpack(view)
+shared = stb.Image.from_dlpack(view)
 print("from_dlpack   :", shared, "| shares memory:", np.shares_memory(shared.numpy(), view))
 
 if jnp is not None:
-    from_jax = libstb.Image.from_dlpack(j)   # jax arrays are read-only, so this one is a copy
+    from_jax = stb.Image.from_dlpack(j)   # jax arrays are read-only, so this one is a copy
     print("from jax      :", from_jax)
 
 # A model's output is usually (C, H, W) float: go back to uint8 (H, W, C) first.
 #     arr = (chw_tensor.clamp(0, 1) * 255).byte().permute(1, 2, 0).contiguous()
-#     libstb.Image.from_dlpack(arr)
+#     stb.Image.from_dlpack(arr)
 restored = np.ascontiguousarray((chw * 255).round().astype(np.uint8).transpose(1, 2, 0))
-libstb.imwrite(OUT / "roundtrip.png", libstb.Image.from_dlpack(restored))
+stb.imwrite(OUT / "roundtrip.png", stb.Image.from_dlpack(restored))
 print("round trip    :", np.array_equal(restored, img.numpy()))
 
 # Something that is not a DLPack object is a clear TypeError.
 try:
-    libstb.Image.from_dlpack(b"not a tensor")
+    stb.Image.from_dlpack(b"not a tensor")
 except TypeError as e:
     print("TypeError     :", e)

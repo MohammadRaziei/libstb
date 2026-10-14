@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import numpy as np
-import libstb
+import libstb as stb
 
 OUT = Path(__file__).parent / "output"
 OUT.mkdir(exist_ok=True)
@@ -15,7 +15,7 @@ def make_test_image(width=160, height=100):
     px[8:48, 8:16] = 255
     px[8:16, 8:36] = 255
     px[24:32, 8:28] = 255
-    return libstb.Image(px)
+    return stb.Image(px)
 
 
 def contact_sheet(images, gap=10):
@@ -23,7 +23,7 @@ def contact_sheet(images, gap=10):
     h = max(i.height for i in images)
     w = max(i.width for i in images)
     cells = [i.pad(0, 0, w - i.width, h - i.height, fill=255).pad(gap, gap, gap, gap, fill=255) for i in images]
-    return libstb.Image(np.hstack([c.numpy() for c in cells]))
+    return stb.Image(np.hstack([c.numpy() for c in cells]))
 
 
 img = make_test_image()
@@ -55,7 +55,7 @@ print("with a filter :", img.thumbnail(64, 64, "cubic").width, "(any resize() fi
 # Nothing above touched the source.
 print("source intact :", img.width, "x", img.height)
 
-libstb.imwrite(OUT / "geometry_overview.png", contact_sheet([
+stb.imwrite(OUT / "geometry_overview.png", contact_sheet([
     img, flipped_h, flipped_v, turned, transposed, framed, thumb,
 ]))
 print("wrote", OUT / "geometry_overview.png")

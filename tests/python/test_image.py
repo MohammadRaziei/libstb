@@ -5,7 +5,7 @@ import zlib
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
-import libstb
+import libstb as stb
 
 
 def png(w, h, rows, color_type=2):
@@ -29,7 +29,7 @@ EXPECTED = np.array([[[255, 0, 0], [0, 255, 0]], [[0, 0, 255], [255, 255, 255]]]
 
 
 def test_load_png_bytes():
-    a = libstb.imread(RGB)
+    a = stb.imread(RGB)
     assert a.dtype == np.uint8
     assert a.shape == (2, 2, 3)
     assert a.flags["C_CONTIGUOUS"]
@@ -37,7 +37,7 @@ def test_load_png_bytes():
 
 
 def test_info():
-    i = libstb.iminfo(RGB)
+    i = stb.iminfo(RGB)
     assert i == (2, 2, 3)
     assert (i.width, i.height, i.channels) == (2, 2, 3)
 
@@ -45,70 +45,70 @@ def test_info():
 def test_load_from_str_and_pathlib_paths(tmp_path):
     p = tmp_path / "x.png"
     p.write_bytes(RGB)
-    np.testing.assert_array_equal(libstb.imread(p), EXPECTED)
-    np.testing.assert_array_equal(libstb.imread(str(p)), EXPECTED)
-    assert libstb.iminfo(p) == (2, 2, 3)
+    np.testing.assert_array_equal(stb.imread(p), EXPECTED)
+    np.testing.assert_array_equal(stb.imread(str(p)), EXPECTED)
+    assert stb.iminfo(p) == (2, 2, 3)
 
 
 def test_load_from_bytearray_and_memoryview():
-    np.testing.assert_array_equal(libstb.imread(bytearray(RGB)), EXPECTED)
-    np.testing.assert_array_equal(libstb.imread(memoryview(RGB)), EXPECTED)
+    np.testing.assert_array_equal(stb.imread(bytearray(RGB)), EXPECTED)
+    np.testing.assert_array_equal(stb.imread(memoryview(RGB)), EXPECTED)
 
 
 def test_missing_file_raises_oserror(tmp_path):
     with pytest.raises(FileNotFoundError):
-        libstb.imread(tmp_path / "nope.png")
+        stb.imread(tmp_path / "nope.png")
 
 
 def test_channels_conversion():
-    rgba = libstb.imread(RGB, channels=4)
+    rgba = stb.imread(RGB, channels=4)
     assert rgba.shape == (2, 2, 4)
     assert (rgba[..., 3] == 255).all()
     np.testing.assert_array_equal(rgba[..., :3], EXPECTED)
-    assert libstb.imread(RGB, channels=1).shape == (2, 2, 1)
+    assert stb.imread(RGB, channels=1).shape == (2, 2, 1)
 
 
 def test_flip():
-    np.testing.assert_array_equal(libstb.imread(RGB, flip=True), EXPECTED[::-1])
+    np.testing.assert_array_equal(stb.imread(RGB, flip=True), EXPECTED[::-1])
 
 
 def test_result_owns_its_memory():
-    a = libstb.imread(RGB)
+    a = stb.imread(RGB)
     import gc
 
     gc.collect()
     np.testing.assert_array_equal(a, EXPECTED)  # still valid, source long gone
     a[0, 0, 0] = 7  # writable, independent buffer
-    np.testing.assert_array_equal(libstb.imread(RGB), EXPECTED)
+    np.testing.assert_array_equal(stb.imread(RGB), EXPECTED)
 
 
 def test_garbage_raises_decode_error():
-    with pytest.raises(libstb.DecodeError):
-        libstb.imread(b"definitely not an image")
-    with pytest.raises(libstb.DecodeError):
-        libstb.iminfo(b"definitely not an image")
+    with pytest.raises(stb.DecodeError):
+        stb.imread(b"definitely not an image")
+    with pytest.raises(stb.DecodeError):
+        stb.iminfo(b"definitely not an image")
 
 
 def test_empty_input_raises_decode_error():
-    with pytest.raises(libstb.DecodeError, match="empty"):
-        libstb.imread(b"")
+    with pytest.raises(stb.DecodeError, match="empty"):
+        stb.imread(b"")
 
 
 def test_truncated_png_raises_decode_error():
-    with pytest.raises(libstb.DecodeError):
-        libstb.imread(RGB[: len(RGB) // 2])
+    with pytest.raises(stb.DecodeError):
+        stb.imread(RGB[: len(RGB) // 2])
 
 
 @pytest.mark.parametrize("bad", [-1, 5])
 def test_bad_channels_raises_value_error(bad):
     with pytest.raises(ValueError):
-        libstb.imread(RGB, channels=bad)
+        stb.imread(RGB, channels=bad)
 
 
 def test_max_bytes():
-    with pytest.raises(libstb.LimitError, match="too large"):
-        libstb.imread(RGB, max_bytes=11)  # decodes to 12 bytes
-    assert libstb.imread(RGB, max_bytes=12).shape == (2, 2, 3)
+    with pytest.raises(stb.LimitError, match="too large"):
+        stb.imread(RGB, max_bytes=11)  # decodes to 12 bytes
+    assert stb.imread(RGB, max_bytes=12).shape == (2, 2, 3)
 
 
 def test_huge_declared_dimensions_rejected_fast():
@@ -117,8 +117,8 @@ def test_huge_declared_dimensions_rejected_fast():
     hdr = hdr.replace(struct.pack(">II", 1, 1), struct.pack(">II", 60000, 60000), 1)
     # stb itself may refuse such a header (DecodeError) or our max_bytes guard
     # does (LimitError); either way nothing is allocated.
-    with pytest.raises(libstb.Error):
-        libstb.imread(hdr)
+    with pytest.raises(stb.Error):
+        stb.imread(hdr)
 
 
 def test_flip_is_thread_safe():
@@ -127,7 +127,7 @@ def test_flip_is_thread_safe():
     def work(t):
         for i in range(500):
             flip = (i + t) % 2 == 1
-            a = libstb.imread(RGB, flip=flip)
+            a = stb.imread(RGB, flip=flip)
             want = EXPECTED[::-1] if flip else EXPECTED
             if not np.array_equal(a, want):
                 errors.append((t, i))
@@ -144,5 +144,5 @@ def test_flip_is_thread_safe():
 def test_cmake_dir_layout():
     import os
 
-    assert os.path.isfile(os.path.join(libstb.get_cmake_dir(), "libstbConfig.cmake"))
-    assert os.path.isfile(os.path.join(libstb.get_include_dir(), "stb.h"))
+    assert os.path.isfile(os.path.join(stb.get_cmake_dir(), "libstbConfig.cmake"))
+    assert os.path.isfile(os.path.join(stb.get_include_dir(), "stb.h"))

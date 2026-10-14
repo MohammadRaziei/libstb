@@ -3,7 +3,7 @@ import threading
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
-import libstb
+import libstb as stb
 from libstb import Image, Resizer
 
 
@@ -74,7 +74,7 @@ def test_errors():
         src.resize(0, 4)
     with pytest.raises(ValueError):
         src.resize(4, -1)
-    with pytest.raises(libstb.LimitError):
+    with pytest.raises(stb.LimitError):
         src.resize(10, 10, Resizer(max_bytes=100))  # 300 bytes needed
 
 

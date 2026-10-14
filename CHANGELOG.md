@@ -44,11 +44,13 @@ This file was generated from the git history (42 commits, tags `v0.3.0`, `v0.4.0
 - CI: native ARM64 runners (Linux and Windows) in the wheel matrix.
 - CI: `build-docs` and `build-coverage` jobs in `cmake.yml` (coverage is also sent to Codecov), and a
   `deploy-pages` job in the orchestrator that publishes the docs with the coverage dashboard under
-  `/coverage`.
+  `/coverage`. The coverage job installs the CPU build of torch so `test_torch.py` runs there.
 
 ### Changed
 - The scalar backend is compiled without compiler auto-vectorization, so it is really scalar.
 - Wheel matrix runs with `fail-fast: false`.
+- Python examples, notebooks, tests, benchmarks, README and docs import the package as
+  `import libstb as stb` and write `stb.Image`, `stb.imread`, ... (the package name is still `libstb`).
 - Python 3.12+ builds use the stable ABI: `wheel.py-api = "cp312"` is set in `pyproject.toml`, giving
   one `cp312-abi3` wheel for 3.12 and newer.
 - `pytest-memray` is only required on x86_64 and arm64, and not on Windows. `numpy` is not required

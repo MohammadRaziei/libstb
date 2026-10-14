@@ -1,5 +1,5 @@
 """
-bench_fonts.py: stb_truetype (libstb.Font) against Pillow's FreeType
+bench_fonts.py: stb_truetype (stb.Font) against Pillow's FreeType
 binding, on a real TrueType font (DejaVu Sans, downloaded by
 cmake/FetchRealCorpus.cmake).
 
@@ -7,7 +7,7 @@ Three operations, each at several pixel sizes and for a short
 single-line string and a multi-line paragraph:
 
   open      load the font file and get a font object ready to draw
-            with. libstb.Font.open(path) vs ImageFont.truetype(path, px).
+            with. stb.Font.open(path) vs ImageFont.truetype(path, px).
   measure   how wide/tall would this text be, without drawing it.
             Font.measure vs getlength / multiline_textbbox.
   render    text in, a 1-channel coverage bitmap out, including
@@ -67,11 +67,11 @@ def _cell(build, repeats):
 
 
 def run(font_path, repeats=REPEATS):
-    import libstb
+    import libstb as stb
     from PIL import Image, ImageDraw, ImageFont
 
     basic = ImageFont.Layout.BASIC
-    libstb_font = libstb.Font.open(font_path)
+    libstb_font = stb.Font.open(font_path)
     pil_fonts = {px: ImageFont.truetype(font_path, px, layout_engine=basic) for px in SIZES}
     measure_canvas = ImageDraw.Draw(Image.new("L", (1, 1)))
 
@@ -82,7 +82,7 @@ def run(font_path, repeats=REPEATS):
         cases.append({
             "op": "open", "text": None, "chars": None, "px": px,
             "libraries": {
-                "libstb": _cell(lambda: (lambda: libstb.Font.open(font_path)), repeats),
+                "libstb": _cell(lambda: (lambda: stb.Font.open(font_path)), repeats),
                 "pillow": _cell(lambda px=px: (lambda: ImageFont.truetype(font_path, px, layout_engine=basic)), repeats),
             },
         })

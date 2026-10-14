@@ -99,6 +99,12 @@ jobs:
     - name: Install python dependencies
       run: pip install -r requirements-dev.txt
 
+    # torch is not a test dependency: tests/python/test_torch.py skips itself without it. The CPU
+    # wheel (a few hundred MB, instead of several GB of CUDA libraries) makes the DLPack tests run
+    # here, so they count towards the coverage report.
+    - name: Install torch (CPU)
+      run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
     - name: Install coverage tools
       run: |
         sudo apt-get update

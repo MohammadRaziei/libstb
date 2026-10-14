@@ -20,7 +20,7 @@ np = pytest.importorskip("numpy")  # the tests below need numpy: without it this
 
 pytest.importorskip("pytest_memray")
 
-import libstb  # noqa: E402
+import libstb as stb  # noqa: E402
 
 ROUNDS = 100
 LEAK_LIMIT = "200 KB"
@@ -43,11 +43,11 @@ def big():
 @pytest.fixture(scope="module", autouse=True)
 def warm_up(small):
     """First calls allocate lazily (imports, tables, nanobind caches): do them before measuring."""
-    img = libstb.Image(small)
+    img = stb.Image(small)
     png, jpg = img.to_png(), img.to_jpg()
-    libstb.Image.open(png), libstb.Image.open(jpg)
+    stb.Image.open(png), stb.Image.open(jpg)
     img.resize(100, 100).numpy()
-    libstb.Image(_rgb(c=4)).composite(libstb.Image(_rgb(c=4)))
+    stb.Image(_rgb(c=4)).composite(stb.Image(_rgb(c=4)))
     for _ in range(2):
         gc.collect()
 
@@ -68,17 +68,17 @@ class Wrapper:
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_encode_and_decode_leave_nothing_behind(small):
-    img = libstb.Image(small)
+    img = stb.Image(small)
     for _ in range(ROUNDS):
-        libstb.Image.open(img.to_png())
-        libstb.Image.open(img.to_jpg(80))
-        libstb.Image.open(img.to_bmp())
-        libstb.Image.open(img.to_tga())
+        stb.Image.open(img.to_png())
+        stb.Image.open(img.to_jpg(80))
+        stb.Image.open(img.to_bmp())
+        stb.Image.open(img.to_tga())
 
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_resize_leaves_nothing_behind(small):
-    img = libstb.Image(small)
+    img = stb.Image(small)
     for i in range(ROUNDS):
         img.resize(200 + i % 7, 300)
         img.resize(900, 700 + i % 5, "mitchell")
@@ -87,7 +87,7 @@ def test_resize_leaves_nothing_behind(small):
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_geometry_leaves_nothing_behind(small):
-    img = libstb.Image(small)
+    img = stb.Image(small)
     for _ in range(ROUNDS):
         img.crop(10, 20, 300, 200)
         img.flip_horizontal(), img.flip_vertical()
@@ -98,26 +98,26 @@ def test_geometry_leaves_nothing_behind(small):
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_convert_composite_and_flatten_leave_nothing_behind(small):
-    rgb, rgba = libstb.Image(small), libstb.Image(_rgb(c=4))
+    rgb, rgba = stb.Image(small), stb.Image(_rgb(c=4))
     for _ in range(ROUNDS):
         rgb.convert(1), rgb.convert(4), rgba.convert(3)
         rgb.composite(rgba)
         rgba.composite(rgba)
         rgba.flatten((10, 20, 30))
         a = rgba.split()
-        libstb.Image.merge(a)
+        stb.Image.merge(a)
 
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_interop_leaves_nothing_behind(small):
-    img = libstb.Image(small)
+    img = stb.Image(small)
     for _ in range(ROUNDS):
         np.asarray(img)
         img.numpy()
         memoryview(img)
         np.from_dlpack(img)
-        libstb.Image(np.array(img))
-        libstb.Image.from_dlpack(small, copy=True)
+        stb.Image(np.array(img))
+        stb.Image.from_dlpack(small, copy=True)
 
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
@@ -126,31 +126,31 @@ def test_images_viewing_a_dlpack_object_are_freed_even_in_a_cycle(small):
     # and it needs the image to report the reference it keeps (the old "leaked 1 instances").
     for _ in range(ROUNDS):
         obj = Wrapper(small.copy())
-        obj.image = libstb.Image.from_dlpack(obj)
+        obj.image = stb.Image.from_dlpack(obj)
         del obj
         gc.collect()
 
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_the_simd_context_manager_and_the_resizer_leave_nothing_behind(small):
-    img = libstb.Image(small)
+    img = stb.Image(small)
     for _ in range(ROUNDS):
-        with libstb.simd("scalar"):
+        with stb.simd("scalar"):
             img.convert(1)
-        libstb.Resizer("cubic")
-        libstb.imresize(small, 100, 100)
+        stb.Resizer("cubic")
+        stb.imresize(small, 100, 100)
 
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
 def test_exceptions_leave_nothing_behind(small):
-    img = libstb.Image(small)
+    img = stb.Image(small)
     for _ in range(ROUNDS):
         with pytest.raises(ValueError):
             img.crop(0, 0, 0, 5)
-        with pytest.raises(libstb.DecodeError):
-            libstb.Image.open(b"not an image")
+        with pytest.raises(stb.DecodeError):
+            stb.Image.open(b"not an image")
         with pytest.raises(ValueError):
-            libstb.simd("nope")
+            stb.simd("nope")
 
 
 # ------------------------------------------------------------------ no hidden copies
@@ -158,7 +158,7 @@ def test_exceptions_leave_nothing_behind(small):
 
 @pytest.mark.limit_memory("2 MB")
 def test_wrapping_a_writable_array_does_not_copy_it(big):
-    img = libstb.Image(big)  # 36 MB of pixels used in place
+    img = stb.Image(big)  # 36 MB of pixels used in place
     view = img.numpy()
     mv = memoryview(img)
     assert view.shape == big.shape and mv.nbytes == big.nbytes and np.shares_memory(view, big)
@@ -166,29 +166,29 @@ def test_wrapping_a_writable_array_does_not_copy_it(big):
 
 @pytest.mark.limit_memory("2 MB")
 def test_a_dlpack_import_does_not_copy_either(big):
-    img = libstb.Image.from_dlpack(Wrapper(big))
+    img = stb.Image.from_dlpack(Wrapper(big))
     assert np.shares_memory(img.numpy(), big)
 
 
 @pytest.mark.limit_memory("14 MB")
 def test_crop_allocates_only_the_cropped_pixels(big):
-    out = libstb.Image(big).crop(100, 100, 2000, 1500)  # 9 MB
+    out = stb.Image(big).crop(100, 100, 2000, 1500)  # 9 MB
     assert (out.width, out.height) == (2000, 1500)
 
 
 @pytest.mark.limit_memory("26 MB")
 def test_convert_to_gray_allocates_only_the_gray_plane(big):
-    out = libstb.Image(big).convert(1)  # 12 MB
+    out = stb.Image(big).convert(1)  # 12 MB
     assert out.channels == 1
 
 
 @pytest.mark.limit_memory("40 MB")
 def test_resize_peak_is_the_output_plus_a_small_working_buffer(big):
-    out = libstb.Image(big).resize(2000, 1500)  # 9 MB out
+    out = stb.Image(big).resize(2000, 1500)  # 9 MB out
     assert (out.width, out.height) == (2000, 1500)
 
 
 @pytest.mark.limit_memory("40 MB")
 def test_decoding_a_png_peaks_near_the_size_of_the_pixels(big):
-    png = libstb.Image(big[:1500, :2000]).to_png()  # 9 MB of pixels, encoded before measuring? no: part of the test
-    libstb.Image.open(png)
+    png = stb.Image(big[:1500, :2000]).to_png()  # 9 MB of pixels, encoded before measuring? no: part of the test
+    stb.Image.open(png)

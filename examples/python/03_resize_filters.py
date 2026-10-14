@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import numpy as np
-import libstb
+import libstb as stb
 
 OUT = Path(__file__).parent / "output"
 OUT.mkdir(exist_ok=True)
@@ -13,7 +13,7 @@ def make_test_image(size=128):
     y, x = np.mgrid[0:size, 0:size]
     grad = (x * 255 // (size - 1)).astype(np.uint8)
     checks = ((x // 8 + y // 8) % 2 * 255).astype(np.uint8)
-    return libstb.Image(np.dstack([grad, checks, 255 - grad]))
+    return stb.Image(np.dstack([grad, checks, 255 - grad]))
 
 
 img = make_test_image()
@@ -31,13 +31,13 @@ for name in ("nearest", "linear", "cubic", "bspline", "mitchell", "box", "auto")
 img.resize(64, 64).write(OUT / "resize_default.png")
 
 # Other options are keywords of Resizer(...).
-wrap = libstb.Resizer(
-    libstb.Resizer.Filter.MITCHELL, libstb.Resizer.Edge.WRAP, srgb=False
+wrap = stb.Resizer(
+    stb.Resizer.Filter.MITCHELL, stb.Resizer.Edge.WRAP, srgb=False
 )
 img.resize(64, 64, wrap).write(OUT / "resize_wrap_linear_light.png")
 
 # A name plus other options.
-img.resize(64, 64, libstb.Resizer("linear", srgb=False)).write(
+img.resize(64, 64, stb.Resizer("linear", srgb=False)).write(
     OUT / "resize_linear_no_srgb.png"
 )
 

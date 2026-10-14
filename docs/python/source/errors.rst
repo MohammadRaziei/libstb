@@ -1,7 +1,7 @@
 Errors
 ======
 
-Runtime failures derive from ``libstb.Error``. Programmer errors raise ``ValueError``
+Runtime failures derive from ``stb.Error``. Programmer errors raise ``ValueError``
 or ``TypeError``.
 
 .. autoexception:: libstb.Error

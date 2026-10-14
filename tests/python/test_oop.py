@@ -1,7 +1,7 @@
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
-import libstb
+import libstb as stb
 from libstb import Image, ImageInfo
 
 from test_image import EXPECTED, RGB
@@ -26,7 +26,7 @@ def test_open_path(tmp_path):
 def test_open_options():
     assert Image.open(RGB, channels=4).channels == 4
     np.testing.assert_array_equal(Image.open(RGB, flip=True).numpy(), EXPECTED[::-1])
-    with pytest.raises(libstb.LimitError, match="too large"):
+    with pytest.raises(stb.LimitError, match="too large"):
         Image.open(RGB, max_bytes=1)
     with pytest.raises(ValueError):
         Image.open(RGB, channels=9)
@@ -54,11 +54,11 @@ def test_constructor_from_array():
 def test_image_info_class():
     i = ImageInfo.read(RGB)
     assert isinstance(i, ImageInfo)
-    assert i == (2, 2, 3) == libstb.iminfo(RGB)
+    assert i == (2, 2, 3) == stb.iminfo(RGB)
 
 
 def test_functional_shortcuts_match_object_api():
-    np.testing.assert_array_equal(libstb.imread(RGB, flip=True), Image.open(RGB, flip=True).numpy())
+    np.testing.assert_array_equal(stb.imread(RGB, flip=True), Image.open(RGB, flip=True).numpy())
 
 
 def test_numpy_method():
@@ -163,7 +163,7 @@ def test_open_sources_bytes_bytearray_memoryview_ndarray_and_paths(tmp_path):
 def test_open_missing_file_is_file_not_found_and_not_a_libstb_error(tmp_path):
     with pytest.raises(FileNotFoundError) as e:
         Image.open(tmp_path / "nope.png")
-    assert not isinstance(e.value, libstb.Error)
+    assert not isinstance(e.value, stb.Error)
     assert e.value.errno is not None and "nope.png" in str(e.value)
 
 

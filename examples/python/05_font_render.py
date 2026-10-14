@@ -7,7 +7,7 @@ Only use fonts you trust: stb_truetype does no bounds checking.
 import sys
 from pathlib import Path
 
-import libstb
+import libstb as stb
 
 OUT = Path(__file__).parent / "output"
 OUT.mkdir(exist_ok=True)
@@ -29,7 +29,7 @@ def find_font():
     sys.exit("No font found: pass one as an argument.")
 
 
-font = libstb.Font.open(find_font())
+font = stb.Font.open(find_font())
 size = 32
 
 print("metrics :", font.metrics(size))

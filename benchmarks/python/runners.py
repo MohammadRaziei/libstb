@@ -17,12 +17,12 @@ Only that callable is ever timed or memory-measured.
 Operations, and what each one is fair to compare:
 
   info          Read width/height/channels from the header only, no
-                pixel decoding. libstb.iminfo vs Pillow (Image.open is
+                pixel decoding. stb.iminfo vs Pillow (Image.open is
                 lazy: .size and .mode come from the header). OpenCV and
                 imageio have no header-only API, so they do not appear.
 
   decode        Encoded bytes in, uint8 pixel array out, in the file's
-                own channel count. libstb.Image.open(bytes).numpy(),
+                own channel count. stb.Image.open(bytes).numpy(),
                 Pillow (np.asarray of the opened image), OpenCV
                 (imdecode, IMREAD_UNCHANGED), imageio (imread, with the
                 extension given).
@@ -161,7 +161,7 @@ class Inputs:
     @property
     def arr(self):
         """Raw pixels, HxWxC uint8, C-contiguous and writable (so
-        libstb.Image can share them without a copy)."""
+        stb.Image can share them without a copy)."""
         if self._arr is None:
             import numpy as np
             raw = self.entry.get("raw")
@@ -209,20 +209,20 @@ def _overlay(inp):
 # ------------------------------------------------------------- libstb --
 
 def _libstb(op, inp, srgb=False):
-    import libstb
+    import libstb as stb
     import numpy  # noqa: F401 - libstb imports it lazily on first .numpy(); setup, not the operation
 
     if op == "info":
         data = inp.data
-        return lambda: libstb.iminfo(data)
+        return lambda: stb.iminfo(data)
     if op == "decode":
         data = inp.data
-        return lambda: libstb.Image.open(data).numpy()
+        return lambda: stb.Image.open(data).numpy()
     if op == "load_file":
         path = inp.path
-        return lambda: libstb.imread(path)
+        return lambda: stb.imread(path)
     if op.startswith("encode_"):
-        img = libstb.Image(inp.arr)  # shares the array's pixels, no copy
+        img = stb.Image(inp.arr)  # shares the array's pixels, no copy
         fmt = op[len("encode_"):]
         if fmt == "png":
             return lambda: img.to_png(compression=PNG_LEVEL)
@@ -233,13 +233,13 @@ def _libstb(op, inp, srgb=False):
         if fmt == "tga":
             return lambda: img.to_tga(rle=False)
     if op in RESIZE_OPS:
-        img = libstb.Image(inp.arr)
+        img = stb.Image(inp.arr)
         w, h = _resize_target(op, inp)
         _, filt = RESIZE_OPS[op]
-        r = libstb.Resizer(filt, srgb=srgb)
+        r = stb.Resizer(filt, srgb=srgb)
         return lambda: img.resize(w, h, r)
     if op in EDIT_OPS:
-        img = libstb.Image(inp.arr)
+        img = stb.Image(inp.arr)
         if op == "crop":
             x, y, cw, ch = _crop_box(inp)
             return lambda: img.crop(x, y, cw, ch)
@@ -249,7 +249,7 @@ def _libstb(op, inp, srgb=False):
             return lambda: img.flip_horizontal()
         if op == "convert_gray":
             return lambda: img.convert(1)
-        over = libstb.Image(_overlay(inp))
+        over = stb.Image(_overlay(inp))
         return lambda: img.composite(over)
     raise Unavailable(f"no libstb runner for {op}")
 
@@ -460,7 +460,7 @@ def describe(result):
     shape = getattr(result, "shape", None)
     if shape is not None:
         return {"out_shape": [int(s) for s in shape]}
-    # libstb.Image and libstb.ImageInfo
+    # stb.Image and stb.ImageInfo
     if hasattr(result, "width") and hasattr(result, "channels"):
         return {"out_shape": [int(result.height), int(result.width), int(result.channels)]}
     # PIL.Image.Image

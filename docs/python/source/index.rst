@@ -9,13 +9,13 @@ Pillow are optional.
 
 .. code-block:: python
 
-   import libstb
+   import libstb as stb
 
-   img = libstb.Image.open("photo.png")
+   img = stb.Image.open("photo.png")
    small = img.resize(320, 240, "cubic")
    small.write("photo.jpg")               # format from the extension
 
-   pixels = libstb.imread("photo.png")    # ndarray, needs numpy
+   pixels = stb.imread("photo.png")       # ndarray, needs numpy
 
 Installation
 ------------

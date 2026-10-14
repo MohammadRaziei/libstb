@@ -1,14 +1,14 @@
 Images
 ======
 
-``libstb.Image`` is the C++ ``stb::image`` itself, not a wrapper. Every editing
+``stb.Image`` is the C++ ``stb::image`` itself, not a wrapper. Every editing
 operation returns a new ``Image``.
 
 .. code-block:: python
 
-   import libstb
+   import libstb as stb
 
-   img = libstb.Image.open("photo.jpg", orient=True)   # apply the EXIF orientation
+   img = stb.Image.open("photo.jpg", orient=True)   # apply the EXIF orientation
    part = img.crop(10, 10, 200, 100)
    turned = img.rotate90()                              # counter-clockwise
    gray = img.convert(1)

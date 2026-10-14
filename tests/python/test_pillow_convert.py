@@ -9,7 +9,7 @@ np = pytest.importorskip("numpy")  # the tests below need numpy: without it this
 PIL = pytest.importorskip("PIL")  # Pillow is only needed to compare against: skip the module without it
 pytest.importorskip("PIL.Image")
 
-import libstb
+import libstb as stb
 
 MODES = {1: "L", 2: "LA", 3: "RGB", 4: "RGBA"}
 
@@ -28,14 +28,14 @@ def pixels(pil, c):
 @pytest.mark.parametrize("c", [1, 2, 3, 4])
 def test_to_pil_has_the_mode_the_channels_say_and_the_same_pixels(c):
     a = rand(5, 7, c)
-    pil = libstb.Image(a.copy()).to_pil()
+    pil = stb.Image(a.copy()).to_pil()
     assert isinstance(pil, PIL.Image.Image)
     assert pil.mode == MODES[c] and pil.size == (7, 5)
     np.testing.assert_array_equal(pixels(pil, c), a)
 
 
 def test_to_pil_is_a_copy():
-    img = libstb.Image(np.zeros((2, 2, 3), np.uint8))
+    img = stb.Image(np.zeros((2, 2, 3), np.uint8))
     pil = img.to_pil()
     img.numpy()[:] = 255
     assert pil.getpixel((0, 0)) == (0, 0, 0)
@@ -50,7 +50,7 @@ def test_to_pil_is_a_copy():
 def test_from_pil_takes_the_four_native_modes_as_they_are(c):
     a = rand(5, 7, c, seed=c)
     pil = PIL.Image.fromarray(a[..., 0] if c == 1 else a)
-    img = libstb.Image.from_pil(pil)
+    img = stb.Image.from_pil(pil)
     assert (img.width, img.height, img.channels) == (7, 5, c)
     np.testing.assert_array_equal(img.numpy(), a)
 
@@ -63,7 +63,7 @@ def test_from_pil_converts_the_modes_that_have_8_bit_colour(mode, expected_mode)
     pil = PIL.Image.new(mode, (5, 4))
     pil.putpixel((1, 2), {"1": 1, "La": (7, 200), "RGBa": (10, 20, 30, 100), "RGBX": (1, 2, 3, 0),
                           "CMYK": (10, 20, 30, 40), "YCbCr": (50, 60, 70), "PA": (3, 120)}[mode])
-    img = libstb.Image.from_pil(pil)
+    img = stb.Image.from_pil(pil)
     want = np.asarray(pil.convert(expected_mode))
     assert img.channels == len(expected_mode)
     np.testing.assert_array_equal(img.numpy().reshape(want.shape), want)
@@ -74,7 +74,7 @@ def test_from_pil_converts_a_palette_image_to_its_colours():
     pil.putpalette([255, 0, 0, 0, 255, 0, 0, 0, 255] + [0] * (256 * 3 - 9))
     pil.putpixel((1, 0), 1)
     pil.putpixel((2, 0), 2)
-    img = libstb.Image.from_pil(pil)
+    img = stb.Image.from_pil(pil)
     assert img.channels == 3
     assert img.numpy()[0, 0].tolist() == [255, 0, 0]
     assert img.numpy()[0, 1].tolist() == [0, 255, 0]
@@ -87,7 +87,7 @@ def test_from_pil_keeps_the_transparency_of_a_palette_image():
     pil.putpalette([10, 20, 30, 40, 50, 60] + [0] * (256 * 3 - 6))
     pil.putpixel((1, 0), 1)
     pil.info["transparency"] = 0  # palette index 0 is transparent
-    img = libstb.Image.from_pil(pil)
+    img = stb.Image.from_pil(pil)
     assert img.channels == 4
     assert img.numpy()[0, 0].tolist() == [10, 20, 30, 0]
     assert img.numpy()[0, 1].tolist() == [40, 50, 60, 255]
@@ -96,24 +96,24 @@ def test_from_pil_keeps_the_transparency_of_a_palette_image():
 @pytest.mark.parametrize("mode", ["I", "I;16", "F", "LAB", "HSV"])
 def test_from_pil_refuses_modes_without_8_bit_colour(mode):
     with pytest.raises(TypeError, match="8-bit colour"):
-        libstb.Image.from_pil(PIL.Image.new(mode, (3, 2)))
+        stb.Image.from_pil(PIL.Image.new(mode, (3, 2)))
 
 
 @pytest.mark.parametrize("bad", [None, 3, "photo.png", np.zeros((2, 2, 3), np.uint8), object()])
 def test_from_pil_needs_a_pillow_image(bad):
     with pytest.raises(TypeError, match="PIL.Image.Image"):
-        libstb.Image.from_pil(bad)
+        stb.Image.from_pil(bad)
 
 
 def test_image_of_a_palette_or_cmyk_image_is_not_silently_read_as_colour():
     # Image(pil) stays strict; from_pil is the forgiving one.
     with pytest.raises(TypeError):
-        libstb.Image(PIL.Image.new("F", (2, 2)))
+        stb.Image(PIL.Image.new("F", (2, 2)))
 
 
 def test_a_round_trip_through_both_methods():
     a = rand(6, 9, 4, 3)
-    back = libstb.Image.from_pil(libstb.Image(a.copy()).to_pil())
+    back = stb.Image.from_pil(stb.Image(a.copy()).to_pil())
     np.testing.assert_array_equal(back.numpy(), a)
 
 
@@ -121,7 +121,7 @@ def test_from_pil_works_on_an_image_opened_from_a_file(tmp_path):
     a = rand(8, 8, 3, 4)
     p = tmp_path / "x.png"
     PIL.Image.fromarray(a).save(p)
-    np.testing.assert_array_equal(libstb.Image.from_pil(PIL.Image.open(p)).numpy(), a)  # lazy-loaded pixels
+    np.testing.assert_array_equal(stb.Image.from_pil(PIL.Image.open(p)).numpy(), a)  # lazy-loaded pixels
 
 
 # ------------------------------------------------------------------ lazy import
@@ -133,7 +133,7 @@ def run(code):
 
 def test_importing_libstb_does_not_import_pillow():
     r = run("""
-        import sys, libstb
+        import sys, libstb as stb
         assert 'PIL' not in sys.modules, 'importing libstb imported Pillow'
     """)
     assert r.returncode == 0, r.stderr
@@ -141,8 +141,8 @@ def test_importing_libstb_does_not_import_pillow():
 
 def test_the_methods_import_pillow_when_called():
     r = run("""
-        import sys, libstb
-        img = libstb.Image(memoryview(bytearray(24)).cast('B', shape=[2, 4, 3]))
+        import sys, libstb as stb
+        img = stb.Image(memoryview(bytearray(24)).cast('B', shape=[2, 4, 3]))
         assert 'PIL' not in sys.modules
         img.to_pil()
         assert 'PIL' in sys.modules
@@ -154,9 +154,9 @@ def test_without_pillow_the_methods_say_how_to_install_it_and_the_rest_works():
     r = run("""
         import sys
         sys.modules['PIL'] = None  # makes `import PIL` fail
-        import libstb
-        img = libstb.Image(memoryview(bytearray(24)).cast('B', shape=[2, 4, 3]))
-        for call in (lambda: img.to_pil(), lambda: libstb.Image.from_pil(object())):
+        import libstb as stb
+        img = stb.Image(memoryview(bytearray(24)).cast('B', shape=[2, 4, 3]))
+        for call in (lambda: img.to_pil(), lambda: stb.Image.from_pil(object())):
             try:
                 call()
             except ImportError as e:
