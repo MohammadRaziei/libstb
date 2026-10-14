@@ -16,10 +16,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: "3.11"
         cache: "pip"
@@ -45,7 +45,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Install apt dependencies
       run: |
@@ -53,7 +53,7 @@ jobs:
         sudo apt-get install -y doxygen graphviz
 
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: "3.11"
         cache: "pip"
@@ -88,10 +88,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: "3.11"
         cache: "pip"
@@ -102,8 +102,8 @@ jobs:
     # torch is not a test dependency: tests/python/test_torch.py skips itself without it. The CPU
     # wheel (a few hundred MB, instead of several GB of CUDA libraries) makes the DLPack tests run
     # here, so they count towards the coverage report.
-    - name: Install torch (CPU)
-      run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+    - name: Install torch (CPU)  
+      run: uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
 
     - name: Install coverage tools
       run: |
