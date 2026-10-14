@@ -33,7 +33,10 @@ add_dependencies(libstb_test libstb_test_cpp)
 # The test executable above is also the coverage one: with lcov and genhtml available it is
 # built with coverage instrumentation (-O0 so lines map 1:1), and libstb_coverage_cpp runs it.
 if(LCOV_EXECUTABLE AND GENHTML_EXECUTABLE)
-    target_compile_options(test_libstb_cpp PRIVATE -O0 -g --coverage)
+    # -fprofile-update=atomic: several tests run threads (concurrent_*), and with the default
+    # non-atomic counters two threads can race on one counter; geninfo then fails with
+    # "Unexpected negative count".
+    target_compile_options(test_libstb_cpp PRIVATE -O0 -g --coverage -fprofile-update=atomic)
     target_link_options(test_libstb_cpp PRIVATE --coverage)
     # LTO (from apply_optimization_flags) would blur the line counters
     set_target_properties(test_libstb_cpp PROPERTIES
