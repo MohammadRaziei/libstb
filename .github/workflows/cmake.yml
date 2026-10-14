@@ -117,7 +117,7 @@ jobs:
           -DLIBSTB_BUILD_PYTHON=ON \
           -DLIBSTB_BUILD_DOCS=OFF
 
-    # C++ (lcov, on an instrumented copy of the core), Python (coverage.py) and the merged total.
+    # C++ (lcov), Python (coverage.py) and the merged total.
     - name: Generate coverage report
       run: cmake --build build --target libstb_coverage
 

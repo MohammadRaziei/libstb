@@ -37,8 +37,9 @@ This file was generated from the git history (42 commits, tags `v0.3.0`, `v0.4.0
   C++ reference (Doxygen), the Python reference (Sphinx) and a landing page into `build/docs/out`.
 - Coverage: `cmake --build build --target libstb_coverage` builds an lcov report for the C++ core, a
   coverage.py report for the Python layer, a merged total and a dashboard in `build/coverage` (needs
-  `lcov` and `coverage`). The C++ part uses its own instrumented copy of the core, so the normal build
-  and the Python extension are unchanged.
+  `lcov` and `coverage`). The C++ tests compile the core sources into the test executable, so
+  coverage is just a few flags on that target; the shipped `libstb::core` and the Python extension are
+  unchanged.
 - CI: QEMU user-mode job (`emulate`) that checks the fallback to portable SIMD backends on a CPU
   without AVX2 (Nehalem) and the use of AVX2 kernels when available (Haswell).
 - CI: native ARM64 runners (Linux and Windows) in the wheel matrix.

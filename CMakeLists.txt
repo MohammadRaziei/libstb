@@ -60,32 +60,41 @@ target_include_directories(libstb_core
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${_libstb_inc_dest}>
 )
-# SYSTEM: vendored headers we don't control - their internal warnings are not
-# ours to fix under our own -Wall/-Wextra/-W4.
-target_include_directories(libstb_core SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/src/third_party/stb)
+# Everything that decides how the core sources are compiled lives in this function, so a target
+# that compiles them itself (tests/cpp does, to attach coverage flags) gets exactly the same
+# settings as libstb_core.
+function(libstb_apply_core_build_settings target)
+    # SYSTEM: vendored headers we don't control - their internal warnings are not
+    # ours to fix under our own -Wall/-Wextra/-W4.
+    target_include_directories(${target} SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/src/third_party/stb)
 
-target_compile_options(libstb_core PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /EHsc>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
-)
-# -fno-trapping-math: lets GCC/Clang vectorize float->int conversions in the JPEG encoder's
-# quantization (about 2x faster JPEG). It only means FP operations are not required to
-# raise hardware traps (nothing here enables or reads them); results are unchanged.
-target_compile_options(libstb_core PRIVATE
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-trapping-math>
-)
-apply_optimization_flags(libstb_core)
+    target_compile_options(${target} PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /EHsc>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+    )
+    # -fno-trapping-math: lets GCC/Clang vectorize float->int conversions in the JPEG encoder's
+    # quantization (about 2x faster JPEG). It only means FP operations are not required to
+    # raise hardware traps (nothing here enables or reads them); results are unchanged.
+    target_compile_options(${target} PRIVATE
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-trapping-math>
+    )
+    apply_optimization_flags(${target})
 
-# image_kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
-# compiler's auto-vectoriser off. (MSVC has no such switch: there it may still vectorise,
-# with identical results.)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
-        PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-fno-tree-slp-vectorize")
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
-        PROPERTIES COMPILE_OPTIONS "-fno-vectorize;-fno-slp-vectorize")
-endif()
+    # image_kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
+    # compiler's auto-vectoriser off. (MSVC has no such switch: there it may still vectorise,
+    # with identical results.) TARGET_DIRECTORY: source file properties are per directory scope.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
+            TARGET_DIRECTORY ${target}
+            PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-fno-tree-slp-vectorize")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
+            TARGET_DIRECTORY ${target}
+            PROPERTIES COMPILE_OPTIONS "-fno-vectorize;-fno-slp-vectorize")
+    endif()
+endfunction()
+
+libstb_apply_core_build_settings(libstb_core)
 
 # --- install (find_package(libstb) -> libstb::core) ---
 include(CMakePackageConfigHelpers)

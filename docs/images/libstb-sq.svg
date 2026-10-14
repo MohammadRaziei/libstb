@@ -1,6 +1,23 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 214">
-  <!-- Placeholder logo: replace with the real artwork (keep the file name). -->
-  <rect x="10" y="10" width="194" height="194" rx="28" fill="none" stroke="#4dabf7" stroke-width="16"/>
-  <text x="107" y="132" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="84" font-weight="700" fill="#4dabf7">stb</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 214" role="img" aria-label="libstb">
+  <defs>
+    <linearGradient id="lsBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect x="7" y="7" width="200" height="200" rx="46" fill="url(#lsBg)"/>
+  <rect x="38" y="46" width="138" height="114" rx="16" fill="#ffffff"/>
+  <g>
+    <circle cx="136" cy="80" r="12" fill="#fbbf24"/>
+    <path d="M54 160 A16 16 0 0 1 38 144 L38 134 L82 84 L128 160 Z" fill="#6366f1"/>
+      <rect x="90" y="146" width="13" height="13" rx="2.5" fill="#38bdf8"/>
+      <rect x="104" y="146" width="13" height="13" rx="2.5" fill="#7dd3fc"/>
+      <rect x="118" y="146" width="13" height="13" rx="2.5" fill="#38bdf8"/>
+      <rect x="132" y="146" width="13" height="13" rx="2.5" fill="#7dd3fc"/>
+      <rect x="146" y="146" width="13" height="13" rx="2.5" fill="#38bdf8"/>
+      <rect x="104" y="132" width="13" height="13" rx="2.5" fill="#7dd3fc"/>
+      <rect x="118" y="132" width="13" height="13" rx="2.5" fill="#38bdf8"/>
+      <rect x="132" y="132" width="13" height="13" rx="2.5" fill="#7dd3fc"/>
+      <rect x="118" y="118" width="13" height="13" rx="2.5" fill="#38bdf8"/>
+  </g>
 </svg>
