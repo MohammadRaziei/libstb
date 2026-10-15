@@ -53,10 +53,15 @@ add_custom_command(
 add_custom_target(libstb_bench_katex DEPENDS "${KATEX_MIN_JS}")
 
 # ------------------------------------------------------------- report --
+# outputs/index.html is the standalone report (Chart.js and KaTeX inlined, one file). It is built
+# straight from outputs/results/*.json. outputs/benchmark.json is a small digest of the same
+# results (gather.py, standard library only): the docs landing page reads it in the browser to
+# draw its teaser, so the report itself does not depend on it.
 
-set(REPORT_HTML "${LIBSTB_BENCH_RESULTS_DIR}/report.html")
+set(REPORT_HTML "${LIBSTB_BENCH_OUTPUT_DIR}/index.html")
+set(REPORT_JSON "${LIBSTB_BENCH_OUTPUT_DIR}/benchmark.json")
 
-file(MAKE_DIRECTORY "${LIBSTB_BENCH_RESULTS_DIR}")
+file(MAKE_DIRECTORY "${LIBSTB_BENCH_OUTPUT_DIR}")
 
 add_custom_command(
   OUTPUT "${REPORT_HTML}"
@@ -64,7 +69,7 @@ add_custom_command(
   # python/CMakeLists.txt for why every venv-python invocation carries this.
   COMMAND "${LIBSTB_BENCH_VENV_PYTHON}" -W "ignore::RuntimeWarning:site"
           "${CMAKE_CURRENT_SOURCE_DIR}/generate_report.py"
-          "${LIBSTB_BENCH_RESULTS_SCRATCH_DIR}" "${REPORT_HTML}"
+          "${LIBSTB_BENCH_RESULT_JSON_DIR}" "${REPORT_HTML}"
           --chartjs-path "${CHARTJS_UMD_MIN}"
           --katex-dir "${KATEX_DIST}"
   DEPENDS
@@ -77,19 +82,13 @@ add_custom_command(
   COMMENT "libstb benchmarks: rendering the standalone HTML report"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_report DEPENDS "${REPORT_HTML}")
-add_dependencies(libstb_bench_report
-  libstb_bench_verify
-  libstb_bench_throughput
-  libstb_bench_throughput_memory
-  libstb_bench_scaling
-  libstb_bench_sizes
-  libstb_bench_fonts
-  libstb_bench_system_info
-  libstb_bench_chartjs
-  libstb_bench_katex
-)
 
-# results/report.html is the one artifact meant to be committed (see
-# README.md). This directory stays genuinely self-contained/copyable
-# elsewhere: nothing here writes outside results/.
+add_custom_command(
+  OUTPUT "${REPORT_JSON}"
+  COMMAND "${LIBSTB_BENCH_VENV_PYTHON}" -W "ignore::RuntimeWarning:site"
+          "${CMAKE_CURRENT_SOURCE_DIR}/gather.py" "${LIBSTB_BENCH_OUTPUT_DIR}"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gather.py" ${LIBSTB_BENCH_ALL_RESULT_JSONS}
+  COMMENT "libstb benchmarks: gathering outputs/results/*.json -> outputs/benchmark.json"
+  USES_TERMINAL
+)
+add_custom_target(libstb_bench_report DEPENDS "${REPORT_HTML}" "${REPORT_JSON}")

@@ -1,6 +1,6 @@
 [theme]
 inherit = "basic"
-stylesheets = ["basic.css", "libstb-sphinx.css"]
+stylesheets = ["basic.css", "libstb-docs.css", "libstb-sphinx.css"]
 sidebars = []
 
 [options]

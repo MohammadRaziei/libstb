@@ -29,6 +29,7 @@ if(DOXYGEN_FOUND)
             -DFOOTER_IN=${LIBSTB_DOCS_CPP_DIR}/footer.html.in
             -DDOXYFILE_IN=${LIBSTB_DOCS_CPP_DIR}/Doxyfile.in
             -DLOGO_SRC=${PROJECT_SOURCE_DIR}/docs/images/libstb-theme.svg
+            -DASSETS_DIR=${LIBSTB_ASSETS_DIR}
             -P ${LIBSTB_DOCS_CPP_DIR}/CreateDocs.cmake
         DEPENDS
             ${LIBSTB_DOCS_CPP_DIR}/CreateDocs.cmake
@@ -95,6 +96,7 @@ endif()
 # ── Route Index Page ──────────────────────────────────────────
 
 set(LIBSTB_INDEX_OUT ${LIBSTB_DOCS_OUT}/index.html)
+set(LIBSTB_ASSETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)
 
 # Per-language tab content for the docs/install/example panels: supported_langs.json
 # lists the languages (see its "_comment" field for the format), and each language
@@ -111,12 +113,17 @@ file(GLOB_RECURSE LIBSTB_LANG_FRAGMENTS
     ${CMAKE_CURRENT_SOURCE_DIR}/*/index-example.txt
 )
 
+set(LIBSTB_ASSETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)
+set(LIBSTB_SHOWCASE_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/make_showcase.py)
+file(GLOB_RECURSE LIBSTB_ASSET_FILES ${LIBSTB_ASSETS_DIR}/*)
+
 add_custom_command(
     OUTPUT ${LIBSTB_INDEX_OUT}
     COMMAND ${CMAKE_COMMAND}
         -DOUTPUT_DIR=${LIBSTB_DOCS_OUT}
         -DINDEX_IN=${CMAKE_CURRENT_SOURCE_DIR}/index.html.in
-        -DCSS_FILE=${CMAKE_CURRENT_SOURCE_DIR}/libstb-docs.css
+        -DASSETS_DIR=${LIBSTB_ASSETS_DIR}
+        -DSHOWCASE_SCRIPT=${LIBSTB_SHOWCASE_SCRIPT}
         -DPROJECT_VERSION=${PROJECT_VERSION}
         -DLOGO_SQ=${PROJECT_SOURCE_DIR}/docs/images/libstb-sq.svg
         -DLANGS_FILE=${LIBSTB_SUPPORTED_LANGS}
@@ -127,11 +134,12 @@ add_custom_command(
         ${CMAKE_CURRENT_SOURCE_DIR}/CreateDocs.cmake
         ${LIBSTB_GENERATE_SCRIPT}
         ${CMAKE_CURRENT_SOURCE_DIR}/index.html.in
-        ${CMAKE_CURRENT_SOURCE_DIR}/libstb-docs.css
+        ${LIBSTB_ASSET_FILES}
+        ${LIBSTB_SHOWCASE_SCRIPT}
         ${PROJECT_SOURCE_DIR}/docs/images/libstb-sq.svg
         ${LIBSTB_SUPPORTED_LANGS}
         ${LIBSTB_LANG_FRAGMENTS}
-    COMMENT "Creating documentation route index"
+    COMMENT "Creating the landing page"
     VERBATIM
 )
 
@@ -162,21 +170,20 @@ add_custom_command(TARGET libstb_docs POST_BUILD
 )
 
 # ── Benchmarks page ───────────────────────────────────────────
-# benchmarks/results/report.html is generated on a developer machine
-# (cmake --build build --target libstb_benchmark inside benchmarks/, see
-# benchmarks/README.md) and committed; it is only copied here, never
-# rebuilt. Runs after InjectComment above so the standalone file is
-# published byte-for-byte as committed.
-set(LIBSTB_BENCH_REPORT ${PROJECT_SOURCE_DIR}/benchmarks/results/report.html)
-if(EXISTS ${LIBSTB_BENCH_REPORT})
+# benchmarks/outputs/ is generated on a developer machine (see benchmarks/README.md) and
+# committed; it is only copied here, never rebuilt. It is published as it is, folder and all:
+# index.html (the page), benchmark.json (its data, which the landing page's teaser also reads in
+# the browser) and results/<step>.json (what each step measured). Runs after InjectComment above so the page is published
+# byte-for-byte as committed.
+set(LIBSTB_BENCH_OUTDIR ${PROJECT_SOURCE_DIR}/benchmarks/outputs)
+if(EXISTS ${LIBSTB_BENCH_OUTDIR}/index.html)
     add_custom_command(TARGET libstb_docs POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBSTB_DOCS_OUT}/benchmarks
-        COMMAND ${CMAKE_COMMAND} -E copy ${LIBSTB_BENCH_REPORT} ${LIBSTB_DOCS_OUT}/benchmarks/index.html
-        COMMENT "Publishing committed benchmark report -> ${LIBSTB_DOCS_OUT}/benchmarks/index.html"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBSTB_BENCH_OUTDIR} ${LIBSTB_DOCS_OUT}/benchmarks
+        COMMENT "Publishing committed benchmarks/outputs/ -> ${LIBSTB_DOCS_OUT}/benchmarks/"
         VERBATIM
     )
 else()
-    message(WARNING "benchmarks/results/report.html not found -- the docs site "
-                    "will have no /benchmarks/ page. Generate it with the "
-                    "libstb_benchmark target in benchmarks/ and commit it.")
+    message(WARNING "benchmarks/outputs/index.html not found -- the docs site "
+                    "will have no /benchmarks/ page. Generate it as described in "
+                    "benchmarks/README.md and commit it.")
 endif()

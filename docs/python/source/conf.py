@@ -85,8 +85,12 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 html_theme       = 'libstb'
 html_theme_path  = [str(DOCS_DIR / '_themes')]
 html_css_files   = []
-pygments_style   = 'monokai'
+# The shared stylesheet, its fonts and the logo come from docs/assets (one copy for every page of the
+# site); the theme's own small libstb-sphinx.css only lays out the three columns.
+html_static_path = [str(PROJECT_ROOT / 'docs' / 'assets')]
+pygments_style   = 'default'
 
+# html_logo copies the mark into _static/libstb-sq.svg, which layout.html uses for the logo and favicon.
 _logo = IMAGES_DIR / 'libstb-sq.svg'
 if _logo.exists():
     html_logo = str(_logo)

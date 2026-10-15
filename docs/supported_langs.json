@@ -1,42 +1,31 @@
 {
   "_comment": [
-    "libstb supported-language registry - drives the tab bar + tab content of",
-    "docs/index.html.in (see docs/generate_index.py, invoked by docs/CreateDocs.cmake).",
+    "libstb supported-language registry: drives the tabs of docs/index.html.in",
+    "(see docs/generate_index.py, invoked by docs/CreateDocs.cmake).",
     "",
     "Each entry's 'folder' must contain three fragment files:",
-    "  <folder>/index-docs.json    - structured API-reference card fields",
-    "                                 (title, badge, description, meta_icon,",
-    "                                 meta_label, link_href, link_label)",
-    "  <folder>/index-install.txt  - raw HTML for the install panel",
-    "  <folder>/index-example.txt  - raw HTML for the quick-example panel",
+    "  <folder>/index-docs.json    - the API-reference row (title, badge, description,",
+    "                                meta_label, link_href, link_label)",
+    "  <folder>/index-install.txt  - HTML for the install panel",
+    "  <folder>/index-example.txt  - HTML for the quick-example panel",
+    "Code goes in <pre data-lang=\"python\" data-label=\"python\">...</pre> (escaped source);",
+    "generate_index.py adds the header, the Copy button and the colours.",
     "",
     "role (optional, default 'binding') decides how an entry is counted in the",
-    "hero/footer text that generate_index.py derives from this file:",
+    "text generate_index.py derives from this file:",
     "  'tool'    - not a language: gets tabs, but is left out of every list",
-    "  'core'    - the C++ core: listed as a supported language, but not counted",
-    "              as a binding",
-    "  'binding' - a language binding",
-    "",
-    "icon.kind is 'fa' (a Font Awesome class string) or 'svg' (a named inline",
-    "glyph resolved by generate_index.py's ICON_SVG dict, currently only 'layers')."
+    "  'core'    - the C++ core: listed as a supported language, not counted as a binding",
+    "  'binding' - a language binding"
   ],
   "languages": [
     {
       "folder": "cpp",
       "name": "C++",
-      "role": "core",
-      "icon": {
-        "kind": "svg",
-        "value": "layers"
-      }
+      "role": "core"
     },
     {
       "folder": "python",
-      "name": "Python",
-      "icon": {
-        "kind": "fa",
-        "value": "fa-brands fa-python"
-      }
+      "name": "Python"
     }
   ]
 }

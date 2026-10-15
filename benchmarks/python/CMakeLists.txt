@@ -1,6 +1,8 @@
 set(PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(VENV_DIR "${CMAKE_CURRENT_BINARY_DIR}/venv")
-set(RESULTS_DIR "${CMAKE_CURRENT_BINARY_DIR}/results")
+# Every step writes its own JSON here: outputs/results/<step>.json. These are
+# committed together with benchmark.json and index.html (see ../README.md).
+set(RESULTS_DIR "${LIBSTB_BENCH_OUTPUT_DIR}/results")
 set(SCRATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}/scratch")
 
 if(WIN32)
@@ -252,7 +254,7 @@ add_custom_command(
 add_custom_target(libstb_bench_system_info DEPENDS "${SYSTEM_INFO_JSON}")
 
 # Expose to the parent scope (report/CMakeLists.txt needs these paths)
-set(LIBSTB_BENCH_RESULTS_SCRATCH_DIR "${RESULTS_DIR}" PARENT_SCOPE)
+set(LIBSTB_BENCH_RESULT_JSON_DIR "${RESULTS_DIR}" PARENT_SCOPE)
 set(LIBSTB_BENCH_VENV_PYTHON "${VENV_PYTHON}" PARENT_SCOPE)
 set(LIBSTB_BENCH_VENV_STAMP "${VENV_STAMP}" PARENT_SCOPE)
 set(LIBSTB_BENCH_ALL_RESULT_JSONS

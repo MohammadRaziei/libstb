@@ -1,0 +1,120 @@
+{
+  "libstb": {
+    "available": true,
+    "name": "libstb",
+    "version": "0.5.0",
+    "size": "2.1 MB",
+    "total_size": "2.1 MB",
+    "filename": "libstb-0.5.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "dependencies": [],
+    "capability": "image decode, png/jpg/bmp/tga encode, resize, TrueType text (stb, no system dependencies)"
+  },
+  "pillow": {
+    "available": true,
+    "name": "Pillow",
+    "version": "12.3.0",
+    "size": "6.6 MB",
+    "total_size": "6.6 MB",
+    "filename": "pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "dependencies": [],
+    "capability": "many-format image io, resize, filters, drawing, FreeType text"
+  },
+  "opencv": {
+    "available": true,
+    "name": "opencv-python-headless",
+    "version": "5.0.0.93",
+    "size": "58.4 MB",
+    "total_size": "74.3 MB",
+    "filename": "opencv_python_headless-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl",
+    "dependencies": [
+      {
+        "name": "numpy",
+        "version": "2.5.4",
+        "size": "16.0 MB"
+      }
+    ],
+    "capability": "image io, resize, and a large computer-vision toolkit"
+  },
+  "imageio": {
+    "available": true,
+    "name": "imageio",
+    "version": "2.38.1",
+    "size": "320.7 KB",
+    "total_size": "22.9 MB",
+    "filename": "imageio-2.38.1-py3-none-any.whl",
+    "dependencies": [
+      {
+        "name": "numpy",
+        "version": "2.5.4",
+        "size": "16.0 MB"
+      },
+      {
+        "name": "pillow",
+        "version": "12.3.0",
+        "size": "6.6 MB"
+      }
+    ],
+    "capability": "many-format image io (delegates to Pillow and friends)"
+  },
+  "skimage": {
+    "available": true,
+    "name": "scikit-image",
+    "version": "0.26.0",
+    "size": "12.9 MB",
+    "total_size": "72.0 MB",
+    "filename": "scikit_image-0.26.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+    "dependencies": [
+      {
+        "name": "numpy",
+        "version": "2.5.4",
+        "size": "16.0 MB"
+      },
+      {
+        "name": "pillow",
+        "version": "12.3.0",
+        "size": "6.6 MB"
+      },
+      {
+        "name": "imageio",
+        "version": "2.38.1",
+        "size": "320.7 KB"
+      },
+      {
+        "name": "tifffile",
+        "version": "2026.9.20",
+        "size": "268.6 KB"
+      },
+      {
+        "name": "packaging",
+        "version": "26.3",
+        "size": "126.9 KB"
+      },
+      {
+        "name": "lazy-loader",
+        "version": "0.6",
+        "size": "8.6 KB"
+      },
+      {
+        "name": "scipy",
+        "version": "1.18.1",
+        "size": "33.7 MB"
+      },
+      {
+        "name": "networkx",
+        "version": "3.7",
+        "size": "2.0 MB"
+      }
+    ],
+    "capability": "image processing algorithms (io + resize + far more)"
+  },
+  "numpy": {
+    "available": true,
+    "name": "numpy",
+    "version": "2.5.4",
+    "size": "16.0 MB",
+    "total_size": "16.0 MB",
+    "filename": "numpy-2.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "dependencies": [],
+    "capability": "arrays only (a dependency of OpenCV, imageio and scikit-image; optional for libstb, not used by Pillow)"
+  }
+}

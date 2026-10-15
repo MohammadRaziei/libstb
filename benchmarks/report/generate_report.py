@@ -25,6 +25,8 @@ import json
 import math
 import os
 import re
+import shutil
+import sys
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -593,6 +595,26 @@ def _build_sizes_chart(size_rows):
 
 # ------------------------------------------------------------------ build --
 
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+SITE_ASSETS = os.path.join(REPO_ROOT, "docs", "assets")
+
+
+def _site_chrome(output_path):
+    """The docs site's design tokens and top bar (docs/assets/libstb-docs.css, everything above its
+    "== base ==" marker comment) and the logo, so this page
+    wears the same top bar and type as the landing page. The charts are not touched by any of this."""
+    css, logo = "", ""
+    try:
+        with open(os.path.join(SITE_ASSETS, "libstb-docs.css"), encoding="utf-8") as f:
+            text = f.read()
+        css = text[: text.index("/* == base == */")]
+        with open(os.path.join(REPO_ROOT, "docs", "images", "libstb-sq.svg"), encoding="utf-8") as f:
+            logo = f.read().strip()
+    except (OSError, ValueError):
+        print("generate_report: docs/assets not found, the page keeps a plain top bar", file=sys.stderr)
+    return css, logo
+
+
 def build(results_dir, output_path, chartjs_path, katex_dir=None):
     throughput = _load(os.path.join(results_dir, "throughput.json"))
     throughput_memory = _load(os.path.join(results_dir, "throughput_memory.json"))
@@ -629,6 +651,7 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
     if verify:
         meta.append(f"{verify['passed']} output checks passed before timing")
 
+    site_css, logo_svg = _site_chrome(output_path)
     env = Environment(loader=FileSystemLoader(HERE), autoescape=False)
     html = env.get_template("template.html.jinja2").render(
         generated_at=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -643,6 +666,7 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
         verify=verify, system_info=system_info, repeats=repeats,
         chartjs_source=chartjs_source, katex_css=katex_css, katex_js=katex_js, embedded_json=json.dumps(embedded),
         chart_scripts="\n".join(chart_scripts),
+        site_css=site_css, logo_svg=logo_svg,
     )
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)

@@ -2,7 +2,6 @@
   "title": "Python API",
   "badge": "Python 3.9+",
   "description": "nanobind extension module. Documents <code>Image</code> (open, resize, edit, write), <code>imread</code> / <code>imwrite</code> / <code>imresize</code>, <code>Resizer</code>, <code>Font</code> with text rendering and atlases, EXIF orientation, SIMD backend selection and the error classes. Ships pre-built wheels for Linux, macOS and Windows.",
-  "meta_icon": "fa-solid fa-book",
   "meta_label": "Generated with Sphinx",
   "link_href": "python/html/index.html",
   "link_label": "Open Python Reference"

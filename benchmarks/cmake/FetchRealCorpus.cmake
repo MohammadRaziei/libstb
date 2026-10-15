@@ -9,10 +9,9 @@
 #   - one real TrueType font (DejaVu Sans, from matplotlib's copy),
 #     for the font benchmark.
 #
-# Always lands in benchmarks/corpus/ in the SOURCE tree (persistent
-# across clean `build/` wipes, so nothing is re-downloaded every time),
-# with a .gitignore containing `*` written into it, so the downloaded
-# files are never committed, only the folder itself.
+# Always lands in <build dir>/corpus/, next to the venv and every other
+# disposable thing the suite makes: nothing downloaded here is ever
+# committed. Only outputs/ (see README.md) is meant to be.
 # This runs at CONFIGURE time (this file is include()'d directly by the
 # top-level CMakeLists.txt, before add_subdirectory()), so
 # `cmake -S . -B build` alone is enough to have the corpus ready.
@@ -34,9 +33,8 @@ set(LIBSTB_BENCH_FONT_URL
     "https://raw.githubusercontent.com/matplotlib/matplotlib/main/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSans.ttf"
     CACHE STRING "A real TrueType font for the font benchmark (set to an empty string to skip it)")
 
-set(_libstb_corpus_dir "${CMAKE_CURRENT_SOURCE_DIR}/corpus")
+set(_libstb_corpus_dir "${CMAKE_BINARY_DIR}/corpus")
 file(MAKE_DIRECTORY "${_libstb_corpus_dir}")
-file(WRITE "${_libstb_corpus_dir}/.gitignore" "*\n!.gitignore\n")
 
 function(_libstb_fetch url dest)
   if(EXISTS "${dest}")

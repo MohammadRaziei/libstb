@@ -18,9 +18,9 @@ jobs:
     name: Build SDist
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@v6
 
-    - uses: actions/setup-python@v7
+    - uses: actions/setup-python@v6
       with:
         python-version: "3.11"
         cache: "pip"
@@ -50,7 +50,7 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
 
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@v6
 
     - name: Build wheels
       uses: pypa/cibuildwheel@v3.4.1
@@ -87,9 +87,9 @@ jobs:
       # pytest-memray (installed by the [test] extra) does not run under QEMU user mode.
       LIBSTB_NO_MEMRAY: "1"
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@v6
 
-    - uses: actions/setup-python@v7
+    - uses: actions/setup-python@v6
       with:
         python-version: "3.12"
 

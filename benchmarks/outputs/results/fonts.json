@@ -1,0 +1,259 @@
+{
+  "font": "DejaVuSans.ttf",
+  "repeats": 15,
+  "metric": "best (min) wall-clock seconds over repeats",
+  "cases": [
+    {
+      "op": "open",
+      "text": null,
+      "chars": null,
+      "px": 16,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 2.405499999724725e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 6.620499999598906e-05
+        }
+      }
+    },
+    {
+      "op": "open",
+      "text": null,
+      "chars": null,
+      "px": 32,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 3.265800000917807e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 6.73610000063718e-05
+        }
+      }
+    },
+    {
+      "op": "open",
+      "text": null,
+      "chars": null,
+      "px": 64,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 3.22479999965708e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 5.5626999994728976e-05
+        }
+      }
+    },
+    {
+      "op": "measure",
+      "text": "short",
+      "chars": 13,
+      "lines": 1,
+      "px": 16,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 9.8649999955569e-06
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 8.313200000031884e-05
+        }
+      }
+    },
+    {
+      "op": "render",
+      "text": "short",
+      "chars": 13,
+      "lines": 1,
+      "px": 16,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 3.540299999826857e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.0002777979999990521
+        }
+      }
+    },
+    {
+      "op": "measure",
+      "text": "short",
+      "chars": 13,
+      "lines": 1,
+      "px": 32,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 9.677999997848019e-06
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 8.398499998918396e-05
+        }
+      }
+    },
+    {
+      "op": "render",
+      "text": "short",
+      "chars": 13,
+      "lines": 1,
+      "px": 32,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 4.1523000007259725e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.00029342100000917526
+        }
+      }
+    },
+    {
+      "op": "measure",
+      "text": "short",
+      "chars": 13,
+      "lines": 1,
+      "px": 64,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 7.482000000891276e-06
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 8.538400000190904e-05
+        }
+      }
+    },
+    {
+      "op": "render",
+      "text": "short",
+      "chars": 13,
+      "lines": 1,
+      "px": 64,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 6.163999999841963e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.00036610800000858035
+        }
+      }
+    },
+    {
+      "op": "measure",
+      "text": "paragraph",
+      "chars": 122,
+      "lines": 3,
+      "px": 16,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 1.6938000001687215e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.0008148400000038691
+        }
+      }
+    },
+    {
+      "op": "render",
+      "text": "paragraph",
+      "chars": 122,
+      "lines": 3,
+      "px": 16,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 0.00010192800000652369
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.0025691470000026584
+        }
+      }
+    },
+    {
+      "op": "measure",
+      "text": "paragraph",
+      "chars": 122,
+      "lines": 3,
+      "px": 32,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 2.0736999999826367e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.0007752819999922167
+        }
+      }
+    },
+    {
+      "op": "render",
+      "text": "paragraph",
+      "chars": 122,
+      "lines": 3,
+      "px": 32,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 0.00014370399999563688
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.0029133800000096244
+        }
+      }
+    },
+    {
+      "op": "measure",
+      "text": "paragraph",
+      "chars": 122,
+      "lines": 3,
+      "px": 64,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 2.072799999552899e-05
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.0007880349999993541
+        }
+      }
+    },
+    {
+      "op": "render",
+      "text": "paragraph",
+      "chars": 122,
+      "lines": 3,
+      "px": 64,
+      "libraries": {
+        "libstb": {
+          "available": true,
+          "seconds": 0.0002444920000073125
+        },
+        "pillow": {
+          "available": true,
+          "seconds": 0.003702899999993292
+        }
+      }
+    }
+  ]
+}

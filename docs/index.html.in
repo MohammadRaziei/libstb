@@ -1,275 +1,247 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>libstb Documentation</title>
-    <link rel="icon" href="@FAVICON@" type="image/svg+xml">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <link rel="stylesheet" id="hljs-theme-dark" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-    <link rel="stylesheet" id="hljs-theme-light" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css" disabled>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cmake.min.js"></script>
-    <link rel="stylesheet" href="libstb-docs.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>libstb: image I/O with no dependencies</title>
+<meta name="description" content="libstb wraps Sean Barrett's stb libraries in a typed C++17 API and a Python module: decode, resize, edit and encode PNG, JPEG, BMP and TGA, and render TrueType text.">
+<link rel="icon" href="@FAVICON@" type="image/svg+xml">
+<script>
+(function () {
+  var t = 'light';
+  try {
+    var s = JSON.parse(localStorage.getItem('libstb-docs') || '{}');
+    if (s.theme) t = s.theme; else if (matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+  } catch (e) {}
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="assets/libstb-docs.css">
 </head>
 <body>
 
-<!-- Topbar -->
 <header class="topbar">
-    <a class="topbar-brand" href="#">
-        <div class="topbar-logo">@LOGO_CONTENT@</div>
-        <span class="topbar-name">libstb</span>
-        <span class="topbar-sep"></span>
-        <span class="topbar-subtitle">Documentation</span>
-    </a>
-    <div class="topbar-actions">
-        <span class="topbar-version">v@PROJECT_VERSION@</span>
-        <a class="topbar-gh" href="https://github.com/MohammadRaziei/libstb" target="_blank">
-            <i class="fa-brands fa-github"></i> GitHub
-        </a>
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-            <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>
-            <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg>
-        </button>
-    </div>
+  <a class="topbar-brand" href="index.html">
+    <span class="topbar-logo">@LOGO_CONTENT@</span><span class="topbar-name">libstb</span>
+    <span class="topbar-sep"></span><span class="topbar-sub">Documentation</span>
+  </a>
+  <nav class="topbar-nav" aria-label="Sections">
+    <a class="topbar-link" href="python/html/index.html">Python</a>
+    <a class="topbar-link" href="cpp/html/index.html">C++</a>
+    <a class="topbar-link" href="benchmarks/index.html">Benchmarks</a>
+  </nav>
+  <div class="topbar-actions">
+    <span class="topbar-version">v@PROJECT_VERSION@</span>
+    <a class="topbar-gh" href="https://github.com/MohammadRaziei/libstb" target="_blank" rel="noopener">GitHub</a>
+    <button class="theme-toggle" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+      <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>
+      <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg>
+    </button>
+  </div>
 </header>
 
-<!-- Hero -->
-<div class="hero">
-    <div class="hero-eyebrow">
-        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v4M4 6h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        @LANG_EYEBROW@
+<main>
+<section class="hero">
+  <div class="hero-grid">
+    <div>
+      <h1>Image I/O with <em>no dependencies.</em></h1>
+      <p class="lede">libstb wraps Sean Barrett's <a href="https://github.com/nothings/stb">stb</a> libraries in a typed C++17 API and a Python module. Decode, resize, edit and encode PNG, JPEG, BMP and TGA, and render TrueType text, from one wheel.</p>
+      <div class="hero-actions">
+        <a class="btn" href="python/html/index.html">Python reference</a>
+        <a class="btn ghost" href="cpp/html/index.html">C++ reference</a>
+      </div>
+      <div class="cmd"><span><span class="prompt">$</span> pip install libstb</span><button class="copy-btn" type="button" onclick="copyText(this, 'pip install libstb')">Copy</button></div>
     </div>
-    <h1>libstb Documentation</h1>
-    <p class="hero-desc">
-        Image I/O, resizing and font rendering on top of the stb single-header libraries.
-        A C++17 core with SIMD kernels, with idiomatic APIs for @LANG_LIST@.
-    </p>
-    <div class="hero-stats">
-        <div class="hero-stat">
-            <div class="hero-stat-num">C++17</div>
-            <div class="hero-stat-label">Core language</div>
+
+    <figure class="demo" id="demo" aria-labelledby="demo-title">
+      <div class="demo-frame"><img id="demo-img" src="showcase/cubic-24.png" width="128" height="128" alt="A photograph of fruit resized to 24 by 24 pixels by libstb and shown enlarged"></div>
+      <figcaption class="demo-cap" id="demo-title" aria-live="polite"></figcaption>
+      <div class="demo-controls">
+        <div class="demo-row"><span>Filter</span>
+          <span class="seg" role="group" aria-label="Resize filter">
+            <button type="button" data-filter="box" aria-pressed="false">box</button>
+            <button type="button" data-filter="linear" aria-pressed="false">linear</button>
+            <button type="button" data-filter="cubic" aria-pressed="true">cubic</button>
+          </span>
         </div>
-        <div class="hero-stat-div"></div>
-        <div class="hero-stat">
-            <div class="hero-stat-num">@BINDING_COUNT@</div>
-            <div class="hero-stat-label">Language bindings</div>
+        <div class="demo-row"><label for="demo-size">Size</label>
+          <input id="demo-size" type="range" min="0" max="8" step="1" value="3">
+          <output id="demo-out" for="demo-size">24 &times; 24</output>
         </div>
-        <div class="hero-stat-div"></div>
-        <div class="hero-stat">
-            <div class="hero-stat-num">MIT</div>
-            <div class="hero-stat-label">License</div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section class="section" id="why">
+  <div class="wrap">
+    <h2>What you get, and what backs it up</h2>
+    <div class="claims">
+
+      <div class="claim">
+        <div>
+          <h3>Nothing else to install.</h3>
+          <p>No system libraries and no Python packages. The stb headers are private; the public API is <code>stb::image</code>, <code>stb::resizer</code> and <code>stb::font</code>.</p>
         </div>
-        <div class="hero-stat-div"></div>
-        <div class="hero-stat">
-            <div class="hero-stat-num">4</div>
-            <div class="hero-stat-label">Image formats</div>
+        <div class="proof">
+          <div class="big">0<small>dependencies</small></div>
+          <div class="cap">numpy and Pillow are optional, and only imported when you ask for <code>img.numpy()</code> or <code>stb.imread()</code>.</div>
+          <div id="proof-install"></div>
         </div>
-    </div>
-</div>
+      </div>
 
-<div class="wrap">
-
-<!-- What is libstb? -->
-<div class="section">
-    <div class="section-header">
-        <div class="section-label">About</div>
-        <div class="section-title">What is libstb?</div>
-        <div class="section-desc">
-            libstb wraps Sean Barrett's <a class="inline-link" href="https://github.com/nothings/stb" target="_blank">stb</a>
-            single-header libraries behind a small, typed C++17 API and a Python binding.
-            <code>pip install libstb</code> is all you need: there are no system dependencies and no Python dependencies.
+      <div class="claim">
+        <div>
+          <h3>Quick, with the losses shown.</h3>
+          <p>The pixel kernels pick a SIMD backend at run time (AVX2, SSE2, NEON or scalar) and every backend gives identical output. The bars include the operations where Pillow or OpenCV is faster.</p>
         </div>
+        <div class="proof" id="proof-speed">
+          <div class="cap">Time per operation, averaged over every corpus entry, as a multiple of libstb (1.0&times; is libstb; larger is slower).</div>
+          <p class="proof-note"><a href="benchmarks/index.html">Open the full benchmark report</a>.</p>
+        </div>
+      </div>
+
+      <div class="claim">
+        <div>
+          <h3>Checked before it is timed.</h3>
+          <p>Every operation and library is run on small non-square images and its output compared before a single speed number is recorded.</p>
+        </div>
+        <div class="proof" id="proof-verify">
+          <div class="cap">Lossless formats must decode to the original pixels exactly; resize output is compared with Pillow's for the same filter.</div>
+        </div>
+      </div>
+
+      <div class="claim">
+        <div>
+          <h3>Your arrays, not copies.</h3>
+          <p>The Python <code>Image</code> is the C++ image itself, not a wrapper. It shares memory with numpy and with DLPack consumers such as torch.</p>
+        </div>
+        <div class="proof">
+          <div class="code" style="margin:0"><div class="code-head"><span>python</span></div><pre><code><span class="tok-k">import</span> numpy <span class="tok-k">as</span> np
+<span class="tok-k">import</span> libstb <span class="tok-k">as</span> stb
+
+img = stb.Image.<span class="tok-f">open</span>(<span class="tok-s">"photo.png"</span>)
+a = np.<span class="tok-f">asarray</span>(img)        <span class="tok-c"># no copy</span>
+t = torch.<span class="tok-f">from_dlpack</span>(img)  <span class="tok-c"># no copy</span></code></pre></div>
+        </div>
+      </div>
+
     </div>
+  </div>
+</section>
 
-    <p class="compare-caption">
-        <strong>Images.</strong> Decode and encode PNG, JPEG, BMP and TGA. Resize with selectable filters, and edit with
-        <code>crop</code>, <code>flip</code>, <code>rotate90</code>, <code>pad</code>, <code>convert</code>,
-        <code>composite</code> and EXIF orientation. Every operation returns a new image.
-    </p>
-    <p class="compare-caption">
-        <strong>Fonts.</strong> Render UTF-8 text from TrueType fonts to a bitmap, or build a glyph atlas.
-    </p>
-    <p class="compare-caption">
-        <strong>Fast and predictable.</strong> The pixel kernels pick a SIMD backend at run time (AVX2, SSE2, NEON or
-        scalar) and every backend gives identical output. The stb headers are private: the public API is
-        <code>stb::image</code>, <code>stb::resizer</code> and <code>stb::font</code>.
-        The Python <code>Image</code> is the C++ image itself, not a wrapper, and it shares memory with numpy and DLPack
-        consumers such as torch without copying.
-    </p>
-</div>
-
-<div class="divider"></div>
-
-<!-- API References -->
-<div class="section">
-    <div class="section-header">
-        <div class="section-label">API References</div>
-        <div class="section-title">Language Documentation</div>
-        <div class="section-desc">Full API reference for each language binding, generated from source.</div>
+<section class="section" id="start">
+  <div class="wrap">
+    <h2>Install it, then use it</h2>
+    <div class="two" style="margin-top:2rem">
+      <div>
+        <h3 style="font-size:1.2rem">Install</h3>
+        <div class="tabs">
+          <div class="tab-bar">
+@INSTALL_TABS@          </div>
+@INSTALL_CONTENT@        </div>
+      </div>
+      <div>
+        <h3 style="font-size:1.2rem">Use</h3>
+        <div class="tabs">
+          <div class="tab-bar">
+@EXAMPLE_TABS@          </div>
+@EXAMPLE_CONTENT@        </div>
+      </div>
     </div>
-    <div class="tabbed-panel" id="docs-panel">
-        <div class="tab-bar" id="docs-tabs">
-@DOCS_TABS@        </div>
+  </div>
+</section>
 
-@DOCS_CONTENT@    </div>
-</div>
-
-<div class="divider"></div>
-
-<!-- Installation -->
-<div class="section">
-    <div class="section-header">
-        <div class="section-label">Get Started</div>
-        <div class="section-title">Installation</div>
-        <div class="section-desc">Add libstb to your project in seconds.</div>
+<section class="section" id="what">
+  <div class="wrap">
+    <h2>One library, three jobs</h2>
+    <div class="claims">
+      <div class="claim">
+        <div><h3>Images.</h3></div>
+        <div class="proof"><p style="margin:0;max-width:none">Decode and encode PNG, JPEG, BMP and TGA. Resize with selectable filters, and edit with <code>crop</code>, <code>flip</code>, <code>rotate90</code>, <code>pad</code>, <code>convert</code> and <code>composite</code>, with EXIF orientation applied on request. Every operation returns a new image.</p></div>
+      </div>
+      <div class="claim">
+        <div><h3>Fonts.</h3></div>
+        <div class="proof"><p style="margin:0;max-width:none">Render UTF-8 text from a TrueType font to a bitmap, or build a glyph atlas.</p></div>
+      </div>
+      <div class="claim">
+        <div><h3>Run-time SIMD.</h3></div>
+        <div class="proof"><p style="margin:0;max-width:none">One build runs on every x86-64 or ARM machine: the kernels choose AVX2, SSE2, NEON or a scalar fallback when the library loads.</p></div>
+      </div>
     </div>
-    <div class="tabbed-panel" id="install-panel">
-        <div class="tab-bar" id="install-tabs">
-@INSTALL_TABS@        </div>
+  </div>
+</section>
 
-@INSTALL_CONTENT@    </div>
-</div>
-
-<div class="divider"></div>
-
-<!-- Examples -->
-<div class="section">
-    <div class="section-header">
-        <div class="section-label">Usage</div>
-        <div class="section-title">Quick Examples</div>
-        <div class="section-desc">Open, resize, edit and write an image in a few lines of code.</div>
+<section class="section" id="reference">
+  <div class="wrap">
+    <h2>API reference</h2>
+    <div class="refs">
+@DOCS_CONTENT@
     </div>
-    <div class="tabbed-panel" id="example-panel">
-        <div class="tab-bar" id="example-tabs">
-@EXAMPLE_TABS@        </div>
+  </div>
+</section>
+</main>
 
-@EXAMPLE_CONTENT@    </div>
-</div>
-
-</div><!-- /wrap -->
-
-<!-- Footer -->
 <footer class="footer">
-    <div class="footer-inner">
-        <div>
-            <div class="footer-brand">
-                <div class="footer-logo">@LOGO_CONTENT@</div>
-                <span class="footer-name">libstb</span>
-            </div>
-            <div class="footer-tagline">
-                Image I/O, resizing and font rendering on top of the stb
-                single-header libraries, with a binding for @BINDING_LIST@.
-            </div>
-            <div class="footer-copy">
-                &copy; 2026 <a href="https://github.com/mohammadraziei">Mohammad Raziei</a>
-                &nbsp;·&nbsp; <a href="https://github.com/MohammadRaziei/libstb/blob/main/LICENSE">MIT License</a>
-                &nbsp;·&nbsp; v@PROJECT_VERSION@
-            </div>
-        </div>
-
-        <div>
-            <div class="footer-links-title">Resources</div>
-            <div class="footer-links">
-                <a class="footer-link" href="https://github.com/MohammadRaziei/libstb" target="_blank">
-                    <i class="fa-brands fa-github"></i> Source code
-                </a>
-                <a class="footer-link" href="https://github.com/MohammadRaziei/libstb/issues" target="_blank">
-                    <i class="fa-solid fa-bug"></i> Report issue
-                </a>
-                <a class="footer-link" href="benchmarks/index.html">
-                    <i class="fa-solid fa-gauge-high"></i> Benchmarks
-                </a>
-                <a class="footer-link" href="coverage/index.html">
-                    <i class="fa-solid fa-chart-pie"></i> Coverage report
-                    <span class="footer-link-badge">dev</span>
-                </a>
-            </div>
-        </div>
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">@LOGO_CONTENT@<span>libstb</span></div>
+      <p>Image I/O, resizing and font rendering on top of the stb single-header libraries, with a binding for @BINDING_LIST@. MIT license. v@PROJECT_VERSION@</p>
+      <p style="margin-top:.6rem">Demo photograph: fruits.jpg from OpenCV's sample data (Apache-2.0), resized by libstb.</p>
     </div>
+    <div class="footer-links">
+      <a href="python/html/index.html">Python reference</a>
+      <a href="cpp/html/index.html">C++ reference</a>
+      <a href="benchmarks/index.html">Benchmarks</a>
+      <a href="https://github.com/MohammadRaziei/libstb">GitHub</a>
+      <a href="https://pypi.org/project/libstb/">PyPI</a>
+    </div>
+  </div>
 </footer>
 
+<script src="assets/bench-teaser.js"></script>
 <script>
-    // ── State ────────────────────────────────────────────────
-    // Single source of truth - like React state but vanilla JS.
-    // All panels (docs, install, example) are always in sync.
-    const PANELS = ['docs', 'install', 'example'];
-    const STORAGE_KEY = 'libstb-docs';
+function toggleTheme() {
+  var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  try { var s = JSON.parse(localStorage.getItem('libstb-docs') || '{}'); s.theme = t; localStorage.setItem('libstb-docs', JSON.stringify(s)); } catch (e) {}
+}
+function switchTab(panel, folder) {
+  document.querySelectorAll('[data-tab^="' + panel + '-"]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === panel + '-' + folder); });
+  document.querySelectorAll('[id^="' + panel + '-"].tab-content').forEach(function (c) { c.classList.toggle('active', c.id === panel + '-' + folder); });
+}
+function copyText(btn, text) {
+  var done = function () { var o = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = o; }, 1400); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, done); else done();
+}
+function copyCode(btn) { copyText(btn, btn.closest('.code').querySelector('code').innerText); }
 
-    const state = {
-        theme: 'dark',
-        lang:  'python',
-    };
-
-    function setState(patch) {
-        Object.assign(state, patch);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        render();
-    }
-
-    function render() {
-        // Theme
-        document.documentElement.setAttribute('data-theme', state.theme);
-        document.getElementById('hljs-theme-dark').disabled  = (state.theme !== 'dark');
-        document.getElementById('hljs-theme-light').disabled = (state.theme !== 'light');
-
-        // Tabs - sync all panels to state.lang, fallback to first tab if lang absent
-        PANELS.forEach(panel => {
-            const btns  = document.querySelectorAll('#' + panel + '-tabs .tab-btn');
-            const panes = document.querySelectorAll('#' + panel + '-panel .tab-content');
-
-            // Check if this panel actually has the requested lang
-            const targetPane = document.getElementById(panel + '-' + state.lang);
-            const effectiveLang = targetPane ? state.lang : (btns[0] ? btns[0].dataset.tab.replace(panel + '-', '') : null);
-            if (!effectiveLang) return;
-
-            btns.forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.tab === panel + '-' + effectiveLang);
-            });
-            panes.forEach(pane => {
-                pane.classList.toggle('active', pane.id === panel + '-' + effectiveLang);
-            });
-        });
-    }
-
-    // ── Init ─────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
-        // Restore persisted state
-        try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            if (saved.theme) state.theme = saved.theme;
-            if (saved.lang)  state.lang  = saved.lang;
-        } catch (e) {}
-
-        render();
-
-        hljs.configure({ ignoreUnescapedHTML: true });
-        hljs.highlightAll();
+/* The live piece. Every frame is a PNG that libstb itself wrote (docs/make_showcase.py). */
+(function () {
+  var SIZES = [8, 12, 16, 24, 32, 48, 64, 96, 128];
+  var img = document.getElementById('demo-img'), cap = document.getElementById('demo-title');
+  var range = document.getElementById('demo-size'), out = document.getElementById('demo-out');
+  var filter = 'cubic';
+  img.addEventListener('error', function () { document.getElementById('demo').hidden = true; });   // frames are made at build time
+  function show() {
+    var n = SIZES[+range.value];
+    img.src = 'showcase/' + filter + '-' + n + '.png';
+    img.alt = 'A photograph of fruit resized to ' + n + ' by ' + n + ' pixels with the ' + filter + ' filter, shown enlarged';
+    out.textContent = n + ' \u00d7 ' + n;
+    cap.innerHTML = '<code>img.resize(' + n + ', ' + n + ', "' + filter + '")</code> writes ' + (n * n).toLocaleString('en-US') +
+      ' pixels. This is the file libstb wrote, shown enlarged.';
+  }
+  range.addEventListener('input', show);
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      filter = b.dataset.filter;
+      document.querySelectorAll('.seg button').forEach(function (o) { o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); });
+      show();
     });
-
-    // ── Public API ───────────────────────────────────────────
-    function switchTab(panel, lang) {
-        // panel arg is ignored - all panels always sync to the same lang
-        setState({ lang });
-    }
-
-    function toggleTheme() {
-        setState({ theme: state.theme === 'dark' ? 'light' : 'dark' });
-    }
-
-    // ── Copy button ──────────────────────────────────────────
-    function copyCode(btn) {
-        const code = btn.closest('.code-wrap').querySelector('pre code') ||
-                     btn.closest('.code-wrap').querySelector('pre');
-        navigator.clipboard.writeText(code.innerText).then(() => {
-            btn.innerHTML = '<i class="fa-solid fa-check"></i> copied!';
-            btn.classList.add('copied');
-            setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i> copy'; btn.classList.remove('copied'); }, 1800);
-        });
-    }
+  });
+  show();
+})();
 </script>
 </body>
 </html>
