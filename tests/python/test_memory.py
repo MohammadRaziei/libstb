@@ -21,6 +21,7 @@ np = pytest.importorskip("numpy")  # the tests below need numpy: without it this
 pytest.importorskip("pytest_memray")
 
 import libstb as stb  # noqa: E402
+import pngbomb  # noqa: E402
 
 ROUNDS = 100
 LEAK_LIMIT = "200 KB"
@@ -192,3 +193,15 @@ def test_resize_peak_is_the_output_plus_a_small_working_buffer(big):
 def test_decoding_a_png_peaks_near_the_size_of_the_pixels(big):
     png = stb.Image(big[:1500, :2000]).to_png()  # 9 MB of pixels, encoded before measuring? no: part of the test
     stb.Image.open(png)
+
+
+@pytest.fixture(scope="module")
+def bomb():
+    return pngbomb.make_bomb()  # a 0.5 MB PNG that declares 576 MB, built outside the measured part
+
+
+@pytest.mark.limit_memory("5 MB")
+def test_a_png_bomb_is_refused_before_any_pixel_memory_is_allocated(bomb):
+    for _ in range(5):
+        with pytest.raises(stb.LimitError):
+            stb.Image.open(bomb)

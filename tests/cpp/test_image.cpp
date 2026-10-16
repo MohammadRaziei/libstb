@@ -95,6 +95,31 @@ UTEST(libstb_image_tests, test_bad_arguments_throw_invalid_argument) {
     ASSERT_THROWS(stb::image::decode(nullptr, 10), std::invalid_argument);
 }
 
+UTEST(libstb_image_tests, test_a_real_png_bomb_is_refused_from_its_header) {
+    // A genuine bomb made by our own encoder: 6000 x 6000 RGBA of zeros (144 MB of pixels)
+    // deflates about 1000 to 1, so the file is ~140 KB. Decoding it needs 144 MB, which the
+    // caller's max_bytes forbids: the refusal must come from the header, before any pixel
+    // memory is allocated (tests/python/test_png_bomb.py does the same past the 512 MiB default).
+    std::vector<std::uint8_t> png;
+    {
+        stb::image zeros(6000, 6000, 4);
+        std::fill(zeros.begin(), zeros.end(), std::uint8_t(0));
+        png = zeros.to_png();
+    }                                                   // the 144 MB image is gone before decoding
+    ASSERT_TRUE(png.size() < 1024 * 1024);              // a file you would happily accept...
+    ASSERT_TRUE(std::uint64_t(6000) * 6000 * 4 / png.size() > 500);   // ...at a ratio of ~1000
+
+    const stb::image_info info = stb::image_info::read(png.data(), png.size());
+    ASSERT_EQ(6000, info.width);
+    ASSERT_EQ(6000, info.height);
+
+    stb::load_options o;
+    o.max_bytes = std::size_t(64) << 20;
+    ASSERT_THROWS(stb::image::decode(png.data(), png.size(), o), stb::limit_error);   // not decode_error
+    o.channels = 1;                                     // asking for gray: 36 MB, under the limit
+    ASSERT_EQ(6000, stb::image::decode(png.data(), png.size(), o).width());           // so it is decoded
+}
+
 UTEST(libstb_image_tests, test_max_bytes_is_enforced_from_header) {
     const std::string d = red_over_green();  // decodes to 6 bytes
     stb::load_options o;
