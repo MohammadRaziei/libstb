@@ -28,7 +28,7 @@ jobs:
       run: pip install -r requirements-dev.txt
 
     - name: Configure Project
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLIBSTB_BUILD_TESTS=ON -DLIBSTB_BUILD_PYTHON=ON
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_TESTS=ON -DSTB_BUILD_PYTHON=ON
 
     - name: Build
       run: cmake --build build -j4 --config Release
@@ -66,9 +66,9 @@ jobs:
       run: |
         cmake -S . -B build \
           -DCMAKE_BUILD_TYPE=Release \
-          -DLIBSTB_BUILD_TESTS=OFF \
-          -DLIBSTB_BUILD_PYTHON=ON \
-          -DLIBSTB_BUILD_DOCS=ON
+          -DSTB_BUILD_TESTS=OFF \
+          -DSTB_BUILD_PYTHON=ON \
+          -DSTB_BUILD_DOCS=ON
 
     - name: Build documentation
       run: cmake --build build --target stb_docs
@@ -113,9 +113,9 @@ jobs:
     - name: Configure CMake
       run: |
         cmake -S . -B build \
-          -DLIBSTB_BUILD_TESTS=ON \
-          -DLIBSTB_BUILD_PYTHON=ON \
-          -DLIBSTB_BUILD_DOCS=OFF
+          -DSTB_BUILD_TESTS=ON \
+          -DSTB_BUILD_PYTHON=ON \
+          -DSTB_BUILD_DOCS=OFF
 
     # C++ (lcov), Python (coverage.py) and the merged total.
     - name: Generate coverage report

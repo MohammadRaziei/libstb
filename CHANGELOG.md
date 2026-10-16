@@ -36,7 +36,7 @@ This file was generated from the git history (42 commits, tags `v0.3.0`, `v0.4.0
   garbage collection (`test_gc.py`) and allocation checks with `pytest-memray` (`test_memory.py`).
 - `tests/python/test_torch.py`: DLPack in both directions with real torch (CPU). torch is not a
   test dependency: the module is skipped when it cannot be imported.
-- Documentation site: `-DLIBSTB_BUILD_DOCS=ON`, then `cmake --build build --target stb_docs` builds the
+- Documentation site: `-DSTB_BUILD_DOCS=ON`, then `cmake --build build --target stb_docs` builds the
   C++ reference (Doxygen), the Python reference (Sphinx) and a landing page into `build/docs/out`.
 - Coverage: `cmake --build build --target stb_coverage` builds an lcov report for the C++ core, a
   coverage.py report for the Python layer, a merged total and a dashboard in `build/coverage` (needs
