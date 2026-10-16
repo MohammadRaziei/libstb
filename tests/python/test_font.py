@@ -143,3 +143,55 @@ def test_concurrent_rendering(font):
     for t in ts:
         t.join()
     assert not bad
+
+
+# ---------------------------------------------------------------- estimates (no font file)
+
+LIBERATION = pathlib.Path("/usr/share/fonts/truetype/liberation")
+SAMPLES = ["Hello, world", "The quick brown fox jumps over the lazy dog", "Pack my box with five dozen liquor jugs.",
+           "Version 0.6.0 (stable): 1,234.56 / 99%", "Caf\u00e9 cr\u00e8me br\u00fbl\u00e9e"]
+
+
+def test_estimate_text_matches_the_documented_shape():
+    size = stb.estimate_text("Hello\nWorld!", 16)
+    assert isinstance(size, stb.TextSize)
+    assert size.lines == 2 and size.width > 0
+    assert size.height == pytest.approx(2 * stb.estimate_metrics(16).line_height)
+    empty = stb.estimate_text("", 16)
+    assert empty.width == 0.0 and empty.lines == 1
+    assert empty.height == pytest.approx(stb.estimate_metrics(16).line_height)
+
+
+def test_estimate_families_differ_and_mono_is_fixed_pitch():
+    sans, serif, mono = (stb.estimate_text("Wi Wi", 20, family=f).width for f in ("sans", "serif", "mono"))
+    assert len({round(sans, 3), round(serif, 3), round(mono, 3)}) == 3
+    assert stb.estimate_text("iiiii", 20, family="mono").width == pytest.approx(
+        stb.estimate_text("WWWWW", 20, family="mono").width)
+
+
+def test_estimate_scales_linearly():
+    assert stb.estimate_text("Hello", 40).width == pytest.approx(2 * stb.estimate_text("Hello", 20).width)
+
+
+def test_estimate_errors():
+    with pytest.raises(ValueError):
+        stb.estimate_text("A", 16, family="comic")
+    for bad in (0, -1, 3000, float("nan"), float("inf")):
+        with pytest.raises(ValueError):
+            stb.estimate_text("A", bad)
+        with pytest.raises(ValueError):
+            stb.estimate_metrics(bad)
+
+
+@pytest.mark.parametrize("family, stem", [("sans", "LiberationSans"), ("serif", "LiberationSerif"),
+                                          ("mono", "LiberationMono")])
+def test_estimate_agrees_with_the_real_font(family, stem):
+    """The tables were cut from Liberation: against the real font only kerning is missing, so
+    the estimate stays within 3 % (width) and is exact for the vertical metrics."""
+    path = LIBERATION / f"{stem}-Regular.ttf"
+    if not path.exists():
+        pytest.skip("Liberation fonts are not installed here")
+    real = Font.open(path)
+    assert stb.estimate_metrics(48, family) == pytest.approx(real.metrics(48))
+    for text in SAMPLES:
+        assert stb.estimate_text(text, 48, family).width == pytest.approx(real.measure(text, 48).width, rel=0.03)

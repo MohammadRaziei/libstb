@@ -9,7 +9,7 @@ project(LibstbBenchmarks LANGUAGES NONE)
 # https://github.com/MohammadRaziei/novasvg/tree/master/benchmarks.
 #
 #   cmake -S . -B build
-#   cmake --build build --target libstb_benchmark
+#   cmake --build build --target stb_benchmark
 #
 # Two folders, nothing else is ever written:
 #
@@ -41,7 +41,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchRealCorpus.cmake")
 add_subdirectory(python)
 add_subdirectory(report)
 
-add_custom_target(libstb_benchmark
-  COMMENT "libstb_benchmark: running the full benchmark suite and building the report"
+add_custom_target(stb_benchmark
+  COMMENT "stb_benchmark: running the full benchmark suite and building the report"
 )
-add_dependencies(libstb_benchmark libstb_bench_report)
+add_dependencies(stb_benchmark stb_bench_report)

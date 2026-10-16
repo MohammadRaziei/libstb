@@ -1,7 +1,7 @@
 #pragma once
 
 // stb headers are never included here: they are compiled into src/core/*.cpp
-// only, with STB_*_STATIC, so no stbi_* symbol leaks out of libstb_core (safe
+// only, with STB_*_STATIC, so no stbi_* symbol leaks out of stb_core (safe
 // to link next to your own copy of stb).
 
 #include <array>

@@ -15,7 +15,7 @@ by the same author, which this one is modeled on.
 ```bash
 cd benchmarks
 cmake -S . -B build
-cmake --build build --target libstb_benchmark
+cmake --build build --target stb_benchmark
 ```
 
 That's the one target you need: it pulls in every benchmark, in the
@@ -47,17 +47,17 @@ Every operation is its own target, independently runnable
 
 | Target | What it does |
 |---|---|
-| `libstb_bench_venv` | Create the venv; install numpy/Pillow/OpenCV/imageio/scikit-image/pip-size/jinja2 + libstb itself (from git) |
-| `libstb_bench_corpus` | Generate the synthetic multi-genre corpus |
-| `libstb_bench_real_corpus` | Convert the real-world photographs (downloaded at configure time) into every format, same manifest shape |
-| `libstb_bench_verify` | Check that every (operation, library) pair produces correct output, before anything is timed |
-| `libstb_bench_sizes` | Real install footprint via `pip-size` |
-| `libstb_bench_throughput` | Speed: decode / encode / resize, every library, every corpus entry |
-| `libstb_bench_throughput_memory` | Peak memory for the same operations, libraries and entries |
-| `libstb_bench_scaling` | Throughput vs. image size, 0.016 to 16.8 megapixels |
-| `libstb_bench_fonts` | `Font` (stb_truetype) vs. Pillow's FreeType binding |
-| `libstb_bench_system_info` | Record CPU / RAM / OS / Python |
-| `libstb_bench_report` | Render `outputs/index.html` from `outputs/results/*.json`, and write `outputs/benchmark.json` |
+| `stb_bench_venv` | Create the venv; install numpy/Pillow/OpenCV/imageio/scikit-image/pip-size/jinja2 + libstb itself (from git) |
+| `stb_bench_corpus` | Generate the synthetic multi-genre corpus |
+| `stb_bench_real_corpus` | Convert the real-world photographs (downloaded at configure time) into every format, same manifest shape |
+| `stb_bench_verify` | Check that every (operation, library) pair produces correct output, before anything is timed |
+| `stb_bench_sizes` | Real install footprint via `pip-size` |
+| `stb_bench_throughput` | Speed: decode / encode / resize, every library, every corpus entry |
+| `stb_bench_throughput_memory` | Peak memory for the same operations, libraries and entries |
+| `stb_bench_scaling` | Throughput vs. image size, 0.016 to 16.8 megapixels |
+| `stb_bench_fonts` | `Font` (stb_truetype) vs. Pillow's FreeType binding |
+| `stb_bench_system_info` | Record CPU / RAM / OS / Python |
+| `stb_bench_report` | Render `outputs/index.html` from `outputs/results/*.json`, and write `outputs/benchmark.json` |
 
 The scripts also run by hand, from `python/`, on any machine that has
 the requirements installed:

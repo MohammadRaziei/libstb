@@ -54,6 +54,7 @@ text.bitmap.write("hello.png")
 font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measure("Hello", 32)
 font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_offset, advance)
 atlas = font.make_atlas("ABCabc123", 32, 256, 256)  # Atlas: .image and atlas["A"] -> AtlasGlyph
+stb.estimate_text("Hello", 16, family="sans")        # TextSize, no font file needed (sans / serif / mono tables)
 
 stb.iminfo("photo.png")                             # shortcut: ImageInfo.read(...)
 ```
@@ -293,6 +294,7 @@ stb::image upright = raw.orient(turn);                 // or apply it yourself
 stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-safe
 stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
 stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
+stb::text_size est = stb::estimate_text("Hello", 16);    // no font file: fixed sans / serif / mono tables
 ```
 
 Design: stb never appears in a public header. Where a class would hold stb
@@ -333,7 +335,7 @@ tests/data/                 synthetic test font (solid-rectangle glyphs) + the s
 ```
 
 Each stb header is compiled with `STB_*_STATIC`, so no `stbi_*` symbol leaks
-from `libstb_core`: it links fine next to your own copy of stb.
+from `stb_core`: it links fine next to your own copy of stb.
 
 ## Build & test
 

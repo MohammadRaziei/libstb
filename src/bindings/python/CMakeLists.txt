@@ -61,4 +61,4 @@ ExternalProject_Add(build_python
     INSTALL_COMMAND ${CMAKE_COMMAND} --install . --config Release
     BUILD_ALWAYS 1
 )
-add_dependencies(build_python libstb_core)
+add_dependencies(build_python stb_core)

@@ -29,7 +29,7 @@ file(MAKE_DIRECTORY "${SCRATCH_DIR}")
 # This runs at CONFIGURE time (execute_process, right here while
 # CMakeLists.txt is being processed), not at build time, so
 # `cmake -S . -B build` alone leaves you with a ready venv, and
-# `cmake --build build --target libstb_benchmark` only has to run the
+# `cmake --build build --target stb_benchmark` only has to run the
 # actual benchmarks. The venv itself still lives under the build
 # directory (${CMAKE_CURRENT_BINARY_DIR}/venv).
 #
@@ -83,7 +83,7 @@ else()
                   "(delete ${VENV_STAMP} to force recreation)")
 endif()
 
-add_custom_target(libstb_bench_venv)
+add_custom_target(stb_bench_venv)
 
 # -------------------------------------------------------------- corpus --
 
@@ -97,7 +97,7 @@ add_custom_command(
   COMMENT "libstb benchmarks: generating the synthetic corpus"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_corpus DEPENDS "${CORPUS_MANIFEST}")
+add_custom_target(stb_bench_corpus DEPENDS "${CORPUS_MANIFEST}")
 
 # --------------------------------------------------------- real corpus --
 # LIBSTB_REAL_CORPUS_DIR comes from FetchRealCorpus.cmake (included by
@@ -118,10 +118,10 @@ if(LIBSTB_REAL_CORPUS_DIR)
     COMMENT "libstb benchmarks: converting the real-world photographs to every format"
     USES_TERMINAL
   )
-  add_custom_target(libstb_bench_real_corpus DEPENDS "${REAL_CORPUS_MANIFEST}")
+  add_custom_target(stb_bench_real_corpus DEPENDS "${REAL_CORPUS_MANIFEST}")
   list(APPEND BENCH_MANIFESTS "${REAL_CORPUS_MANIFEST}")
 else()
-  add_custom_target(libstb_bench_real_corpus
+  add_custom_target(stb_bench_real_corpus
     COMMENT "libstb benchmarks: real corpus unavailable (download failed), skipping"
   )
 endif()
@@ -141,7 +141,7 @@ add_custom_command(
   COMMENT "libstb benchmarks: verifying every operation produces correct output"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_verify DEPENDS "${VERIFY_JSON}")
+add_custom_target(stb_bench_verify DEPENDS "${VERIFY_JSON}")
 
 # ---------------------------------------------------------------- sizes --
 
@@ -154,7 +154,7 @@ add_custom_command(
   COMMENT "libstb benchmarks: comparing install footprint (pip-size)"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_sizes DEPENDS "${SIZES_JSON}")
+add_custom_target(stb_bench_sizes DEPENDS "${SIZES_JSON}")
 
 # ----------------------------------------------------------- throughput --
 # Repeats per (library, corpus entry, operation) cell; the best (min)
@@ -176,8 +176,8 @@ add_custom_command(
   COMMENT "libstb benchmarks: decode / encode / resize speed, all libraries (${LIBSTB_BENCH_REPEATS} repeats/cell)"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_throughput DEPENDS "${THROUGHPUT_JSON}")
-add_dependencies(libstb_bench_throughput libstb_bench_verify libstb_bench_corpus libstb_bench_real_corpus)
+add_custom_target(stb_bench_throughput DEPENDS "${THROUGHPUT_JSON}")
+add_dependencies(stb_bench_throughput stb_bench_verify stb_bench_corpus stb_bench_real_corpus)
 
 # ------------------------------------------------------- throughput memory --
 # Memory alongside speed for the SAME operations, libraries and corpus
@@ -198,8 +198,8 @@ add_custom_command(
   COMMENT "libstb benchmarks: peak memory for decode / encode / resize, all libraries"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_throughput_memory DEPENDS "${THROUGHPUT_MEMORY_JSON}")
-add_dependencies(libstb_bench_throughput_memory libstb_bench_verify libstb_bench_corpus libstb_bench_real_corpus)
+add_custom_target(stb_bench_throughput_memory DEPENDS "${THROUGHPUT_MEMORY_JSON}")
+add_dependencies(stb_bench_throughput_memory stb_bench_verify stb_bench_corpus stb_bench_real_corpus)
 
 # -------------------------------------------------------------- scaling --
 
@@ -213,8 +213,8 @@ add_custom_command(
   COMMENT "libstb benchmarks: time vs image size (0.016 to 16.8 megapixels)"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_scaling DEPENDS "${SCALING_JSON}")
-add_dependencies(libstb_bench_scaling libstb_bench_verify)
+add_custom_target(stb_bench_scaling DEPENDS "${SCALING_JSON}")
+add_dependencies(stb_bench_scaling stb_bench_verify)
 
 # ---------------------------------------------------------------- fonts --
 # Needs a real .ttf (LIBSTB_REAL_FONT, from FetchRealCorpus.cmake). If it
@@ -231,9 +231,9 @@ if(LIBSTB_REAL_FONT)
     COMMENT "libstb benchmarks: text (stb_truetype vs FreeType via Pillow)"
     USES_TERMINAL
   )
-  add_custom_target(libstb_bench_fonts DEPENDS "${FONTS_JSON}")
+  add_custom_target(stb_bench_fonts DEPENDS "${FONTS_JSON}")
 else()
-  add_custom_target(libstb_bench_fonts
+  add_custom_target(stb_bench_fonts
     COMMENT "libstb benchmarks: no font available (download failed), skipping the font benchmark"
   )
 endif()
@@ -251,7 +251,7 @@ add_custom_command(
   COMMENT "libstb benchmarks: recording machine specs (CPU/RAM/OS)"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_system_info DEPENDS "${SYSTEM_INFO_JSON}")
+add_custom_target(stb_bench_system_info DEPENDS "${SYSTEM_INFO_JSON}")
 
 # Expose to the parent scope (report/CMakeLists.txt needs these paths)
 set(LIBSTB_BENCH_RESULT_JSON_DIR "${RESULTS_DIR}" PARENT_SCOPE)

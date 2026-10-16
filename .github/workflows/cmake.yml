@@ -71,7 +71,7 @@ jobs:
           -DLIBSTB_BUILD_DOCS=ON
 
     - name: Build documentation
-      run: cmake --build build --target libstb_docs
+      run: cmake --build build --target stb_docs
 
     - name: List docs directory
       run: tree --du -shaC build/docs/out
@@ -119,7 +119,7 @@ jobs:
 
     # C++ (lcov), Python (coverage.py) and the merged total.
     - name: Generate coverage report
-      run: cmake --build build --target libstb_coverage
+      run: cmake --build build --target stb_coverage
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5

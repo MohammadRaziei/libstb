@@ -23,7 +23,7 @@ add_custom_command(
   COMMENT "libstb benchmarks: fetching Chart.js ${CHARTJS_VERSION} (for the standalone report)"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_chartjs DEPENDS "${CHARTJS_UMD_MIN}")
+add_custom_target(stb_bench_chartjs DEPENDS "${CHARTJS_UMD_MIN}")
 
 # --------------------------------------------------------------- KaTeX --
 # The report writes its formulas in LaTeX and renders them in the browser with KaTeX. Fetched
@@ -50,7 +50,7 @@ add_custom_command(
   COMMENT "libstb benchmarks: fetching KaTeX ${KATEX_VERSION} (formulas in the standalone report)"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_katex DEPENDS "${KATEX_MIN_JS}")
+add_custom_target(stb_bench_katex DEPENDS "${KATEX_MIN_JS}")
 
 # ------------------------------------------------------------- report --
 # outputs/index.html is the standalone report (Chart.js and KaTeX inlined, one file). It is built
@@ -91,4 +91,4 @@ add_custom_command(
   COMMENT "libstb benchmarks: gathering outputs/results/*.json -> outputs/benchmark.json"
   USES_TERMINAL
 )
-add_custom_target(libstb_bench_report DEPENDS "${REPORT_HTML}" "${REPORT_JSON}")
+add_custom_target(stb_bench_report DEPENDS "${REPORT_HTML}" "${REPORT_JSON}")

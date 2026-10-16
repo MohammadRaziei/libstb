@@ -1,7 +1,7 @@
 set(LIBSTB_CMAKE_TEST_EXAMPLE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/consumer_project)
 set(LIBSTB_CMAKE_TEST_BUILD_DIR ${CMAKE_BINARY_DIR}/cmake_consumer_test)
 
-add_test(NAME test_libstb_cmake
+add_test(NAME test_stb_cmake
     COMMAND ${CMAKE_COMMAND}
         -DPYTHON_INSTALL_DIR=${PYTHON_INSTALL_DIR}
         -DEXAMPLE_SOURCE_DIR=${LIBSTB_CMAKE_TEST_EXAMPLE_DIR}
@@ -9,7 +9,7 @@ add_test(NAME test_libstb_cmake
         -P ${CMAKE_CURRENT_SOURCE_DIR}/run_consumer_test.cmake
 )
 
-add_custom_target(libstb_test_cmake
+add_custom_target(stb_test_cmake
     COMMAND ${CMAKE_COMMAND} -E echo "-- Running cmake consumer test..."
     COMMAND ${CMAKE_COMMAND}
         -DPYTHON_INSTALL_DIR=${PYTHON_INSTALL_DIR}
@@ -18,5 +18,5 @@ add_custom_target(libstb_test_cmake
         -P ${CMAKE_CURRENT_SOURCE_DIR}/run_consumer_test.cmake
     USES_TERMINAL
 )
-add_dependencies(libstb_test_cmake build_python)
-add_dependencies(libstb_test libstb_test_cmake)
+add_dependencies(stb_test_cmake build_python)
+add_dependencies(stb_test stb_test_cmake)

@@ -13,7 +13,7 @@ pytest
 numpy; sys_platform != "win32" or platform_machine != "ARM64" or python_version >= "3.11"
 pillow
 pytest-memray; sys_platform != "win32" and (platform_machine == "x86_64" or platform_machine == "arm64")  # memory-leak and allocation checks (tests/python/test_memory.py)
-coverage  # Python coverage (the libstb_coverage_python target)
+coverage  # Python coverage (the stb_coverage_python target)
 
 # documentation dependencies (-DLIBSTB_BUILD_DOCS=ON; also needs doxygen)
 sphinx

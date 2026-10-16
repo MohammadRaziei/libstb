@@ -188,3 +188,48 @@ UTEST(libstb_font_tests, test_concurrent_rendering) {
     for (auto& th : ts) th.join();
     ASSERT_EQ(0, bad.load());
 }
+
+// ---------------------------------------------------------------- estimates
+// Widths are 1/2048 em from the Liberation tables. For sans, ascent - descent is 2288 units, so at
+// pixel_height = 100 one unit is 100 / 2288 px (the same scale font::measure uses).
+
+UTEST(libstb_font_estimate_tests, test_sans_widths_are_exact_table_values) {
+    // 'i' = 455 units, 'W' = 1933 units, ' ' = 569 units
+    const float s = 100.0f / 2288.0f;
+    ASSERT_NEAR(455 * s, stb::estimate_text("i", 100).width, 1e-3f);
+    ASSERT_NEAR((1933 + 455 + 569) * s, stb::estimate_text("Wi ", 100).width, 1e-3f);
+}
+
+UTEST(libstb_font_estimate_tests, test_mono_is_fixed_pitch) {
+    const float one = stb::estimate_text("i", 50, stb::font_family::mono).width;
+    ASSERT_NEAR(one, stb::estimate_text("W", 50, stb::font_family::mono).width, 1e-4f);
+    ASSERT_NEAR(one * 5, stb::estimate_text("hello", 50, stb::font_family::mono).width, 1e-3f);
+}
+
+UTEST(libstb_font_estimate_tests, test_lines_height_and_metrics) {
+    const stb::font_metrics m = stb::estimate_metrics(100);
+    const stb::text_size two = stb::estimate_text("ab\r\nabcd", 100);
+    ASSERT_EQ(2, two.lines);
+    ASSERT_NEAR(2 * m.line_height(), two.height, 1e-3f);
+    ASSERT_NEAR(stb::estimate_text("abcd", 100).width, two.width, 1e-4f);  // widest line, '\r' ignored
+    ASSERT_NEAR(100.0f, m.ascent - m.descent, 1e-3f);                       // em height = pixel_height
+    ASSERT_EQ(1, stb::estimate_text("", 100).lines);
+    ASSERT_EQ(0.0f, stb::estimate_text("", 100).width);
+}
+
+UTEST(libstb_font_estimate_tests, test_non_latin_rules) {
+    const float em = 100.0f * 2048.0f / 2288.0f;  // 1 em = 2048 units
+    ASSERT_NEAR(em, stb::estimate_text("\xE4\xB8\xAD", 100).width, 1e-3f);          // CJK: 1 em
+    ASSERT_NEAR(em, stb::estimate_text("\xF0\x9F\x98\x80", 100).width, 1e-3f);      // emoji: 1 em
+    ASSERT_EQ(0.0f, stb::estimate_text("\xCC\x81", 100).width);                     // combining acute: 0
+    ASSERT_TRUE(stb::estimate_text("\xD0\x96", 100).width > 0.0f);                  // Cyrillic: average
+    ASSERT_NEAR(stb::estimate_text("\xE2\x80\x94", 100).width, 100.0f * 2048 / 2288, 1e-2f);  // em dash
+}
+
+UTEST(libstb_font_estimate_tests, test_errors) {
+    ASSERT_THROWS(stb::estimate_text("\xFF", 16), std::invalid_argument);       // malformed UTF-8
+    for (float bad : {0.0f, -1.0f, 3000.0f, std::nanf(""), INFINITY}) {
+        ASSERT_THROWS(stb::estimate_text("A", bad), std::invalid_argument);
+        ASSERT_THROWS(stb::estimate_metrics(bad), std::invalid_argument);
+    }
+}

@@ -145,3 +145,25 @@ class Font:
         """
         bitmap, entries = self._f.make_atlas(chars, pixel_height, width, height, padding)
         return Atlas(bitmap, {e[0]: AtlasGlyph(*e) for e in entries})
+
+
+def estimate_text(text: str, pixel_height: float, family: str = "sans") -> TextSize:
+    """Rough size of `text` without any font file.
+
+    `family` is "sans" (Arial-like), "serif" (Times-like) or "mono" (Courier-like). Widths come
+    from fixed tables, so the result is the same on every machine. It is an estimate: no kerning,
+    no bold or italic, and characters outside Latin-1 and common punctuation are approximated
+    (CJK and emoji 1 em, anything else the average letter width). For exact numbers use
+    Font.measure with a real font. Same line rules as Font.measure.
+
+    Raises ValueError (malformed text, bad pixel_height, unknown family).
+
+    >>> stb.estimate_text("Hello", 16)
+    TextSize(width=..., height=..., lines=1)
+    """
+    return TextSize(*_native.estimate_text(text, pixel_height, family))
+
+
+def estimate_metrics(pixel_height: float, family: str = "sans") -> FontMetrics:
+    """Vertical metrics for `family` at `pixel_height`, without a font file."""
+    return FontMetrics(*_native.estimate_metrics(pixel_height, family))

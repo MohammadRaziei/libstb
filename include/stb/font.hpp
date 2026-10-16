@@ -119,7 +119,7 @@ public:
 
     // Opaque pimpl (holds the font file bytes and the stbtt_fontinfo). Public
     // only so that helpers in font.cpp can name it; it is incomplete here, so
-    // nothing outside libstb_core can look inside.
+    // nothing outside stb_core can look inside.
     struct impl;
 
 private:
@@ -127,5 +127,30 @@ private:
 
     std::shared_ptr<const impl> impl_;
 };
+
+// ---------------------------------------------------------------- estimates
+//
+// Rough text size WITHOUT a font file, for layout code that only needs to know how much room a
+// string takes (label boxes, SVG sizing, tests that must give the same numbers on every
+// machine). Advance widths come from fixed tables of three metric-compatible families:
+//   sans  ~ Arial / Helvetica      serif ~ Times New Roman      mono ~ Courier New
+// (derived from Liberation Sans / Serif / Mono, SIL OFL; no font is bundled).
+//
+// It is an estimate: no kerning, no shaping, no bold or italic. Basic Latin, Latin-1 and common
+// punctuation use the table; CJK, Hangul, fullwidth forms and emoji count as 1 em; combining
+// marks and control characters as 0; any other character (Cyrillic, Greek, Arabic, ...) gets the
+// family's average letter width, so such text is only roughly right. For exact numbers load a
+// real font and use font::measure.
+
+enum class font_family { sans, serif, mono };
+
+// Vertical metrics at `pixel_height` (the em height; same meaning as font::metrics).
+// Throws invalid_argument unless 0 < pixel_height <= font::max_pixel_height.
+font_metrics estimate_metrics(float pixel_height, font_family family = font_family::sans);
+
+// Same result type and line rules as font::measure ('\n' starts a new line, '\r' is ignored).
+// Throws invalid_argument on malformed UTF-8 or a bad pixel_height.
+text_size estimate_text(std::string_view utf8, float pixel_height,
+                        font_family family = font_family::sans);
 
 }  // namespace stb

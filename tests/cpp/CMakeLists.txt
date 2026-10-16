@@ -3,53 +3,53 @@ file(GLOB LIBSTB_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test
 # The core sources are compiled into the test executable (like ctoon's tests do with ctoon.c)
 # instead of linking libstb::core: the --coverage flags below then reach their object files,
 # and the shipped library target stays untouched. libstb_apply_core_build_settings() gives
-# them the same flags libstb_core is built with.
-add_executable(test_libstb_cpp
+# them the same flags stb_core is built with.
+add_executable(test_stb_cpp
     ${LIBSTB_CORE_SOURCES}
     ${LIBSTB_TEST_SOURCES}
     ${LIBSTB_TEST_SOURCE_DIR}/utest/utest_main.cxx
 )
-libstb_apply_core_build_settings(test_libstb_cpp)
+libstb_apply_core_build_settings(test_stb_cpp)
 # Tests use the public API only: the vendored stb headers are on the include path just because
 # the core sources are compiled in here, and no test includes them.
-target_include_directories(test_libstb_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include ${LIBSTB_TEST_SOURCE_DIR})
+target_include_directories(test_stb_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include ${LIBSTB_TEST_SOURCE_DIR})
 # Synthetic font with solid-rectangle glyphs (tests/data/make_test_font.py).
-target_compile_definitions(test_libstb_cpp PRIVATE
+target_compile_definitions(test_stb_cpp PRIVATE
     LIBSTB_TEST_DATA_DIR="${LIBSTB_TEST_SOURCE_DIR}/data")
 find_package(Threads REQUIRED)
-target_link_libraries(test_libstb_cpp PRIVATE Threads::Threads)
+target_link_libraries(test_stb_cpp PRIVATE Threads::Threads)
 
-add_test(NAME test_libstb_cpp COMMAND $<TARGET_FILE:test_libstb_cpp>)
+add_test(NAME test_stb_cpp COMMAND $<TARGET_FILE:test_stb_cpp>)
 
-add_custom_target(libstb_test_cpp
+add_custom_target(stb_test_cpp
     COMMAND ${CMAKE_COMMAND} -E echo "-- Running c++ tests..."
-    COMMAND $<TARGET_FILE:test_libstb_cpp>
+    COMMAND $<TARGET_FILE:test_stb_cpp>
     WORKING_DIRECTORY ${LIBSTB_TEST_BINARY_DIR}
 )
-add_dependencies(libstb_test_cpp test_libstb_cpp)
-add_dependencies(libstb_test libstb_test_cpp)
+add_dependencies(stb_test_cpp test_stb_cpp)
+add_dependencies(stb_test stb_test_cpp)
 
 # ── Coverage (lcov + genhtml) ─────────────────────────────────────────────────
 # The test executable above is also the coverage one: with lcov and genhtml available it is
-# built with coverage instrumentation (-O0 so lines map 1:1), and libstb_coverage_cpp runs it.
+# built with coverage instrumentation (-O0 so lines map 1:1), and stb_coverage_cpp runs it.
 if(LCOV_EXECUTABLE AND GENHTML_EXECUTABLE)
     # -fprofile-update=atomic: several tests run threads (concurrent_*), and with the default
     # non-atomic counters two threads can race on one counter; geninfo then fails with
     # "Unexpected negative count".
-    target_compile_options(test_libstb_cpp PRIVATE -O0 -g --coverage -fprofile-update=atomic)
-    target_link_options(test_libstb_cpp PRIVATE --coverage)
+    target_compile_options(test_stb_cpp PRIVATE -O0 -g --coverage -fprofile-update=atomic)
+    target_link_options(test_stb_cpp PRIVATE --coverage)
     # LTO (from apply_optimization_flags) would blur the line counters
-    set_target_properties(test_libstb_cpp PROPERTIES
+    set_target_properties(test_stb_cpp PROPERTIES
         INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE
         INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO FALSE)
 
-    add_custom_target(libstb_coverage_cpp
+    add_custom_target(stb_coverage_cpp
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${LIBSTB_COVERAGE_CPP_BINARY_DIR}/html
         COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBSTB_COVERAGE_CPP_BINARY_DIR}/html
 
         COMMAND ${CMAKE_COMMAND} -E echo "-- Running c++ tests with coverage..."
         COMMAND ${LCOV_EXECUTABLE} --zerocounters --directory ${CMAKE_CURRENT_BINARY_DIR}
-        COMMAND $<TARGET_FILE:test_libstb_cpp>
+        COMMAND $<TARGET_FILE:test_stb_cpp>
 
         COMMAND ${CMAKE_COMMAND} -E echo "-- Capturing coverage..."
         COMMAND ${LCOV_EXECUTABLE}
@@ -90,12 +90,12 @@ if(LCOV_EXECUTABLE AND GENHTML_EXECUTABLE)
         WORKING_DIRECTORY ${LIBSTB_TEST_BINARY_DIR}
         USES_TERMINAL
     )
-    add_dependencies(libstb_coverage_cpp test_libstb_cpp)
-    add_dependencies(libstb_coverage libstb_coverage_cpp)
+    add_dependencies(stb_coverage_cpp test_stb_cpp)
+    add_dependencies(stb_coverage stb_coverage_cpp)
 
     file(MAKE_DIRECTORY ${LIBSTB_COVERAGE_CPP_BINARY_DIR})
 
-    add_custom_command(TARGET libstb_coverage_cpp POST_BUILD
+    add_custom_command(TARGET stb_coverage_cpp POST_BUILD
         COMMAND ${CMAKE_COMMAND}
                 -DIFRAME_SRC="html/index.html"
                 -DSECTION_TITLE="C++%20Core"

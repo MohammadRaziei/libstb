@@ -14,7 +14,7 @@ include(FetchContent)
 FetchContent_Declare(
   libstb
   GIT_REPOSITORY https://github.com/MohammadRaziei/libstb.git
-  GIT_TAG        main
+  GIT_TAG        master
 )
 FetchContent_MakeAvailable(libstb)
 

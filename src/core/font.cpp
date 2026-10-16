@@ -344,4 +344,150 @@ atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int 
     return atlas(image(width, height, 1, std::move(pixels)), std::move(glyphs));
 }
 
+// --------------------------------------------------------------- estimate
+// Font-free size estimate: advance widths come from fixed tables (see
+// tools/gen_font_metrics.py), so the result is the same on every machine.
+
+namespace {
+
+// BEGIN GENERATED (tools/gen_font_metrics.py), do not edit by hand
+// All values are in 1/2048 em. Latin table: U+0020..U+00FF; extras: U+2013, U+2014, U+2018, U+2019, U+201C, U+201D, U+2022, U+2026, U+20AC, U+2122.
+constexpr int kEstimateLow = 0x20, kEstimateHigh = 0xFF;
+constexpr char32_t kEstimateExtraCp[10] = {0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2026, 0x20AC, 0x2122};
+struct estimate_family {
+    std::uint16_t latin[kEstimateHigh - kEstimateLow + 1];
+    std::uint16_t extra[10];
+    std::uint16_t fallback;  // any other narrow character
+    int ascent, descent, line_gap;
+};
+const estimate_family kEstimate[3] = {
+    {  // sans (LiberationSans)
+    {
+    569, 569, 727, 1139, 1139, 1821, 1366, 391, 682, 682, 797, 1196, 569, 682, 569, 569,
+    1139, 1139, 1139, 1139, 1139, 1139, 1139, 1139, 1139, 1139, 569, 569, 1196, 1196, 1196, 1139,
+    2079, 1366, 1366, 1479, 1479, 1366, 1251, 1593, 1479, 569, 1024, 1366, 1139, 1706, 1479, 1593,
+    1366, 1593, 1479, 1366, 1251, 1479, 1366, 1933, 1366, 1366, 1251, 569, 569, 569, 961, 1139,
+    682, 1139, 1139, 1024, 1139, 1139, 569, 1139, 1139, 455, 455, 1024, 455, 1706, 1139, 1139,
+    1139, 1139, 682, 1024, 569, 1139, 1024, 1479, 1024, 1024, 1024, 684, 532, 684, 1196, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    569, 682, 1139, 1139, 1139, 1139, 532, 1139, 682, 1509, 758, 1139, 1196, 682, 1509, 1131,
+    819, 1124, 682, 682, 682, 1180, 1100, 682, 682, 682, 748, 1139, 1708, 1708, 1708, 1251,
+    1366, 1366, 1366, 1366, 1366, 1366, 2048, 1479, 1366, 1366, 1366, 1366, 569, 569, 569, 569,
+    1479, 1479, 1593, 1593, 1593, 1593, 1593, 1196, 1593, 1479, 1479, 1479, 1479, 1366, 1366, 1251,
+    1139, 1139, 1139, 1139, 1139, 1139, 1821, 1024, 1139, 1139, 1139, 1139, 569, 569, 569, 569,
+    1139, 1139, 1139, 1139, 1139, 1139, 1139, 1124, 1251, 1139, 1139, 1139, 1139, 1024, 1139, 1024,
+    },
+    {1139, 2048, 455, 455, 682, 682, 717, 2048, 1139, 2048},
+    1195,
+    1854, -434, 67,
+    },
+    {  // serif (LiberationSerif)
+    {
+    512, 682, 836, 1024, 1024, 1706, 1593, 369, 682, 682, 1024, 1155, 512, 682, 512, 569,
+    1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 569, 569, 1155, 1155, 1155, 909,
+    1886, 1479, 1366, 1366, 1479, 1251, 1139, 1479, 1479, 682, 797, 1479, 1251, 1821, 1479, 1479,
+    1139, 1479, 1366, 1139, 1251, 1479, 1479, 1933, 1479, 1479, 1251, 682, 569, 682, 961, 1024,
+    682, 909, 1024, 909, 1024, 909, 682, 1024, 1024, 569, 569, 1024, 569, 1593, 1024, 1024,
+    1024, 1024, 682, 797, 569, 1024, 1024, 1479, 1024, 1024, 909, 983, 410, 983, 1108, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    512, 682, 1024, 1024, 1024, 1024, 410, 1024, 682, 1556, 565, 1024, 1155, 682, 1556, 1024,
+    819, 1124, 614, 614, 682, 1180, 928, 682, 682, 614, 635, 1024, 1536, 1536, 1536, 909,
+    1479, 1479, 1479, 1479, 1479, 1479, 1821, 1366, 1251, 1251, 1251, 1251, 682, 682, 682, 682,
+    1479, 1479, 1479, 1479, 1479, 1479, 1479, 1155, 1479, 1479, 1479, 1479, 1479, 1479, 1139, 1024,
+    909, 909, 909, 909, 909, 909, 1366, 909, 909, 909, 909, 909, 569, 569, 569, 569,
+    1024, 1024, 1024, 1024, 1024, 1024, 1024, 1124, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
+    },
+    {1024, 2048, 682, 682, 909, 909, 717, 2048, 1024, 2007},
+    1153,
+    1825, -443, 87,
+    },
+    {  // mono (LiberationMono)
+    {
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229,
+    },
+    {1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229, 1229},
+    1229,
+    1705, -615, 0,
+    },
+};
+// END GENERATED
+
+constexpr float kEm = 2048.0f;
+
+const estimate_family& family_data(font_family f) {
+    switch (f) {
+        case font_family::sans: return kEstimate[0];
+        case font_family::serif: return kEstimate[1];
+        case font_family::mono: return kEstimate[2];
+    }
+    throw std::invalid_argument("unknown font family");
+}
+
+// Characters that take no room (combining marks, joiners, variation selectors) ...
+bool is_zero_width(char32_t c) {
+    return (c >= 0x0300 && c <= 0x036F) || (c >= 0x200B && c <= 0x200F) || (c >= 0x20D0 && c <= 0x20FF) ||
+           (c >= 0xFE00 && c <= 0xFE0F) || c == 0xFEFF || c == 0x2060;
+}
+
+// ... and the ones that take a full em (CJK, Hangul, fullwidth forms, emoji).
+bool is_wide(char32_t c) {
+    return (c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) ||
+           (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFE30 && c <= 0xFE6F) || (c >= 0xFF00 && c <= 0xFF60) ||
+           (c >= 0xFFE0 && c <= 0xFFE6) || (c >= 0x1F300 && c <= 0x1FAFF) || (c >= 0x20000 && c <= 0x3FFFD);
+}
+
+float estimate_units(const estimate_family& fam, char32_t c) {
+    if (c >= char32_t(kEstimateLow) && c <= char32_t(kEstimateHigh)) return fam.latin[c - kEstimateLow];
+    for (int i = 0; i < int(sizeof kEstimateExtraCp / sizeof kEstimateExtraCp[0]); ++i)
+        if (kEstimateExtraCp[i] == c) return fam.extra[i];
+    if (c < 0x20 || is_zero_width(c)) return 0.0f;
+    if (is_wide(c)) return kEm;
+    return fam.fallback;
+}
+
+}  // namespace
+
+font_metrics estimate_metrics(float px, font_family family) {
+    check_px(px);
+    const estimate_family& f = family_data(family);
+    const float s = px / (f.ascent - f.descent);  // same scale stbtt_ScaleForPixelHeight uses
+    return {f.ascent * s, f.descent * s, f.line_gap * s};
+}
+
+text_size estimate_text(std::string_view utf8, float px, font_family family) {
+    check_px(px);
+    const estimate_family& f = family_data(family);
+    const float s = px / (f.ascent - f.descent);
+    const float line_h = float(f.ascent - f.descent + f.line_gap) * s;
+
+    float x = 0, widest = 0;
+    int lines = 1;
+    for (char32_t c : utf8_decode(utf8)) {
+        if (c == U'\n') {
+            widest = std::max(widest, x);
+            x = 0;
+            ++lines;
+        } else if (c != U'\r') {
+            x += estimate_units(f, c) * s;
+        }
+    }
+    widest = std::max(widest, x);
+    return {widest, lines * line_h, lines};
+}
+
 }  // namespace stb

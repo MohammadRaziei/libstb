@@ -2,7 +2,7 @@ set(LIBSTB_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(LIBSTB_TEST_BINARY_DIR ${CMAKE_BINARY_DIR}/tests)
 
 # Coverage reports (lcov + genhtml for C++, coverage.py for the Python layer). Each language
-# writes into its own directory; libstb_coverage_total merges them. The dashboard that links
+# writes into its own directory; stb_coverage_total merges them. The dashboard that links
 # them all is generated at the end of this file (build/coverage/index.html).
 set(LIBSTB_COVERAGE_BINARY_DIR ${CMAKE_BINARY_DIR}/coverage)
 set(LIBSTB_COVERAGE_TOTAL_BINARY_DIR  ${LIBSTB_COVERAGE_BINARY_DIR}/total  CACHE PATH "Total coverage output directory")
@@ -10,11 +10,11 @@ set(LIBSTB_COVERAGE_CPP_BINARY_DIR    ${LIBSTB_COVERAGE_BINARY_DIR}/cpp    CACHE
 set(LIBSTB_COVERAGE_PYTHON_BINARY_DIR ${LIBSTB_COVERAGE_BINARY_DIR}/python CACHE PATH "Python coverage output directory")
 file(MAKE_DIRECTORY ${LIBSTB_COVERAGE_BINARY_DIR})
 
-add_custom_target(libstb_test
+add_custom_target(stb_test
     COMMAND ${CMAKE_COMMAND} -E echo "-- Running All tests..."
 )
 
-add_custom_target(libstb_coverage
+add_custom_target(stb_coverage
     COMMAND ${CMAKE_COMMAND} -E echo "-- Running coverage for all languages ..."
 )
 
@@ -29,9 +29,9 @@ if(TARGET build_python)
 endif()
 
 # ── Total coverage: merge the per-language lcov files ─────────────────────────
-if(TARGET libstb_coverage_cpp AND TARGET libstb_coverage_python)
+if(TARGET stb_coverage_cpp AND TARGET stb_coverage_python)
     if(LCOV_EXECUTABLE AND GENHTML_EXECUTABLE)
-        add_custom_target(libstb_coverage_total
+        add_custom_target(stb_coverage_total
             COMMAND ${CMAKE_COMMAND} -E remove_directory ${LIBSTB_COVERAGE_TOTAL_BINARY_DIR}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBSTB_COVERAGE_TOTAL_BINARY_DIR}/html
             COMMAND ${CMAKE_COMMAND} -E echo "-- Merging C++ and Python coverage..."
@@ -63,10 +63,10 @@ if(TARGET libstb_coverage_cpp AND TARGET libstb_coverage_python)
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             USES_TERMINAL
         )
-        add_dependencies(libstb_coverage_total libstb_coverage_cpp libstb_coverage_python)
-        add_dependencies(libstb_coverage libstb_coverage_total)
+        add_dependencies(stb_coverage_total stb_coverage_cpp stb_coverage_python)
+        add_dependencies(stb_coverage stb_coverage_total)
 
-        add_custom_command(TARGET libstb_coverage_total POST_BUILD
+        add_custom_command(TARGET stb_coverage_total POST_BUILD
             COMMAND ${CMAKE_COMMAND}
                 -DIFRAME_SRC="html/index.html"
                 -DSECTION_TITLE="Total%20Coverage"
@@ -83,7 +83,7 @@ endif()
 # ── Dashboard: build/coverage/index.html links every report that exists ───────
 set(COVERAGE_DATA_JSON "[")
 
-if(TARGET libstb_coverage_total)
+if(TARGET stb_coverage_total)
     set(COVERAGE_DATA_JSON "${COVERAGE_DATA_JSON}
         {
             \"id\": \"total\",
@@ -97,7 +97,7 @@ if(TARGET libstb_coverage_total)
         },")
 endif()
 
-if(TARGET libstb_coverage_cpp)
+if(TARGET stb_coverage_cpp)
     set(COVERAGE_DATA_JSON "${COVERAGE_DATA_JSON}
         {
             \"id\": \"cpp\",
@@ -110,7 +110,7 @@ if(TARGET libstb_coverage_cpp)
         },")
 endif()
 
-if(TARGET libstb_coverage_python)
+if(TARGET stb_coverage_python)
     set(COVERAGE_DATA_JSON "${COVERAGE_DATA_JSON}
         {
             \"id\": \"py\",

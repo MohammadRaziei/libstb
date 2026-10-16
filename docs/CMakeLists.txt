@@ -45,10 +45,10 @@ if(DOXYGEN_FOUND)
         VERBATIM
     )
 
-    add_custom_target(libstb_docs_cpp DEPENDS ${LIBSTB_DOCS_CPP_HTML})
+    add_custom_target(stb_docs_cpp DEPENDS ${LIBSTB_DOCS_CPP_HTML})
 else()
     message(WARNING "Doxygen not found - C++ documentation will not be generated")
-    add_custom_target(libstb_docs_cpp
+    add_custom_target(stb_docs_cpp
         COMMAND ${CMAKE_COMMAND} -E echo "Skipping C++ docs: Doxygen not found"
     )
 endif()
@@ -84,15 +84,15 @@ if(SPHINX_CHECK EQUAL 0)
         VERBATIM
     )
 
-    add_custom_target(libstb_docs_python DEPENDS ${LIBSTB_DOCS_PYTHON_HTML})
+    add_custom_target(stb_docs_python DEPENDS ${LIBSTB_DOCS_PYTHON_HTML})
 
     # Must have build_python run first so the module is installed
     if(TARGET build_python)
-        add_dependencies(libstb_docs_python build_python)
+        add_dependencies(stb_docs_python build_python)
     endif()
 else()
     message(WARNING "Sphinx not found - Python documentation will not be generated")
-    add_custom_target(libstb_docs_python
+    add_custom_target(stb_docs_python
         COMMAND ${CMAKE_COMMAND} -E echo "Skipping Python docs: Sphinx not found"
     )
 endif()
@@ -148,22 +148,22 @@ add_custom_command(
     VERBATIM
 )
 
-add_custom_target(libstb_docs_index DEPENDS ${LIBSTB_INDEX_OUT})
+add_custom_target(stb_docs_index DEPENDS ${LIBSTB_INDEX_OUT})
 
 
 # ── Master target ─────────────────────────────────────────────
 
-add_custom_target(libstb_docs
+add_custom_target(stb_docs
     COMMAND ${CMAKE_COMMAND} -E echo "-- All documentation generated"
     COMMENT "Building all documentation"
 )
 
-add_dependencies(libstb_docs libstb_docs_cpp libstb_docs_python libstb_docs_index)
+add_dependencies(stb_docs stb_docs_cpp stb_docs_python stb_docs_index)
 
 
 # ── Post-process: inject HTML comment into all output HTML files ──
 
-add_custom_command(TARGET libstb_docs POST_BUILD
+add_custom_command(TARGET stb_docs POST_BUILD
     COMMAND ${CMAKE_COMMAND}
         -DOUTPUT_DIR=${LIBSTB_DOCS_OUT}
         -DCOMMENT_IN=${CMAKE_CURRENT_SOURCE_DIR}/initial_comment.in
@@ -182,7 +182,7 @@ add_custom_command(TARGET libstb_docs POST_BUILD
 # byte-for-byte as committed.
 set(LIBSTB_BENCH_OUTDIR ${PROJECT_SOURCE_DIR}/benchmarks/outputs)
 if(EXISTS ${LIBSTB_BENCH_OUTDIR}/index.html)
-    add_custom_command(TARGET libstb_docs POST_BUILD
+    add_custom_command(TARGET stb_docs POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBSTB_BENCH_OUTDIR} ${LIBSTB_DOCS_OUT}/benchmarks
         COMMENT "Publishing committed benchmarks/outputs/ -> ${LIBSTB_DOCS_OUT}/benchmarks/"
         VERBATIM

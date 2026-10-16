@@ -11,24 +11,24 @@ if(NOT LIBSTB_PYDEPS_RESULT EQUAL 0)
 endif()
 
 # Run from the install dir so `import libstb` finds the freshly built package.
-add_test(NAME test_libstb_python
+add_test(NAME test_stb_python
     COMMAND ${Python3_EXECUTABLE} -m pytest ${LIBSTB_TEST_SOURCE_DIR}/python -p no:cacheprovider
     WORKING_DIRECTORY ${PYTHON_INSTALL_DIR}
 )
 
-add_custom_target(libstb_test_python
+add_custom_target(stb_test_python
     COMMAND ${CMAKE_COMMAND} -E echo "-- Running python tests..."
     COMMAND ${Python3_EXECUTABLE} -m pytest ${LIBSTB_TEST_SOURCE_DIR}/python -p no:cacheprovider
     WORKING_DIRECTORY ${PYTHON_INSTALL_DIR}
     USES_TERMINAL
 )
-add_dependencies(libstb_test_python build_python)
-add_dependencies(libstb_test libstb_test_python)
+add_dependencies(stb_test_python build_python)
+add_dependencies(stb_test stb_test_python)
 
 # ── Coverage (coverage.py, reported through lcov-format files) ────────────────
 # Measures the Python layer (src/bindings/python/libstb/*.py, installed under
 # PYTHON_INSTALL_DIR). The native extension is not instrumented here: the C++ core
-# is covered by libstb_coverage_cpp. pytest-memray is switched off for this run
+# is covered by stb_coverage_cpp. pytest-memray is switched off for this run
 # (LIBSTB_NO_MEMRAY): its allocation tracking and coverage.py's tracing do not mix.
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -m coverage --version
@@ -37,7 +37,7 @@ execute_process(
 )
 
 if(LIBSTB_COVERAGE_CHECK_RESULT EQUAL 0)
-    add_custom_target(libstb_coverage_python
+    add_custom_target(stb_coverage_python
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${LIBSTB_COVERAGE_PYTHON_BINARY_DIR}/html
         COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBSTB_COVERAGE_PYTHON_BINARY_DIR}/html
 
@@ -66,12 +66,12 @@ if(LIBSTB_COVERAGE_CHECK_RESULT EQUAL 0)
         WORKING_DIRECTORY ${PYTHON_INSTALL_DIR}
         USES_TERMINAL
     )
-    add_dependencies(libstb_coverage_python build_python)
-    add_dependencies(libstb_coverage libstb_coverage_python)
+    add_dependencies(stb_coverage_python build_python)
+    add_dependencies(stb_coverage stb_coverage_python)
 
     file(MAKE_DIRECTORY ${LIBSTB_COVERAGE_PYTHON_BINARY_DIR})
 
-    add_custom_command(TARGET libstb_coverage_python POST_BUILD
+    add_custom_command(TARGET stb_coverage_python POST_BUILD
         COMMAND ${CMAKE_COMMAND}
                 -DIFRAME_SRC="html/index.html"
                 -DSECTION_TITLE="Python%20Layer"

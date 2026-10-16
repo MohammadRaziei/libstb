@@ -31,10 +31,10 @@ option(LIBSTB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 # stbi_* symbol leaks out to consumers.
 file(GLOB LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/core/*.cpp)
 
-add_library(libstb_core STATIC ${LIBSTB_CORE_SOURCES})
-add_library(libstb::core ALIAS libstb_core)
+add_library(stb_core STATIC ${LIBSTB_CORE_SOURCES})
+add_library(libstb::core ALIAS stb_core)
 
-set_target_properties(libstb_core PROPERTIES
+set_target_properties(stb_core PROPERTIES
     POSITION_INDEPENDENT_CODE ON        # linked into the Python extension
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
@@ -55,14 +55,14 @@ else()
     set(_libstb_cmake_dest lib/cmake/libstb)
 endif()
 
-target_include_directories(libstb_core
+target_include_directories(stb_core
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${_libstb_inc_dest}>
 )
 # Everything that decides how the core sources are compiled lives in this function, so a target
 # that compiles them itself (tests/cpp does, to attach coverage flags) gets exactly the same
-# settings as libstb_core.
+# settings as stb_core.
 function(libstb_apply_core_build_settings target)
     # SYSTEM: vendored headers we don't control - their internal warnings are not
     # ours to fix under our own -Wall/-Wextra/-W4.
@@ -94,11 +94,11 @@ function(libstb_apply_core_build_settings target)
     endif()
 endfunction()
 
-libstb_apply_core_build_settings(libstb_core)
+libstb_apply_core_build_settings(stb_core)
 
 # --- install (find_package(libstb) -> libstb::core) ---
 include(CMakePackageConfigHelpers)
-install(TARGETS libstb_core EXPORT libstbTargets ARCHIVE DESTINATION ${_libstb_lib_dest})
+install(TARGETS stb_core EXPORT libstbTargets ARCHIVE DESTINATION ${_libstb_lib_dest})
 install(DIRECTORY include/ DESTINATION ${_libstb_inc_dest})
 install(EXPORT libstbTargets FILE libstbTargets.cmake NAMESPACE libstb:: DESTINATION ${_libstb_cmake_dest})
 configure_package_config_file(

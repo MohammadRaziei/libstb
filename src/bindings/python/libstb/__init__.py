@@ -23,7 +23,8 @@ except Exception:  # pragma: no cover
     __version__ = "0.0.0+unknown"
 
 from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
-from .font import Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize
+from .font import (Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize,
+                   estimate_metrics, estimate_text)
 from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, set_simd, simd_backends, simd_name
@@ -124,7 +125,7 @@ def get_include_dir():
 
 
 def get_lib_dir():
-    """Directory containing the static C++ library (libstb_core)."""
+    """Directory containing the static C++ library (stb_core)."""
     return _os.path.join(_pkg_dir, "lib")
 
 
@@ -137,6 +138,7 @@ __all__ = [
     "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "imresize",
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
+    "estimate_text", "estimate_metrics",
     "Error", "DecodeError", "EncodeError", "LimitError",
     "get_include_dir", "get_lib_dir", "get_cmake_dir",
 ]

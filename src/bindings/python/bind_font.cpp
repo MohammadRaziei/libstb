@@ -38,6 +38,13 @@ std::string to_utf8(char32_t cp) {
     return s;
 }
 
+stb::font_family parse_family(const std::string& name) {
+    if (name == "sans") return stb::font_family::sans;
+    if (name == "serif") return stb::font_family::serif;
+    if (name == "mono") return stb::font_family::mono;
+    throw std::invalid_argument("family must be \"sans\", \"serif\" or \"mono\"");
+}
+
 }  // namespace
 
 // Native tuples here; the Python package (font.py) wraps them in NamedTuples
@@ -115,4 +122,18 @@ void bind_font(nb::module_& m) {
                  return std::make_tuple(std::move(bitmap), std::move(glyphs));
              },
              "chars"_a, "pixel_height"_a, "width"_a, "height"_a, "padding"_a = 1);
+
+    // Font-free estimates (font.py wraps them in NamedTuples)
+    m.def("estimate_text",
+          [](const std::string& text, float px, const std::string& family) {
+              const auto s = stb::estimate_text(text, px, parse_family(family));
+              return std::make_tuple(s.width, s.height, s.lines);
+          },
+          "text"_a, "pixel_height"_a, "family"_a = "sans");
+    m.def("estimate_metrics",
+          [](float px, const std::string& family) {
+              const auto v = stb::estimate_metrics(px, parse_family(family));
+              return std::make_tuple(v.ascent, v.descent, v.line_gap);
+          },
+          "pixel_height"_a, "family"_a = "sans");
 }
