@@ -15,7 +15,7 @@ jobs:
       version_string: ${{ steps.init.outputs.version_string }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Initalize
         id: init

@@ -1,0 +1,74 @@
+/*
+ * libstb-doxygen.css: maps doxygen-awesome's variables onto the site tokens (the tokens and the top bar
+ * come first in the same file, from docs/assets/libstb-docs.css: CreateDocs.cmake joins them). Nothing
+ * here changes the layout doxygen-awesome-sidebar-only gives, except making room for the top bar.
+ */
+html, html[data-theme="light"], html[data-theme="dark"] {
+  --primary-color: var(--accent);
+  --primary-dark-color: var(--accent-hover);
+  --primary-light-color: var(--brand);
+  --on-primary-color: var(--accent-fg);
+  --link-color: var(--fg);
+  --page-background-color: var(--bg);
+  --page-foreground-color: var(--fg);
+  --page-secondary-foreground-color: var(--fg3);
+  --separator-color: var(--border);
+  --border-radius-large: 4px; --border-radius-medium: 4px; --border-radius-small: 3px;
+  --box-shadow: none;
+  --odd-color: var(--bg2);
+  --font-family: var(--font);
+  --font-family-monospace: var(--font-mono);
+  --code-background: var(--bg3);
+  --code-foreground: var(--fg);
+  --fragment-background: var(--bg2);
+  --fragment-foreground: var(--fg);
+  --fragment-keyword: var(--tok-k);
+  --fragment-keywordtype: var(--tok-n);
+  --fragment-keywordflow: var(--tok-k);
+  --fragment-token: var(--tok-s);
+  --fragment-comment: var(--code-dim);
+  --fragment-link: var(--tok-n);
+  --fragment-preprocessor: var(--tok-k);
+  --fragment-linenumber-color: var(--code-dim);
+  --fragment-linenumber-background: #1a1d22;
+  --fragment-linenumber-border: #2c3138;
+  --fragment-lineheight: 20px;
+  --tablehead-background: var(--bg3);
+  --blockquote-background: var(--bg2);
+  --blockquote-foreground: var(--fg2);
+  --side-nav-background: var(--bg2);
+  --header-background: var(--bg);
+  --header-foreground: var(--fg);
+  --searchbar-background: var(--bg3);
+  --searchbar-foreground: var(--fg);
+  --menu-selected-background: var(--bg3);
+  --menu-focus-background: var(--fg);
+  --menu-focus-foreground: var(--bg);
+  --note-color: var(--bg2); --note-color-dark: var(--brand); --note-color-darker: var(--fg);
+}
+body { font-family: var(--font); }
+a { text-decoration-color: var(--brand); }
+.topbar { position: sticky; top: 0; z-index: 1000; }
+.topbar-search { display: none; }
+#titlearea, #projectlogo { display: none; }
+#side-nav, #doc-content { background-color: var(--bg); }
+#nav-tree { background: var(--bg2); }
+/* the member tables share doxygen-awesome's fragment colours, so code blocks are dark explicitly */
+div.fragment, pre.fragment { border: 0; background: var(--code-bg); color: var(--code-fg); }
+div.fragment div.line, div.fragment span.lineno { color: var(--code-fg); }
+div.fragment div.line a, div.fragment div.line a:visited { color: var(--tok-n) !important; }
+.memitem, .memproto { border-color: var(--border); }
+table.memname, .memproto { background: var(--bg2); }
+.memproto { border-left: 5px solid var(--brand); border-radius: 0 4px 4px 0; }
+h1, h2, h3, h4, .title { font-family: var(--font); font-weight: 800; font-stretch: 112%; letter-spacing: -.02em; }
+#MSearchBox { background: var(--bg3); }
+
+/* doxygen-awesome sets every link colour with !important (a:link, a:visited ...), which would repaint
+   the top bar and the footer, so these two need !important as well */
+body { margin: 0; }
+.topbar a, .topbar a:link, .topbar a:visited, .topbar a:hover, .topbar a:focus { color: var(--bar-fg) !important; text-decoration: none; }
+.topbar a.topbar-link, .topbar a.topbar-link:link, .topbar a.topbar-link:visited { color: var(--bar-fg2) !important; }
+.topbar a.topbar-link.current, .topbar a.topbar-link:hover { color: var(--bar-fg) !important; }
+.footer a, .footer a:link, .footer a:visited, .footer a:hover { color: var(--bar-fg) !important; }
+.footer-brand { color: var(--bar-fg); }
+#nav-tree .selected, #nav-tree .selected a, #nav-tree .selected a:visited { background: var(--brand); color: var(--on-brand) !important; }

@@ -20,14 +20,21 @@ cmake --build build --target libstb_benchmark
 
 That's the one target you need: it pulls in every benchmark, in the
 right dependency order, and finishes by writing
-**`results/report.html`**: a single, standalone HTML file (Chart.js
+**`outputs/index.html`**: a single, standalone HTML file (Chart.js
 and every raw JSON result are embedded in it) with a "download JSON"
 button per dataset. Open it in a browser; nothing else is required:
 no server, no network, no sibling files.
 
-`results/` is the **only** thing meant to be committed from this whole
-build: everything else (the venv, the corpus, per-run JSON) lives
-under `build/` and is disposable.
+Two folders, nothing else is ever written (the same layout as
+[novasvg's benchmarks](https://github.com/MohammadRaziei/novasvg/tree/master/benchmarks)):
+
+| Folder | What it is |
+|---|---|
+| `build/` | Disposable and git-ignored: the venv, the corpus (synthetic and the downloaded photographs), scratch files, CMake's own state. |
+| `outputs/` | What is meant to be **committed** and published: `index.html` (the report), `results/<step>.json` (what each step measured), and `benchmark.json` (a small digest of those, which the docs landing page reads to draw its teaser). |
+
+The docs build (`docs/CMakeLists.txt`) copies `outputs/` to the site's
+`/benchmarks/` as it is, so committing it is what puts the page online.
 
 The first configure creates a venv and builds libstb from source into
 it (scikit-build-core + nanobind), so it needs a C++17 compiler and
@@ -50,7 +57,7 @@ Every operation is its own target, independently runnable
 | `libstb_bench_scaling` | Throughput vs. image size, 0.016 to 16.8 megapixels |
 | `libstb_bench_fonts` | `Font` (stb_truetype) vs. Pillow's FreeType binding |
 | `libstb_bench_system_info` | Record CPU / RAM / OS / Python |
-| `libstb_bench_report` | Render `results/report.html` from all of the above |
+| `libstb_bench_report` | Render `outputs/index.html` from `outputs/results/*.json`, and write `outputs/benchmark.json` |
 
 The scripts also run by hand, from `python/`, on any machine that has
 the requirements installed:
@@ -69,8 +76,8 @@ python bench_fonts.py DejaVuSans.ttf fonts.json
 # of the default main-branch GitHub install
 cmake -S benchmarks -B benchmarks/build -DLIBSTB_BENCH_GITHUB_URL=/path/to/local/checkout
 
-# where report.html ends up
-cmake -S benchmarks -B benchmarks/build -DLIBSTB_BENCH_RESULTS_DIR=/some/dir
+# where results/, benchmark.json and index.html end up (default: benchmarks/outputs)
+cmake -S benchmarks -B benchmarks/build -DLIBSTB_BENCH_OUTPUT_DIR=/some/dir
 
 # a noisier machine wants more repeats
 cmake -S benchmarks -B benchmarks/build -DLIBSTB_BENCH_REPEATS=15
@@ -256,7 +263,7 @@ average-then-ratio.
 
 The report writes these definitions as LaTeX formulas (inline, between `\(` and `\)`) and renders
 them in the browser with KaTeX. KaTeX is fetched from the npm registry at build time, like Chart.js,
-and inlined together with the eight fonts it needs, so `report.html` is still one self-contained
+and inlined together with the eight fonts it needs, so `index.html` is still one self-contained
 file. Without KaTeX the formulas show as their LaTeX source.
 
 ```
@@ -296,7 +303,7 @@ say so; nothing in it is hard-coded.
 
 ## What the report doesn't say (on purpose)
 
-`results/report.html` is the results, not the write-up: it doesn't
+`outputs/index.html` is the results, not the write-up: it doesn't
 explain how the corpus was built, why timing uses best-of-N, or what
 went wrong along the way: that's this file. The exceptions are the
 machine it ran on (CPU model, core count, RAM, OS, Python version),

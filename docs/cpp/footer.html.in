@@ -1,27 +1,21 @@
-<div class="footer">
-  <div class="footer-content">
-    <p>
-      <strong>$projectname v$projectnumber</strong> - Image I/O, resizing and font rendering on top of stb
-    </p>
-    <p>
-      &copy; 2024-present Mohammad Raziei -
-      <a href="https://github.com/MohammadRaziei/libstb">GitHub Repository</a> |
-      <a href="https://github.com/MohammadRaziei/libstb/blob/master/LICENSE">MIT License</a>
-    </p>
-  </div>
-</div>
-
-<style>
-.footer {
-  margin-top: 2rem;
-  padding: 1rem;
-  border-top: 1px solid #eaeaea;
-  text-align: center;
-  font-size: 0.9rem;
-  color: #666;
+<footer class="footer">
+    <div class="footer-inner">
+        <div>
+            <div class="footer-brand"><img src="../../assets/libstb-sq.svg" alt="" width="34" height="34"><span>libstb</span></div>
+            <p>$projectname v$projectnumber: image I/O, resizing and font rendering on top of the stb single-header libraries. MIT license.</p>
+        </div>
+        <div class="footer-links">
+            <a href="../../python/html/index.html">Python reference</a>
+            <a href="index.html">C++ reference</a>
+            <a href="../../benchmarks/index.html">Benchmarks</a>
+            <a href="https://github.com/MohammadRaziei/libstb">GitHub</a>
+        </div>
+    </div>
+</footer>
+<script>
+function toggleTheme() {
+  var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  try { var s = JSON.parse(localStorage.getItem('libstb-docs') || '{}'); s.theme = t; localStorage.setItem('libstb-docs', JSON.stringify(s)); } catch (e) {}
 }
-.footer-content { max-width: 800px; margin: 0 auto; }
-.footer p { margin: 0.5rem 0; }
-.footer a { color: #0366d6; text-decoration: none; }
-.footer a:hover { text-decoration: underline; }
-</style>
+</script>

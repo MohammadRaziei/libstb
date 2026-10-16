@@ -1,14 +1,14 @@
 {%- extends "basic/layout.html" %}
 {#- The Sphinx pages share the top bar, the footer, the fonts and the tokens with the landing page and
     the benchmark report: libstb-docs.css (docs/assets/) is the one stylesheet, copied into _static/
-    by html_static_path in conf.py. Nothing here loads from a CDN. -#}
+    by html_static_path in conf.py. Only the fonts come from Google Fonts. -#}
 
 {%- block htmltitle %}
 <title>{{ title|striptags|e }} - libstb</title>
 {% endblock %}
 
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
 {%- block extrahead %}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="{{ pathto('_static/libstb-sq.svg', 1) }}" type="image/svg+xml">
 <script>
 (function () {

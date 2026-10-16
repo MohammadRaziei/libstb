@@ -27,13 +27,18 @@ if(DOXYGEN_FOUND)
             -DOUTPUT_DIR=${LIBSTB_DOCS_CPP_OUT}
             -DDOXYGEN_EXECUTABLE=${DOXYGEN_EXECUTABLE}
             -DFOOTER_IN=${LIBSTB_DOCS_CPP_DIR}/footer.html.in
+            -DTOPBAR_IN=${LIBSTB_DOCS_CPP_DIR}/topbar.html.in
+            -DDOXY_CSS=${LIBSTB_DOCS_CPP_DIR}/libstb-doxygen.css
             -DDOXYFILE_IN=${LIBSTB_DOCS_CPP_DIR}/Doxyfile.in
             -DLOGO_SRC=${PROJECT_SOURCE_DIR}/docs/images/libstb-theme.svg
-            -DASSETS_DIR=${LIBSTB_ASSETS_DIR}
+            -DASSETS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/assets
             -P ${LIBSTB_DOCS_CPP_DIR}/CreateDocs.cmake
         DEPENDS
             ${LIBSTB_DOCS_CPP_DIR}/CreateDocs.cmake
             ${LIBSTB_DOCS_CPP_DIR}/footer.html.in
+            ${LIBSTB_DOCS_CPP_DIR}/topbar.html.in
+            ${LIBSTB_DOCS_CPP_DIR}/libstb-doxygen.css
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/libstb-docs.css
             ${LIBSTB_DOCS_CPP_DIR}/Doxyfile.in
             ${LIBSTB_DOCS_CPP_DIR}/mainpage.md
         COMMENT "Generating C++ API documentation with Doxygen"

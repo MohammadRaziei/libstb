@@ -3,9 +3,9 @@ generate_report.py: combine every result JSON the benchmark suite wrote
 into one standalone HTML report. Chart.js and all the raw JSON data are
 embedded directly in the file, so the output needs nothing else to view
 or to keep: no server, no network, no sibling files. That is also why
-this is the one artifact meant to live in benchmarks/results/:
-everything upstream of it (corpus, venv, per-run JSON) is disposable
-build output.
+this is the report that lives in benchmarks/outputs/ (next to results/*.json and
+benchmark.json): everything else (corpus, venv, scratch) is disposable build output
+under build/.
 
 What this file deliberately does NOT contain: how the corpus was
 generated, why timing uses best-of-N, or the ru_maxrss/execve gotcha
