@@ -37,8 +37,8 @@ Homepage = "https://github.com/MohammadRaziei/libstb"
 [tool.scikit-build]
 build.verbose = true
 cmake.build-type = "Release"
-cmake.define.LIBSTB_BUILD_PYTHON = "ON"
-cmake.define.LIBSTB_BUILD_TESTS = "OFF"
+cmake.define.STB_BUILD_PYTHON = "ON"
+cmake.define.STB_BUILD_TESTS = "OFF"
 
 # Stable ABI (abi3): nanobind's STABLE_ABI only takes effect on Python >= 3.12 (below that it
 # silently builds a normal per-version extension), so the abi3 tag is set only for 3.12+. That
