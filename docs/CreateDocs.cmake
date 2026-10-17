@@ -4,6 +4,7 @@
 #   OUTPUT_DIR, INDEX_IN, PROJECT_VERSION, LOGO_SQ,
 #   ASSETS_DIR   (docs/assets: the one stylesheet, its fonts, the logos and the benchmark teaser script)
 #   SHOWCASE_SCRIPT (docs/make_showcase.py: writes the frames of the live demo with libstb itself)
+#   LIBSTB_PYTHON_INSTALL_DIR (optional: the built module, put on PYTHONPATH for SHOWCASE_SCRIPT)
 #   LANGS_FILE (docs/supported_langs.json), LANGS_DIR (docs/, holding each
 #   <folder>/index-docs.json + index-install.txt + index-example.txt; see
 #   supported_langs.json's own "_comment" field for the format),
@@ -40,11 +41,15 @@ if(NOT GENERATE_RESULT EQUAL 0)
 endif()
 
 # The hero's live demo: every frame is written by libstb itself at build time (never committed).
-# Needs libstb importable by this Python and network access for the photo; without either the
-# page simply hides the demo.
+# Needs libstb importable (LIBSTB_PYTHON_INSTALL_DIR, the freshly built module, is put on PYTHONPATH)
+# and network access for the photo; without either the page simply hides the demo.
 if(DEFINED SHOWCASE_SCRIPT)
+  set(_showcase_env "")
+  if(LIBSTB_PYTHON_INSTALL_DIR AND EXISTS "${LIBSTB_PYTHON_INSTALL_DIR}")
+    set(_showcase_env ${CMAKE_COMMAND} -E env "PYTHONPATH=${LIBSTB_PYTHON_INSTALL_DIR}")
+  endif()
   execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${SHOWCASE_SCRIPT}" --out "${OUTPUT_DIR}/showcase"
+    COMMAND ${_showcase_env} "${Python3_EXECUTABLE}" "${SHOWCASE_SCRIPT}" --out "${OUTPUT_DIR}/showcase"
     RESULT_VARIABLE SHOWCASE_RESULT OUTPUT_QUIET ERROR_VARIABLE SHOWCASE_ERR
   )
   if(NOT SHOWCASE_RESULT EQUAL 0)

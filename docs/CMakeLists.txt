@@ -129,6 +129,7 @@ add_custom_command(
         -DINDEX_IN=${CMAKE_CURRENT_SOURCE_DIR}/index.html.in
         -DASSETS_DIR=${LIBSTB_ASSETS_DIR}
         -DSHOWCASE_SCRIPT=${LIBSTB_SHOWCASE_SCRIPT}
+        -DLIBSTB_PYTHON_INSTALL_DIR=${PYTHON_INSTALL_DIR}
         -DPROJECT_VERSION=${PROJECT_VERSION}
         -DLOGO_SQ=${PROJECT_SOURCE_DIR}/docs/images/libstb-sq.svg
         -DLANGS_FILE=${LIBSTB_SUPPORTED_LANGS}
@@ -149,6 +150,11 @@ add_custom_command(
 )
 
 add_custom_target(stb_docs_index DEPENDS ${LIBSTB_INDEX_OUT})
+
+# The demo frames are written by the built module, so it has to exist first.
+if(TARGET build_python)
+    add_dependencies(stb_docs_index build_python)
+endif()
 
 
 # ── Master target ─────────────────────────────────────────────
