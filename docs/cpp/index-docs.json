@@ -1,7 +1,7 @@
 {
   "title": "C++ API",
   "badge": "C++17",
-  "description": "The core library. Covers <code>stb::image</code> (decode, encode, edit), <code>stb::resizer</code> and its options, <code>stb::font</code> with text bitmaps and atlases, EXIF orientation, SIMD backend selection and the <code>stb::error</code> hierarchy.",
+  "description": "The core library. Covers <code>stb::image</code> (decode, encode, edit), <code>stb::resizer</code> and its options, <code>stb::font</code> with text bitmaps and atlases, <code>stb::zlib_compress</code> and <code>zlib_decompress</code>, EXIF orientation, SIMD backend selection and the <code>stb::error</code> hierarchy.",
   "meta_label": "Generated with Doxygen",
   "link_href": "cpp/html/index.html",
   "link_label": "Open C++ Reference"

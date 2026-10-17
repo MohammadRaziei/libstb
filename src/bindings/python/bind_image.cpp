@@ -85,14 +85,6 @@ stb::image copy_pixels(const std::uint8_t* src, std::size_t h, std::size_t w, st
     return stb::image(int(w), int(h), int(c), std::move(px));
 }
 
-struct py_buffer {  // releases a Py_buffer however the scope is left
-    Py_buffer view{};
-    bool ok = false;
-    ~py_buffer() {
-        if (ok) PyBuffer_Release(&view);
-    }
-};
-
 // An object that only speaks NumPy's __array_interface__ (version 3), e.g. a Pillow image:
 // {"shape", "typestr", "data", "strides", "offset"}. `data` is (address, read-only flag), as
 // NumPy arrays give it, or an object with the buffer protocol, as Pillow gives (bytes).
@@ -140,9 +132,7 @@ stb::image image_from_array_interface(nb::handle obj) {
         return copy_pixels(base, std::size_t(h), std::size_t(w), std::size_t(c), s0, s1, s2);
     }
 
-    py_buffer buf;
-    if (PyObject_GetBuffer(data.ptr(), &buf.view, PyBUF_SIMPLE) != 0) throw nb::python_error();
-    buf.ok = true;
+    py_buffer buf(data.ptr());
     // Every byte the strides can reach must lie inside the buffer.
     const std::int64_t lo = offset + std::min<std::int64_t>(0, (h - 1) * s0) + std::min<std::int64_t>(0, (w - 1) * s1) +
                             std::min<std::int64_t>(0, (c - 1) * s2);

@@ -205,3 +205,17 @@ def test_a_png_bomb_is_refused_before_any_pixel_memory_is_allocated(bomb):
     for _ in range(5):
         with pytest.raises(stb.LimitError):
             stb.Image.open(bomb)
+
+
+@pytest.fixture(scope="module")
+def zip_bomb():
+    import zlib
+
+    return zlib.compress(bytes(600 * 1024 * 1024), 9)  # ~600 KB that inflates to 600 MiB
+
+
+@pytest.mark.limit_memory("60 MB")
+def test_zlib_never_inflates_past_max_bytes(zip_bomb):
+    for _ in range(3):
+        with pytest.raises(stb.LimitError):
+            stb.zlib_decompress(zip_bomb, max_bytes=32 * 1024 * 1024)

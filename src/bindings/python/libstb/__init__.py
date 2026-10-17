@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover
 from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
 from .font import (Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize,
                    estimate_metrics, estimate_text)
+from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
 from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, set_simd, simd_backends, simd_name
@@ -139,6 +140,7 @@ __all__ = [
     "Resizer",
     "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
+    "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",
     "Error", "DecodeError", "EncodeError", "LimitError",
     "get_include_dir", "get_lib_dir", "get_cmake_dir",
 ]

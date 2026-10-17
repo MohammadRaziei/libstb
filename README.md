@@ -34,6 +34,9 @@ photo = stb.Image.open("IMG_0001.jpg", orient=True)   # apply the EXIF rotation 
 font = stb.Font.open("font.ttf")                  # trusted fonts only
 font.render("Hello", 32).bitmap.write("hello.png")
 stb.estimate_text("Hello", 16)                    # text size with no font file at all
+
+packed = stb.zlib_compress(data)                  # zlib streams: the compressor that writes PNG
+data = stb.zlib_decompress(packed, max_bytes=64 << 20)   # output is bounded: a zip bomb is a LimitError
 ```
 
 ## C++ with CMake
@@ -61,6 +64,9 @@ std::vector<std::uint8_t> bytes = small.to_png(9);
 stb::font f = stb::font::open("font.ttf");               // cheap to copy, thread-safe
 stb::text_bitmap t = f.render("Hello", 32);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file needed
+
+std::vector<std::uint8_t> z = stb::zlib_compress(bytes);                 // <stb/zlib.hpp>, level 0..9 like zlib
+std::vector<std::uint8_t> back = stb::zlib_decompress(z, 64u << 20);     // throws limit_error past max_bytes
 ```
 
 The namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target
@@ -90,6 +96,12 @@ What we changed on top, for speed and for a safer, more convenient API:
   scalar builds that give identical results; the best one is picked at run time.
 - **No hidden copies.** Decoded buffers are adopted, not copied; arrays and DLPack tensors are
   shared when they can be; Python calls release the GIL.
+- **zlib as an API.** The PNG compressor and stb's inflate are exposed as
+  `zlib_compress` and `zlib_decompress` (any bytes-like object in, bytes out), with a bounded
+  output so a zip bomb is a `LimitError`. They interoperate with python's `zlib`. Compression
+  was 1.2x to 1.9x faster than zlib level 6 at 0.4% to 3.3% larger output on our samples;
+  decompression is stb_image's and is **not** faster than zlib (about 2.5x slower on very
+  compressible text), so use zlib if inflate speed is what you need.
 - **Editing stb does not have.** Crop, pad, flips, rotation, thumbnail, channel conversion,
   alpha compositing, EXIF orientation, resize filters by name, and a font-free text size
   estimate.

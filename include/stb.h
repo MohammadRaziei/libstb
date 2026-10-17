@@ -20,6 +20,7 @@
 #include "stb/image.hpp"
 #include "stb/resizer.hpp"
 #include "stb/font.hpp"
+#include "stb/zlib.hpp"
 #endif
 
 #endif  // LIBSTB_H

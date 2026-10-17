@@ -460,20 +460,24 @@ float estimate_units(const estimate_family& fam, char32_t c) {
     return fam.fallback;
 }
 
+// The same scale stbtt_ScaleForPixelHeight uses: pixel_height / (ascent - descent).
+float estimate_scale(const estimate_family& f, float px) {
+    check_px(px);
+    return px / (f.ascent - f.descent);
+}
+
 }  // namespace
 
 font_metrics estimate_metrics(float px, font_family family) {
-    check_px(px);
     const estimate_family& f = family_data(family);
-    const float s = px / (f.ascent - f.descent);  // same scale stbtt_ScaleForPixelHeight uses
+    const float s = estimate_scale(f, px);
     return {f.ascent * s, f.descent * s, f.line_gap * s};
 }
 
 text_size estimate_text(std::string_view utf8, float px, font_family family) {
-    check_px(px);
     const estimate_family& f = family_data(family);
-    const float s = px / (f.ascent - f.descent);
-    const float line_h = float(f.ascent - f.descent + f.line_gap) * s;
+    const float s = estimate_scale(f, px);
+    const float line_h = estimate_metrics(px, family).line_height();
 
     float x = 0, widest = 0;
     int lines = 1;

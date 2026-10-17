@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <climits>
+#include <cstdlib>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -12,12 +13,23 @@
 #include <utility>
 
 #include "file.hpp"
+#include "zlib_bridge.hpp"
 
 // STATIC: every stbi_* function gets internal linkage in this TU.
 // NO_STDIO: we only decode from memory (files are read by detail::read_file),
 // which removes fopen/FILE code from the attack surface and Windows path
 // quirks. MAX_DIMENSIONS: hard cap on width/height; stb_image has been fuzzed
 // into many bugs, so reject absurd headers before any decoding work happens.
+//
+// stb_image grows its zlib output buffer through STBI_REALLOC_SIZED, one of stb's documented
+// customisation points (all three allocator macros go together). It is routed through a hook so
+// stb_inflate below can put a ceiling on that buffer when it serves the public zlib API.
+namespace stb::detail {
+void* stbi_realloc(void* p, std::size_t old_size, std::size_t new_size);
+}
+#define STBI_MALLOC(sz) std::malloc(sz)
+#define STBI_REALLOC_SIZED(p, oldsz, newsz) ::stb::detail::stbi_realloc(p, oldsz, newsz)
+#define STBI_FREE(p) std::free(p)
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
@@ -265,3 +277,44 @@ void image::write(const std::filesystem::path& path) const {
 }
 
 }  // namespace stb
+
+// ------------------------------------------------------ the zlib bridge (see zlib_bridge.hpp)
+
+namespace stb::detail {
+namespace {
+thread_local std::size_t t_ceiling = 0;  // 0: no ceiling (every use except stb_inflate)
+thread_local bool t_refused = false;
+}  // namespace
+
+void* stbi_realloc(void* p, std::size_t, std::size_t new_size) {
+    if (t_ceiling != 0 && new_size > t_ceiling) {
+        t_refused = true;
+        return nullptr;  // stb reports it as "out of memory" and frees the old block itself
+    }
+    return std::realloc(p, new_size);
+}
+
+unsigned char* stb_deflate(const unsigned char* data, int size, int level, int* out_size) {
+    return stbi_zlib_compress(const_cast<unsigned char*>(data), size, out_size, level);
+}
+
+unsigned char* stb_inflate(const unsigned char* in, int size, std::size_t initial, std::size_t ceiling,
+                           int* out_size, inflate_status* status) {
+    t_ceiling = ceiling;
+    t_refused = false;
+    char* out = stbi_zlib_decode_malloc_guesssize_headerflag(reinterpret_cast<const char*>(in), size,
+                                                             static_cast<int>(initial), out_size, 1);
+    const bool refused = t_refused;
+    t_ceiling = 0;
+    if (out) {
+        *status = inflate_status::ok;
+        return reinterpret_cast<unsigned char*>(out);
+    }
+    const char* why = stbi_failure_reason();
+    *status = refused ? inflate_status::too_large
+                      : (why && std::string(why) == "Out of memory") ? inflate_status::out_of_memory
+                                                                     : inflate_status::corrupt;
+    return nullptr;
+}
+
+}  // namespace stb::detail
