@@ -2,13 +2,13 @@
 """Generate the landing page (index.html) from docs/index.html.in.
 
 Reads docs/supported_langs.json (the language registry) plus, per language,
-  <folder>/index-docs.json     the API-reference row (title, badge, description, meta_label, link_href, link_label)
-  <folder>/index-install.txt   HTML for the install panel
-  <folder>/index-example.txt   HTML for the quick-example panel
-and fills the @DOCS_TABS@ / @DOCS_CONTENT@ / @INSTALL_TABS@ / @INSTALL_CONTENT@ / @EXAMPLE_TABS@ /
-@EXAMPLE_CONTENT@ placeholders, plus @PROJECT_VERSION@, @LOGO_CONTENT@, @FAVICON@, @LANG_LIST@,
-@BINDING_LIST@ and @BINDING_COUNT@ (the last three derived from the registry's optional "role":
-"tool", "core" or "binding").
+  <folder>/index-docs.json     the API-reference tile (title, badge, description, meta_label, link_href, link_label)
+  <folder>/index-install.txt   HTML for the install step
+  <folder>/index-example.txt   HTML for the quick-example step
+and fills the @LANG_TABS@ / @START_CONTENT@ (one tab per language; each tab holds the install step and
+the example step, one under the other) and @DOCS_CONTENT@ (one reference tile per language, all shown)
+placeholders, plus @PROJECT_VERSION@, @LOGO_CONTENT@, @FAVICON@, @LANG_LIST@, @BINDING_LIST@ and
+@BINDING_COUNT@ (the last three derived from the registry's optional "role": "tool", "core" or "binding").
 
 Code blocks in the fragments are written as <pre data-lang="python" data-label="python">...</pre>
 holding HTML-escaped source. This script gives each one its header (language label and Copy button)
@@ -27,7 +27,6 @@ import re
 import sys
 from pathlib import Path
 
-PANELS = ("docs", "install", "example")
 ROLES = ("tool", "core", "binding")
 DOC_FIELDS = ("title", "badge", "description", "meta_label", "link_href", "link_label")
 
@@ -91,10 +90,19 @@ def decorate_code(fragment: str) -> str:
 
 # ------------------------------------------------------------------- assembly --
 
-DOC_ROW = """<div class="ref">
-    <h3>{title}<span>{badge}</span></h3>
-    <div><p>{description}</p><span class="meta">{meta_label}</span></div>
-    <a class="go" href="{link_href}">{link_label} &rarr;</a>
+DOC_ROW = """<article class="ref reveal">
+  <h3>{title}</h3>
+  <p class="ref-badge">{badge}</p>
+  <p class="ref-desc">{description}</p>
+  <p class="ref-meta">{meta_label}</p>
+  <a class="btn" href="{link_href}">{link_label}</a>
+</article>
+"""
+
+STEP = """<div class="step">
+  <h3>{title}</h3>
+  <div class="step-body">
+{body}  </div>
 </div>
 """
 
@@ -116,15 +124,15 @@ def language_placeholders(languages):
             "@BINDING_COUNT@": str(len(bindings))}
 
 
-def tab_button(panel, folder, name, active):
+def tab_button(folder, name, active):
     cls = "tab-btn active" if active else "tab-btn"
-    return (f'<button class="{cls}" type="button" data-tab="{panel}-{folder}" '
-            f"onclick=\"switchTab('{panel}','{folder}')\">{html.escape(name)}</button>\n")
+    return (f'<button class="{cls}" type="button" role="tab" data-tab="{folder}" '
+            f"onclick=\"switchTab('{folder}')\">{html.escape(name)}</button>\n")
 
 
-def tab_content(panel, folder, inner, active):
+def tab_content(folder, inner, active):
     cls = "tab-content active" if active else "tab-content"
-    return f'<div class="{cls}" id="{panel}-{folder}">\n{inner}</div>\n'
+    return f'<div class="{cls}" id="start-{folder}" role="tabpanel">\n{inner}</div>\n'
 
 
 def read(path):
@@ -148,22 +156,21 @@ def load_docs_row(lang_dir):
 
 def build(args):
     languages = json.loads(read(args.langs_file))["languages"]
-    tabs = {p: [] for p in PANELS}
-    content = {p: [] for p in PANELS}
+    tabs, start, docs = [], [], []
     for i, lang in enumerate(languages):
         folder, name, active = lang["folder"], lang["name"], i == 0
         lang_dir = Path(args.langs_dir) / folder
-        for p in PANELS:
-            tabs[p].append(tab_button(p, folder, name, active))
-        content["docs"].append(tab_content("docs", folder, load_docs_row(lang_dir), active))
-        for p in ("install", "example"):
-            frag = decorate_code(read(lang_dir / f"index-{p}.txt"))
-            content[p].append(tab_content(p, folder, frag, active))
+        tabs.append(tab_button(folder, name, active))
+        steps = "".join(
+            STEP.format(title=title, body=decorate_code(read(lang_dir / f"index-{panel}.txt")))
+            for title, panel in (("Install", "install"), ("Use", "example")))
+        start.append(tab_content(folder, steps, active))
+        docs.append(load_docs_row(lang_dir))
 
-    text = read(args.index_in)
-    for p in PANELS:
-        text = text.replace(f"@{p.upper()}_TABS@", "".join(tabs[p]))
-        text = text.replace(f"@{p.upper()}_CONTENT@", "".join(content[p]))
+    text = decorate_code(read(args.index_in))      # code written straight into the template gets the same treatment
+    text = text.replace("@LANG_TABS@", "".join(tabs))
+    text = text.replace("@START_CONTENT@", "".join(start))
+    text = text.replace("@DOCS_CONTENT@", "".join(docs))
     for key, value in language_placeholders(languages).items():
         text = text.replace(key, value)
     text = text.replace("@PROJECT_VERSION@", args.project_version)

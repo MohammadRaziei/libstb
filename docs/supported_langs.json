@@ -1,13 +1,13 @@
 {
   "_comment": [
-    "libstb supported-language registry: drives the tabs of docs/index.html.in",
+    "libstb supported-language registry: drives the language tabs of docs/index.html.in",
     "(see docs/generate_index.py, invoked by docs/CreateDocs.cmake).",
     "",
     "Each entry's 'folder' must contain three fragment files:",
-    "  <folder>/index-docs.json    - the API-reference row (title, badge, description,",
+    "  <folder>/index-docs.json    - the API-reference tile (title, badge, description,",
     "                                meta_label, link_href, link_label)",
-    "  <folder>/index-install.txt  - HTML for the install panel",
-    "  <folder>/index-example.txt  - HTML for the quick-example panel",
+    "  <folder>/index-install.txt  - HTML for the Install step",
+    "  <folder>/index-example.txt  - HTML for the Use step (shown under the Install step)",
     "Code goes in <pre data-lang=\"python\" data-label=\"python\">...</pre> (escaped source);",
     "generate_index.py adds the header, the Copy button and the colours.",
     "",

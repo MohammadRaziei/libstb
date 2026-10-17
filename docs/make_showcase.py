@@ -6,6 +6,10 @@ shows is a file this script wrote with libstb (Image.resize with a filter by nam
 Image.write), so the page demonstrates the library rather than imitating it. The frames are tiny
 PNGs, shown enlarged with image-rendering: pixelated.
 
+The same run also writes the "tour": one 160 px copy of the photograph and the result of four edit
+calls on it (crop, rotate90, convert, flip_horizontal), shown at their true size in the "Images"
+panel of the landing page.
+
     python docs/make_showcase.py --out <site dir>/showcase [<source photo>]
 
 Run by docs/CreateDocs.cmake while the site is built, so the frames are never committed. With no
@@ -22,6 +26,7 @@ import libstb as stb
 
 SIZES = (8, 12, 16, 24, 32, 48, 64, 96, 128)
 FILTERS = ("box", "linear", "cubic")
+TOUR_SIDE = 160
 PHOTO_URL = "https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/fruits.jpg"
 
 
@@ -30,6 +35,24 @@ def default_photo():
     if not path.exists():
         urllib.request.urlretrieve(PHOTO_URL, path)
     return str(path)
+
+
+def write_tour(square, out):
+    """The photograph and four edits of it, each written by libstb. Returns {name: file}."""
+    base = square.resize(TOUR_SIDE, TOUR_SIDE, "cubic")
+    q = TOUR_SIDE // 5
+    steps = {
+        "open": base,
+        "crop": base.crop(q, q, TOUR_SIDE - 2 * q, TOUR_SIDE - 2 * q),
+        "rotate": base.rotate90(1),
+        "gray": base.convert(1),
+        "flip": base.flip_horizontal(),
+    }
+    files = {}
+    for name, frame in steps.items():
+        files[name] = f"tour-{name}.png"
+        frame.write(str(out / files[name]))
+    return files
 
 
 def main():
@@ -51,9 +74,11 @@ def main():
             rel = f"{name}-{n}.png"
             frame.write(str(out / rel))
             frames.setdefault(name, {})[n] = rel
-    (out / "demo.json").write_text(json.dumps({"sizes": SIZES, "filters": FILTERS, "source": f"{img.width}x{img.height}",
+    tour = write_tour(square, out)
+    (out / "demo.json").write_text(json.dumps({"sizes": SIZES, "filters": FILTERS, "tour": tour,
+                                               "source": f"{img.width}x{img.height}",
                                                "libstb": stb.__version__}, indent=1) + "\n")
-    print(f"wrote {len(FILTERS) * len(SIZES)} frames to {out}")
+    print(f"wrote {len(FILTERS) * len(SIZES)} frames and {len(tour)} tour images to {out}")
 
 
 if __name__ == "__main__":

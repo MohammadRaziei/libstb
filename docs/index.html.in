@@ -14,9 +14,10 @@
     if (s.theme) t = s.theme; else if (matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
   } catch (e) {}
   document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.classList.add('js');
 })();
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap"> <!-- taste-skill-ignore: JetBrains Mono is used for code only -->
 <link rel="stylesheet" href="assets/libstb-docs.css">
 </head>
 <body>
@@ -44,14 +45,15 @@
 <main>
 <section class="hero">
   <div class="hero-grid">
-    <div>
-      <h1>Image I/O with <em>no dependencies.</em></h1>
-      <p class="lede">libstb wraps Sean Barrett's <a href="https://github.com/nothings/stb">stb</a> libraries in a typed C++17 API and a Python module. Decode, resize, edit and encode PNG, JPEG, BMP and TGA, and render TrueType text, from one wheel.</p>
+    <div class="hero-copy">
+      <h1><span class="mask"><span>Image I/O with</span></span> <span class="mask"><span>no dependencies.</span></span></h1>
+      <p class="lede">A C++17 library and a Python module on top of Sean Barrett's <a href="https://github.com/nothings/stb">stb</a>. Decode, resize, edit and encode PNG, JPEG, BMP and TGA, and render TrueType text.</p>
       <div class="hero-actions">
-        <a class="btn" href="python/html/index.html">Python reference</a>
-        <a class="btn ghost" href="cpp/html/index.html">C++ reference</a>
+        <a class="btn" href="#start">Install libstb</a>
+        <a class="hero-link" href="cpp/html/index.html">C++ reference</a>
+        <a class="hero-link" href="python/html/index.html">Python reference</a>
       </div>
-      <div class="cmd"><span><span class="prompt">$</span> pip install libstb</span><button class="copy-btn" type="button" onclick="copyText(this, 'pip install libstb')">Copy</button></div>
+      <p class="hero-note">C++17 core, Python 3.9+ module. Pre-built wheels for Linux, macOS and Windows. MIT license.</p>
     </div>
 
     <figure class="demo" id="demo" aria-labelledby="demo-title">
@@ -74,111 +76,114 @@
   </div>
 </section>
 
+<section class="section" id="start">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <h2>Install and use</h2>
+      <div class="tab-bar" role="tablist" aria-label="Language">
+@LANG_TABS@      </div>
+    </div>
+@START_CONTENT@  </div>
+</section>
+
+<section class="section" id="what">
+  <div class="wrap">
+    <h2 class="reveal">One library, three jobs</h2>
+    <div class="jobs">
+
+      <article class="job job-images reveal">
+        <div>
+          <h3>Images</h3>
+          <p>Decode and encode PNG, JPEG, BMP and TGA. Resize with selectable filters, and edit with <code>crop</code>, <code>flip</code>, <code>rotate90</code>, <code>pad</code>, <code>convert</code> and <code>composite</code>, with EXIF orientation applied on request. Every operation returns a new image.</p>
+        </div>
+        <ul class="tour" id="tour" aria-label="One photograph and four edits of it, each written by libstb">
+          <li style="--s:1"><img src="showcase/tour-open.png" width="160" height="160" alt="The photograph at 160 by 160 pixels"><span><code>open</code></span></li>
+          <li style="--s:.6"><img src="showcase/tour-crop.png" width="96" height="96" alt="The middle of the photograph, cropped to 96 by 96 pixels"><span><code>crop</code></span></li>
+          <li style="--s:1"><img src="showcase/tour-rotate.png" width="160" height="160" alt="The photograph turned a quarter turn counter-clockwise"><span><code>rotate90</code></span></li>
+          <li style="--s:1"><img src="showcase/tour-gray.png" width="160" height="160" alt="The photograph converted to one grey channel"><span><code>convert(1)</code></span></li>
+          <li style="--s:1"><img src="showcase/tour-flip.png" width="160" height="160" alt="The photograph mirrored left to right"><span><code>flip_horizontal</code></span></li>
+        </ul>
+      </article>
+
+      <article class="job job-fonts reveal">
+        <h3>Fonts</h3>
+        <p>Render UTF-8 text from a TrueType font to a bitmap, or build a glyph atlas. To lay text out before you have a font file, estimate its size from built-in metrics.</p>
+<pre data-lang="python" data-label="python">font = stb.Font.open("font.ttf")
+font.render("Hello", 32).bitmap.write("hello.png")
+
+# the size of a text, with no font file
+size = stb.estimate_text("Hello", 32)
+print(size.width, size.height)</pre>
+      </article>
+
+      <article class="job job-zlib reveal">
+        <h3>zlib</h3>
+        <p>Compress and decompress zlib streams. Decompression takes an output limit, so a decompression bomb ends in an error and not in an exhausted machine.</p>
+<pre data-lang="python" data-label="python">packed = stb.zlib_compress(data, 6)
+
+# raises LimitError past max_bytes
+data = stb.zlib_decompress(
+    packed, max_bytes=64 &lt;&lt; 20)</pre>
+      </article>
+
+    </div>
+  </div>
+</section>
+
 <section class="section" id="why">
   <div class="wrap">
-    <h2>What you get, and what backs it up</h2>
-    <div class="claims">
+    <h2 class="reveal">What backs it up</h2>
+    <div class="proofs">
 
-      <div class="claim">
-        <div>
-          <h3>Nothing else to install.</h3>
-          <p>No system libraries and no Python packages. The stb headers are private; the public API is <code>stb::image</code>, <code>stb::resizer</code> and <code>stb::font</code>.</p>
+      <article class="tile tile-speed reveal">
+        <h3>Quick, with the losses shown.</h3>
+        <p>The pixel kernels pick a SIMD backend at run time (AVX2, SSE2, NEON or scalar) and every backend gives identical output. The bars include the operations where Pillow or OpenCV is faster.</p>
+        <div class="proof" id="proof-speed">
+          <div class="cap">Time per operation, averaged over every corpus entry, as a multiple of libstb (1.0&times; is libstb; larger is slower).</div>
+          <p class="proof-note"><a href="benchmarks/index.html">Open the full benchmark report</a>.</p>
         </div>
+      </article>
+
+      <article class="tile tile-deps reveal">
+        <h3>Nothing else to install.</h3>
+        <p>No system libraries and no Python packages. The stb headers are private; the public API is <code>stb::image</code>, <code>stb::resizer</code> and <code>stb::font</code>.</p>
         <div class="proof">
           <div class="big">0<small>dependencies</small></div>
           <div class="cap">numpy and Pillow are optional, and only imported when you ask for <code>img.numpy()</code> or <code>stb.imread()</code>.</div>
           <div id="proof-install"></div>
         </div>
-      </div>
+      </article>
 
-      <div class="claim">
-        <div>
-          <h3>Quick, with the losses shown.</h3>
-          <p>The pixel kernels pick a SIMD backend at run time (AVX2, SSE2, NEON or scalar) and every backend gives identical output. The bars include the operations where Pillow or OpenCV is faster.</p>
-        </div>
-        <div class="proof" id="proof-speed">
-          <div class="cap">Time per operation, averaged over every corpus entry, as a multiple of libstb (1.0&times; is libstb; larger is slower).</div>
-          <p class="proof-note"><a href="benchmarks/index.html">Open the full benchmark report</a>.</p>
-        </div>
-      </div>
-
-      <div class="claim">
-        <div>
-          <h3>Checked before it is timed.</h3>
-          <p>Every operation and library is run on small non-square images and its output compared before a single speed number is recorded.</p>
-        </div>
+      <article class="tile tile-verify reveal">
+        <h3>Checked before it is timed.</h3>
+        <p>Every operation and library is run on small non-square images and its output compared before a single speed number is recorded.</p>
         <div class="proof" id="proof-verify">
           <div class="cap">Lossless formats must decode to the original pixels exactly; resize output is compared with Pillow's for the same filter.</div>
         </div>
-      </div>
+      </article>
 
-      <div class="claim">
+      <article class="tile tile-copy reveal">
         <div>
           <h3>Your arrays, not copies.</h3>
           <p>The Python <code>Image</code> is the C++ image itself, not a wrapper. It shares memory with numpy and with DLPack consumers such as torch.</p>
         </div>
-        <div class="proof">
-          <div class="code" style="margin:0"><div class="code-head"><span>python</span></div><pre><code><span class="tok-k">import</span> numpy <span class="tok-k">as</span> np
-<span class="tok-k">import</span> libstb <span class="tok-k">as</span> stb
+<pre data-lang="python" data-label="python">import numpy as np
+import libstb as stb
 
-img = stb.Image.<span class="tok-f">open</span>(<span class="tok-s">"photo.png"</span>)
-a = np.<span class="tok-f">asarray</span>(img)        <span class="tok-c"># no copy</span>
-t = torch.<span class="tok-f">from_dlpack</span>(img)  <span class="tok-c"># no copy</span></code></pre></div>
-        </div>
-      </div>
+img = stb.Image.open("photo.png")
+a = np.asarray(img)          # no copy
+t = torch.from_dlpack(img)   # no copy</pre>
+      </article>
 
-    </div>
-  </div>
-</section>
-
-<section class="section" id="start">
-  <div class="wrap">
-    <h2>Install it, then use it</h2>
-    <div class="two" style="margin-top:2rem">
-      <div>
-        <h3 style="font-size:1.2rem">Install</h3>
-        <div class="tabs">
-          <div class="tab-bar">
-@INSTALL_TABS@          </div>
-@INSTALL_CONTENT@        </div>
-      </div>
-      <div>
-        <h3 style="font-size:1.2rem">Use</h3>
-        <div class="tabs">
-          <div class="tab-bar">
-@EXAMPLE_TABS@          </div>
-@EXAMPLE_CONTENT@        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="what">
-  <div class="wrap">
-    <h2>One library, three jobs</h2>
-    <div class="claims">
-      <div class="claim">
-        <div><h3>Images.</h3></div>
-        <div class="proof"><p style="margin:0;max-width:none">Decode and encode PNG, JPEG, BMP and TGA. Resize with selectable filters, and edit with <code>crop</code>, <code>flip</code>, <code>rotate90</code>, <code>pad</code>, <code>convert</code> and <code>composite</code>, with EXIF orientation applied on request. Every operation returns a new image.</p></div>
-      </div>
-      <div class="claim">
-        <div><h3>Fonts.</h3></div>
-        <div class="proof"><p style="margin:0;max-width:none">Render UTF-8 text from a TrueType font to a bitmap, or build a glyph atlas.</p></div>
-      </div>
-      <div class="claim">
-        <div><h3>Run-time SIMD.</h3></div>
-        <div class="proof"><p style="margin:0;max-width:none">One build runs on every x86-64 or ARM machine: the kernels choose AVX2, SSE2, NEON or a scalar fallback when the library loads.</p></div>
-      </div>
     </div>
   </div>
 </section>
 
 <section class="section" id="reference">
   <div class="wrap">
-    <h2>API reference</h2>
+    <h2 class="reveal">API reference</h2>
     <div class="refs">
-@DOCS_CONTENT@
-    </div>
+@DOCS_CONTENT@    </div>
   </div>
 </section>
 </main>
@@ -207,9 +212,14 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', t);
   try { var s = JSON.parse(localStorage.getItem('libstb-docs') || '{}'); s.theme = t; localStorage.setItem('libstb-docs', JSON.stringify(s)); } catch (e) {}
 }
-function switchTab(panel, folder) {
-  document.querySelectorAll('[data-tab^="' + panel + '-"]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === panel + '-' + folder); });
-  document.querySelectorAll('[id^="' + panel + '-"].tab-content').forEach(function (c) { c.classList.toggle('active', c.id === panel + '-' + folder); });
+function switchTab(folder) {
+  document.querySelectorAll('.tab-btn').forEach(function (b) {
+    var on = b.dataset.tab === folder;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-content').forEach(function (c) { c.classList.toggle('active', c.id === 'start-' + folder); });
+  try { var s = JSON.parse(localStorage.getItem('libstb-docs') || '{}'); s.lang = folder; localStorage.setItem('libstb-docs', JSON.stringify(s)); } catch (e) {}
 }
 function copyText(btn, text) {
   var done = function () { var o = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = o; }, 1400); };
@@ -241,6 +251,17 @@ function copyCode(btn) { copyText(btn, btn.closest('.code').querySelector('code'
     });
   });
   show();
+})();
+
+/* The language chosen last time, the headline's entrance, and the entrance of each block as it scrolls in. */
+(function () {
+  try { var s = JSON.parse(localStorage.getItem('libstb-docs') || '{}'); if (s.lang && document.querySelector('.tab-btn[data-tab="' + s.lang + '"]')) switchTab(s.lang); } catch (e) {}
+  requestAnimationFrame(function () { requestAnimationFrame(function () { document.documentElement.classList.add('ready'); }); });
+  var blocks = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) { blocks.forEach(function (b) { b.classList.add('in'); }); return; }
+  var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: .12 });
+  blocks.forEach(function (b) { io.observe(b); });
+  document.querySelectorAll('.tour img').forEach(function (i) { i.addEventListener('error', function () { document.getElementById('tour').hidden = true; }); });   // frames are made at build time
 })();
 </script>
 </body>

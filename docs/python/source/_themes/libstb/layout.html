@@ -26,16 +26,17 @@
 {%- block relbar2 %}{% endblock %}
 
 {%- block header %}
+{%- set html_root = pathto('_static/libstb-sq.svg', 1)|replace('_static/libstb-sq.svg', '') %}
 <header class="topbar">
-    <a class="topbar-brand" href="../../index.html">
+    <a class="topbar-brand" href="{{ html_root }}../../index.html">
         <span class="topbar-logo"><img src="{{ pathto('_static/libstb-sq.svg', 1) }}" alt="" width="30" height="30"></span>
         <span class="topbar-name">libstb</span>
         <span class="topbar-sep"></span><span class="topbar-sub">Documentation</span>
     </a>
     <nav class="topbar-nav" aria-label="Sections">
         <a class="topbar-link current" href="{{ pathto(root_doc) }}" aria-current="page">Python</a>
-        <a class="topbar-link" href="../../cpp/html/index.html">C++</a>
-        <a class="topbar-link" href="../../benchmarks/index.html">Benchmarks</a>
+        <a class="topbar-link" href="{{ html_root }}../../cpp/html/index.html">C++</a>
+        <a class="topbar-link" href="{{ html_root }}../../benchmarks/index.html">Benchmarks</a>
     </nav>
     <div class="topbar-actions">
         {%- if builder != 'dirhtml' %}
@@ -105,6 +106,7 @@
 {%- endblock %}
 
 {%- block footer %}
+{%- set html_root = pathto('_static/libstb-sq.svg', 1)|replace('_static/libstb-sq.svg', '') %}
 <footer class="footer">
     <div class="footer-inner">
         <div>
@@ -113,8 +115,8 @@
         </div>
         <div class="footer-links">
             <a href="{{ pathto(root_doc) }}">Python reference</a>
-            <a href="../../cpp/html/index.html">C++ reference</a>
-            <a href="../../benchmarks/index.html">Benchmarks</a>
+            <a href="{{ html_root }}../../cpp/html/index.html">C++ reference</a>
+            <a href="{{ html_root }}../../benchmarks/index.html">Benchmarks</a>
             <a href="https://github.com/MohammadRaziei/libstb">GitHub</a>
             {%- if show_source and has_source and sourcename %}
             <a href="{{ pathto('_sources/' + sourcename, 1)|e }}">View page source</a>
