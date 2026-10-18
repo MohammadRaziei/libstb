@@ -185,34 +185,10 @@ def _tex_e(symbol, ref_label):
     return TEX_E_VS_REF % (symbol, symbol, ref_label)
 
 
-# The only KaTeX fonts the report's formulas use; every other @font-face is dropped so the
-# page does not carry ~20 fonts for a handful of symbols.
-KATEX_FONTS = ("KaTeX_AMS-Regular", "KaTeX_Caligraphic-Regular", "KaTeX_Main-Regular", "KaTeX_Main-Italic",
-               "KaTeX_Main-Bold", "KaTeX_Math-Italic", "KaTeX_Size1-Regular", "KaTeX_Size2-Regular")
-
-
-def _katex_assets(dist_dir):
-    """(css, js) that render the report's formulas with no network: KaTeX itself, its auto-render
-    extension, and a stylesheet whose fonts are the base64 woff2 files above. ("", "") when KaTeX
-    is not available: the formulas then show as their LaTeX source instead of failing the report."""
-    if not dist_dir or not os.path.isfile(os.path.join(dist_dir, "katex.min.js")):
-        print("generate_report: KaTeX not found, formulas will show as LaTeX source")
-        return "", ""
-
-    def read(*parts, mode="r"):
-        with open(os.path.join(dist_dir, *parts), mode, **({"encoding": "utf-8"} if mode == "r" else {})) as f:
-            return f.read()
-
-    def face(match):
-        block = match.group(0)
-        font = re.search(r"url\(fonts/(KaTeX_[A-Za-z0-9-]+)\.woff2\)", block)
-        if not font or font.group(1) not in KATEX_FONTS:
-            return ""
-        data = base64.b64encode(read("fonts", font.group(1) + ".woff2", mode="rb")).decode("ascii")
-        return re.sub(r"src:[^;}]*", 'src:url(data:font/woff2;base64,' + data + ') format("woff2")', block, count=1)
-
-    css = re.sub(r"@font-face\{[^}]*\}", face, read("katex.min.css"))
-    return css, read("katex.min.js") + "\n" + read("contrib", "auto-render.min.js")
+# Chart.js and KaTeX come from cdnjs, pinned to an exact version (nothing is downloaded at build time and
+# nothing is inlined, so the report stays small). Bump the versions here.
+CHARTJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"
+KATEX_BASE = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.22/"
 
 
 def _e_ratio(pairs):
@@ -587,7 +563,7 @@ def _site_chrome(output_path):
     return css, logo
 
 
-def build(results_dir, output_path, chartjs_path, katex_dir=None):
+def build(results_dir, output_path):
     site_css, logo_svg = _site_chrome(output_path)
     if site_css:
         dark, light = _series_palettes(site_css)
@@ -606,11 +582,6 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
     fnt = _build_fonts(fonts)
     size_rows = _build_sizes(sizes)
     size_chart_js = _build_sizes_chart(size_rows)
-
-    with open(chartjs_path, "r", encoding="utf-8") as f:
-        chartjs_source = f.read()
-
-    katex_css, katex_js = _katex_assets(katex_dir)
 
     embedded = {"throughput": throughput, "throughput_memory": throughput_memory, "scaling": scaling,
                 "fonts": fonts, "sizes": sizes, "verify": verify, "system_info": system_info}
@@ -640,7 +611,7 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
         has_throughput_memory=bool(throughput_memory),
         has_sizes=bool(size_rows), size_rows=size_rows,
         verify=verify, system_info=system_info, repeats=repeats,
-        chartjs_source=chartjs_source, katex_css=katex_css, katex_js=katex_js, embedded_json=json.dumps(embedded),
+        chartjs_url=CHARTJS_URL, katex_base=KATEX_BASE, embedded_json=json.dumps(embedded),
         chart_scripts="\n".join(chart_scripts),
         site_css=site_css, logo_svg=logo_svg, favicon=favicon, recolor=RECOLOR,
     )
@@ -655,13 +626,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("results_dir", help="directory holding throughput.json, scaling.json, sizes.json, ...")
     p.add_argument("output", help="path to write the standalone report.html")
-    p.add_argument("--chartjs-path", default=os.path.join(HERE, "vendor", "chart.umd.min.js"),
-                   help="path to a Chart.js UMD build (CMake fetches this fresh; "
-                        "defaults to a local vendor/ copy for running by hand)")
-    p.add_argument("--katex-dir", default=os.path.join(HERE, "vendor", "katex"),
-                   help="KaTeX's dist/ directory (CMake fetches this fresh); without it the formulas "
-                        "are left as LaTeX source")
     args = p.parse_args()
 
-    out = build(args.results_dir, args.output, args.chartjs_path, args.katex_dir)
-    print(f"generate_report: wrote {out} ({os.path.getsize(out) / 1024:.0f}KB, standalone)")
+    out = build(args.results_dir, args.output)
+    print(f"generate_report: wrote {out} ({os.path.getsize(out) / 1024:.0f}KB)")

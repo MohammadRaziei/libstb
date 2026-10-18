@@ -16,10 +16,10 @@
 </script>
 {% if favicon %}<link rel="icon" href="{{ favicon }}" type="image/svg+xml">
 {% endif %}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="{{ katex_base }}katex.min.css">
 <style>
 {{ site_css | safe }}
 .topbar a { text-decoration: none; }
-{{ katex_css | safe }}
 .katex { font-size: 1.04em; }
 :root {
   --r: 4px;
@@ -351,13 +351,9 @@ code { font-family: var(--mono); background: var(--bg-panel-2); padding: 1px 6px
   <a href="https://github.com/MohammadRaziei/libstb">github.com/MohammadRaziei/libstb</a>
 </footer>
 
-<script>
-{{ chartjs_source | safe }}
-</script>
-
-<script>
-{{ katex_js | safe }}
-</script>
+<script src="{{ chartjs_url }}"></script>
+<script src="{{ katex_base }}katex.min.js"></script>
+<script src="{{ katex_base }}contrib/auto-render.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   if (typeof renderMathInElement !== "function") return;

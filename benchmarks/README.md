@@ -20,10 +20,10 @@ cmake --build build --target stb_benchmark
 
 That's the one target you need: it pulls in every benchmark, in the
 right dependency order, and finishes by writing
-**`outputs/index.html`**: a single, standalone HTML file (Chart.js
-and every raw JSON result are embedded in it) with a "download JSON"
-button per dataset. Open it in a browser; nothing else is required:
-no server, no network, no sibling files.
+**`outputs/index.html`**: a single HTML file (every raw JSON result
+is embedded in it) with a "download JSON" button per dataset. Chart.js
+and KaTeX load from cdnjs at fixed versions, so open it in a browser
+with network access; no server and no sibling files are needed.
 
 Two folders, nothing else is ever written (the same layout as
 [novasvg's benchmarks](https://github.com/MohammadRaziei/novasvg/tree/master/benchmarks)):
@@ -244,8 +244,8 @@ operation.
   pre-installed into your system Python)
 - A C++17 compiler (libstb is built from source into the venv)
 - Internet access (competitors + libstb from PyPI/GitHub, the real
-  photographs, a real TrueType font, and Chart.js are all fetched at
-  build time: nothing is vendored in this repository). Every download
+  photographs and a real TrueType font are all fetched at build time:
+  nothing is vendored in this repository). Every download
   of a corpus file is best-effort: if one fails, the suite continues on
   what it has, and without the font it skips the font benchmark.
 
@@ -262,9 +262,9 @@ averaged across entries, ratio-then-average and not
 average-then-ratio.
 
 The report writes these definitions as LaTeX formulas (inline, between `\(` and `\)`) and renders
-them in the browser with KaTeX. KaTeX is fetched from the npm registry at build time, like Chart.js,
-and inlined together with the eight fonts it needs, so `index.html` is still one self-contained
-file. Without KaTeX the formulas show as their LaTeX source.
+them in the browser with KaTeX. KaTeX and Chart.js are linked from cdnjs (the versions are
+`CHARTJS_URL` and `KATEX_BASE` in `report/generate_report.py`), so `index.html` stays small. Offline,
+the charts do not draw and the formulas show as their LaTeX source.
 
 ```
 E[time_x / time_ref] = mean( time_x_i / time_ref_i  for each corpus entry i )
