@@ -34,7 +34,8 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
 
 /* ---- Hero: the landing page's field, left aligned ---- */
-.hero { background: var(--hero-bg); color: var(--hero-fg); }
+/* the brand field in both themes (the landing page's dark theme uses a dark hero; here the green is the page's head) */
+.hero { --hero-bg: var(--brand); --hero-fg: var(--on-brand); --hero-fg2: #2b2810; background: var(--hero-bg); color: var(--hero-fg); }
 .hero-inner { max-width: 1080px; margin: 0 auto; padding: 4.5rem 24px 4rem; }
 .hero .eyebrow { font-size: .9rem; color: var(--hero-fg2); margin-bottom: 1rem; }
 .hero h1 { font-size: clamp(2rem, 4vw, 3.3rem); line-height: 1.04; margin: 0 0 1.2rem; max-width: 22ch; font-weight: 800; font-stretch: 112%; letter-spacing: -.035em; }
