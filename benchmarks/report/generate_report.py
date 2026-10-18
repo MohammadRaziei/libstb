@@ -235,12 +235,221 @@ def _load(path):
     return None
 
 
-def _fmt_ms(x):
-    if x < 1:
-        return f"{x:.3f}ms"
-    if x < 10:
-        return f"{x:.2f}ms"
-    return f"{x:.1f}ms"
+def _fmt_us(x):
+    return f"{x:.1f}\u00b5s" if x < 1000 else f"{x / 1000:.2f}ms"
+
+
+def _chart_js(canvas_id, config):
+    return f"new Chart(document.getElementById({json.dumps(canvas_id)}), {json.dumps(config)});"
+
+
+def _bar_config(labels, values, colors, unit):
+    return {
+        "type": "bar",
+        "data": {"labels": labels, "datasets": [{"data": values, "backgroundColor": colors}]},
+        "options": {
+            "indexAxis": "y", "responsive": True, "maintainAspectRatio": False,
+            "scales": {"x": {"title": {"display": True, "text": unit}}, "y": {"grid": {"display": False}}},
+            "plugins": {"legend": {"display": False}},
+        },
+    }
+
+
+def _series(lib, points, show_line):
+    color = LIB_COLORS.get(lib, FALLBACK_COLOR)
+    return {
+        "label": _label(lib), "data": points, "borderColor": color, "backgroundColor": color,
+        "pointStyle": LIB_POINT_STYLES.get(lib, "circle"), "borderDash": LIB_DASH.get(lib, []) if show_line else [],
+        "showLine": show_line, "tension": 0.2, "pointRadius": 5 if show_line else 4, "pointHoverRadius": 8,
+    }
+
+
+def _xy_config(datasets, x_title, y_title, y_log, x_log=True):
+    return {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "responsive": True, "maintainAspectRatio": False,
+            "scales": {
+                "x": {"type": "logarithmic" if x_log else "linear", "title": {"display": True, "text": x_title}},
+                "y": {"type": "logarithmic" if y_log else "linear", "title": {"display": True, "text": y_title}},
+            },
+            "plugins": {"legend": {"position": "bottom"}},
+        },
+    }
+
+
+# ------------------------------------------------------------ operations --
+
+RESIZE_NOTE = (
+    "libstb, Pillow and scikit-image prefilter when shrinking; OpenCV's INTER_LINEAR and INTER_CUBIC do not "
+    "(faster, and they alias), and INTER_AREA is its antialiasing counterpart. \"libstb\" is "
+    "<code>Resizer(filter, srgb=False)</code>, the like-for-like pairing; \"libstb (sRGB-correct)\" is the "
+    "library's own default, which blends in linear light like a correct resizer should, listed separately so "
+    "the price of that is visible. 3-channel images only. scikit-image is skipped above 1 MP (seconds per call)."
+)
+
+OP_META = {
+    "info": {
+        "title": "info: read the header only, no pixels",
+        "note": "Width, height and channel count without decoding anything. Only libstb and Pillow have a "
+                "header-only call; OpenCV and imageio do not, so they are absent here.",
+    },
+    "decode": {
+        "title": "decode: encoded bytes in, pixel array out",
+        "note": "Each file was written by Pillow, never by stb. OpenCV has no TGA decoder, so it has no TGA "
+                "entries. imageio delegates to Pillow, so it is Pillow plus its own overhead.",
+    },
+    "load_file": {
+        "title": "load_file: path in, pixel array out",
+        "note": "The same as decode but starting from a path, so file I/O is included: what someone actually types.",
+    },
+    "encode_png": {
+        "title": "encode PNG: raw pixels in, file bytes out",
+        "note": "zlib level 6 on every side. stb bundles its own small deflate instead of zlib, so the same level "
+                "does not produce the same bytes: read the speed together with the output-size table below.",
+    },
+    "encode_jpg": {
+        "title": "encode JPEG: raw pixels in, file bytes out",
+        "note": "Quality 90 on every side, 3-channel images only. Encoders make different size/quality trades "
+                "at the same setting, so the output-size table matters as much as the time.",
+    },
+    "encode_bmp": {
+        "title": "encode BMP: raw pixels in, file bytes out",
+        "note": "Uncompressed, so this is mostly memory bandwidth. 3-channel images only.",
+    },
+    "encode_tga": {
+        "title": "encode TGA: raw pixels in, file bytes out",
+        "note": "Uncompressed on every side (libstb with <code>rle=False</code>, matching Pillow's default). "
+                "OpenCV has no TGA encoder.",
+    },
+    "resize_down_linear": {"title": "resize, half size, linear (triangle)", "note": RESIZE_NOTE},
+    "resize_down_cubic": {"title": "resize, half size, cubic (Catmull-Rom)", "note": RESIZE_NOTE},
+    "resize_down_box": {"title": "resize, half size, box / area",
+                        "note": RESIZE_NOTE + " scikit-image has no box filter."},
+    "resize_up_linear": {"title": "resize, double size, linear (triangle)", "note": RESIZE_NOTE},
+    "resize_up_cubic": {"title": "resize, double size, cubic (Catmull-Rom)", "note": RESIZE_NOTE},
+    "crop": {
+        "title": "crop: the central half of each side",
+        "note": "A new, independent image in every library (an OpenCV slice is a view, so it is copied). "
+                "This is mostly memory bandwidth. 3-channel images only.",
+    },
+    "rotate90": {
+        "title": "rotate: a counter-clockwise quarter turn",
+        "note": "Pillow's transpose(ROTATE_90) and cv2.rotate against libstb's rotate90. A turn reads rows "
+                "and writes columns, so it is about memory access patterns. 3-channel images only.",
+    },
+    "flip_horizontal": {
+        "title": "flip left to right",
+        "note": "Pillow's transpose(FLIP_LEFT_RIGHT) and cv2.flip against libstb's flip_horizontal. 3-channel images only.",
+    },
+    "convert_gray": {
+        "title": "convert: RGB to gray",
+        "note": "libstb and Pillow use the same integer formula and give identical pixels; OpenCV's BGR2GRAY "
+                "rounds slightly differently. libstb runs the fastest SIMD backend of the CPU it is measured on "
+                "(<code>libstb.simd_name()</code>). 3-channel images only.",
+    },
+    "composite": {
+        "title": "composite: RGBA over RGBA, straight alpha",
+        "note": "An RGBA image laid over its own upside-down copy, against Pillow's <code>Image.alpha_composite</code> "
+                "(OpenCV has no equivalent). The alpha channel is identical; the colour is within one level where the "
+                "pixel is visible. 4-channel images only, so only the graphics images take part.",
+    },
+}
+
+SECTIONS = [
+    {"id": "decoding", "kicker": "Decoding", "title": "Reading images",
+     "lede": "Header-only reads and full decodes, from bytes and from a file, on every corpus entry: "
+             "synthetic images of four shapes and real photographs, each stored as png, jpg, bmp and tga.",
+     "ops": ["info", "decode", "load_file"], "dataset": "throughput"},
+    {"id": "encoding", "kicker": "Encoding", "title": "Writing images",
+     "lede": "Raw pixels to file bytes, at matched settings. Speed alone is not the whole story for an "
+             "encoder, so each panel also shows how large the output is.",
+     "ops": ["encode_png", "encode_jpg", "encode_bmp", "encode_tga"], "dataset": "throughput"},
+    {"id": "resizing", "kicker": "Resizing", "title": "Resizing images",
+     "lede": "Half size and double size, with linear, cubic and box filters.",
+     "ops": ["resize_down_linear", "resize_down_cubic", "resize_down_box",
+             "resize_up_linear", "resize_up_cubic"], "dataset": "throughput"},
+    {"id": "editing", "kicker": "Editing", "title": "Editing images",
+     "lede": "Crop, quarter turn, flip, RGB to gray and alpha compositing: the operations libstb added for "
+             "working on pixels without leaving the library, against Pillow and OpenCV where they have one.",
+     "ops": ["crop", "rotate90", "flip_horizontal", "convert_gray", "composite"], "dataset": "throughput"},
+]
+
+SCALING_TITLES = {
+    "decode_png": "decode PNG", "decode_jpg": "decode JPEG", "encode_png": "encode PNG",
+    "encode_jpg": "encode JPEG", "resize_down_cubic": "resize, half size, cubic",
+}
+
+FONT_OP_TITLES = {
+    "open": "open: load the font file, get a font object",
+    "measure": "measure: how big would this text be",
+    "render": "render: text in, coverage bitmap out (measure + allocate + draw)",
+}
+
+
+# --------------------------------------------------------------- helpers --
+
+def _label(lib):
+    return LIB_LABELS.get(lib, lib)
+
+
+# Formulas are written in LaTeX between \( and \) (inline only) and rendered in the browser by KaTeX.
+# "%s" slots: the quantity symbol (t = time, m = extra peak memory, s = output size) and the
+# reference library's name; L stands for each other library the sentence goes on to list.
+TEX_E_VS_REF = r"\(\mathbb{E}\!\left[\dfrac{%s_{L}}{%s_{\text{%s}}}\right]\)"
+TEX_E_FONT = r"\(\mathbb{E}\!\left[\dfrac{t_{\text{libstb}}}{t_{\text{Pillow}}}\right]\)"
+
+
+def _tex_e(symbol, ref_label):
+    return TEX_E_VS_REF % (symbol, symbol, ref_label)
+
+
+# The only KaTeX fonts the report's formulas use; every other @font-face is dropped so the
+# page does not carry ~20 fonts for a handful of symbols.
+KATEX_FONTS = ("KaTeX_AMS-Regular", "KaTeX_Caligraphic-Regular", "KaTeX_Main-Regular", "KaTeX_Main-Italic",
+               "KaTeX_Main-Bold", "KaTeX_Math-Italic", "KaTeX_Size1-Regular", "KaTeX_Size2-Regular")
+
+
+def _katex_assets(dist_dir):
+    """(css, js) that render the report's formulas with no network: KaTeX itself, its auto-render
+    extension, and a stylesheet whose fonts are the base64 woff2 files above. ("", "") when KaTeX
+    is not available: the formulas then show as their LaTeX source instead of failing the report."""
+    if not dist_dir or not os.path.isfile(os.path.join(dist_dir, "katex.min.js")):
+        print("generate_report: KaTeX not found, formulas will show as LaTeX source")
+        return "", ""
+
+    def read(*parts, mode="r"):
+        with open(os.path.join(dist_dir, *parts), mode, **({"encoding": "utf-8"} if mode == "r" else {})) as f:
+            return f.read()
+
+    def face(match):
+        block = match.group(0)
+        font = re.search(r"url\(fonts/(KaTeX_[A-Za-z0-9-]+)\.woff2\)", block)
+        if not font or font.group(1) not in KATEX_FONTS:
+            return ""
+        data = base64.b64encode(read("fonts", font.group(1) + ".woff2", mode="rb")).decode("ascii")
+        return re.sub(r"src:[^;}]*", 'src:url(data:font/woff2;base64,' + data + ') format("woff2")', block, count=1)
+
+    css = re.sub(r"@font-face\{[^}]*\}", face, read("katex.min.css"))
+    return css, read("katex.min.js") + "\n" + read("contrib", "auto-render.min.js")
+
+
+def _e_ratio(pairs):
+    """pairs: list of (target, ref), same units, ref > 0. Returns E[target/ref]:
+    the mean of each pair's OWN ratio, not (mean of targets)/(mean of refs) and
+    not a ratio of medians. Entries of very different absolute scale (a 64x64
+    image next to a 2048x2048 one) do not get to dominate just because their
+    raw numbers are bigger."""
+    ratios = [t / r for t, r in pairs if r and r > 0]
+    return sum(ratios) / len(ratios) if ratios else None
+
+
+def _load(path):
+    if path and os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
 
 
 def _fmt_us(x):
@@ -295,18 +504,15 @@ def _entry_label(row, canonical):
 # ------------------------------------------------------------ operations --
 
 def _build_op(key, meta, rows, mem_rows):
-    """One operation's panel: per-entry bars (time and memory), the
-    who-wins summary, and the three scatter charts across all entries."""
+    """One operation's panel: the who-wins summary and the trend charts across all entries."""
     rows = [r for r in rows if key in r]
     libs = sorted({lib for r in rows for lib, c in r[key].items() if c.get("available")},
                   key=lambda lib: list(LIB_LABELS).index(lib) if lib in LIB_LABELS else 99)
     if not libs:
         return None
-    canonical = all(r.get("canonical") for r in rows)
 
     mem_by_entry = {(m["genre"], m["size"], m["format"]): m.get("libraries", {}) for m in mem_rows}
 
-    entries = []
     wins = {lib: 0 for lib in libs}
     mem_wins = {lib: 0 for lib in libs}
     n_cmp = n_mem_cmp = 0
@@ -317,7 +523,7 @@ def _build_op(key, meta, rows, mem_rows):
     mem_agg_all = {lib: {} for lib in libs}
     size_pairs = {lib: [] for lib in libs}  # (out_bytes, ref out_bytes) filled below
 
-    for i, r in enumerate(rows):
+    for r in rows:
         cells = [(lib, r[key].get(lib)) for lib in libs]
         cells = [(lib, c) for lib, c in cells if c and c.get("available")]
         if not cells:
@@ -332,18 +538,10 @@ def _build_op(key, meta, rows, mem_rows):
             if synthetic:
                 time_agg[lib].setdefault(round(mpx, 5), []).append(c["seconds"])
 
-        label = _entry_label(r, canonical)
-        values_text = "  \u00b7  ".join(f"{_label(lib)} {_fmt_ms(c['seconds'] * 1000)}" for lib, c in cells)
-        time_id = f"chart-time-{key}-{i}"
-        js = [_chart_js(time_id, _bar_config([_label(lib) for lib, _ in cells],
-                                             [round(c["seconds"] * 1000, 4) for _, c in cells],
-                                             [LIB_COLORS.get(lib, FALLBACK_COLOR) for lib, _ in cells], "ms"))]
-
         emem = mem_by_entry.get((r["genre"], r["size"], r["format"]), {})
         mem_cells = [(lib, emem.get(lib)) for lib, _ in cells]
         mem_cells = sorted([(lib, m) for lib, m in mem_cells if m and m.get("available")],
                            key=lambda lm: lm[1]["delta_mb"])
-        mem_id, mem_text = None, ""
         if mem_cells:
             n_mem_cmp += 1
             mem_wins[mem_cells[0][0]] += 1
@@ -351,14 +549,6 @@ def _build_op(key, meta, rows, mem_rows):
                 mem_agg_all[lib].setdefault(round(mpx, 5), []).append(m["delta_mb"])
                 if synthetic:
                     mem_agg[lib].setdefault(round(mpx, 5), []).append(m["delta_mb"])
-            mem_id = f"chart-mem-{key}-{i}"
-            mem_text = "  \u00b7  ".join(f"{_label(lib)} {m['delta_mb']:.1f}MB" for lib, m in mem_cells)
-            js.append(_chart_js(mem_id, _bar_config([_label(lib) for lib, _ in mem_cells],
-                                                    [round(m["delta_mb"], 3) for _, m in mem_cells],
-                                                    [LIB_COLORS.get(lib, FALLBACK_COLOR) for lib, _ in mem_cells],
-                                                    "MB (extra peak RSS)")))
-        entries.append({"id": time_id, "label": label, "values_text": values_text,
-                        "mem_id": mem_id, "mem_text": mem_text, "chart_js": "\n".join(js)})
 
     winner_summary, e_ratios, ref_lib = "", {}, None
     if n_cmp:
@@ -466,9 +656,8 @@ def _build_op(key, meta, rows, mem_rows):
         "key": key, "title": meta["title"], "note": meta["note"],
         "winner_summary": winner_summary, "memory_summary": memory_summary,
         "ref_lib": ref_lib, "e_ratios": e_ratios, "size_rows": size_rows,
-        "entries": entries, "trend_chart_js": "\n".join(charts),
+        "trend_chart_js": "\n".join(charts),
         "has_tp": has_tp, "has_time": has_time, "has_mem": has_mem,
-        "n_entries": len(entries),
     }
 
 
@@ -642,8 +831,6 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
     for sec in sections:
         for op in sec["ops_built"]:
             chart_scripts.append(op["trend_chart_js"])
-            for entry in op["entries"]:
-                chart_scripts.append(entry["chart_js"])
 
     n_entries = len(throughput["results"]) if throughput else 0
     repeats = throughput.get("repeats", "?") if throughput else "?"
@@ -653,6 +840,8 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
 
     site_css, logo_svg = _site_chrome(output_path)
     env = Environment(loader=FileSystemLoader(HERE), autoescape=False)
+    # the report is one file, so its icon travels inside it
+    favicon = ("data:image/svg+xml;base64," + base64.b64encode(logo_svg.encode("utf-8")).decode("ascii")) if logo_svg else ""
     html = env.get_template("template.html.jinja2").render(
         generated_at=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         headline="libstb, measured honestly",
@@ -666,7 +855,7 @@ def build(results_dir, output_path, chartjs_path, katex_dir=None):
         verify=verify, system_info=system_info, repeats=repeats,
         chartjs_source=chartjs_source, katex_css=katex_css, katex_js=katex_js, embedded_json=json.dumps(embedded),
         chart_scripts="\n".join(chart_scripts),
-        site_css=site_css, logo_svg=logo_svg,
+        site_css=site_css, logo_svg=logo_svg, favicon=favicon,
     )
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)

@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>libstb Benchmarks</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
+{% if favicon %}<link rel="icon" href="{{ favicon }}" type="image/svg+xml">
+{% endif %}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 {{ site_css | safe }}
 .topbar a { text-decoration: none; }
@@ -161,41 +162,6 @@ h3.op-title:first-of-type { margin-top: 8px; }
 .mini-details[open] summary::before { transform: rotate(90deg); }
 .mini-details summary:hover { color: var(--accent-2); }
 
-.mini-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 14px;
-  margin-bottom: 8px;
-  margin-top: 4px;
-}
-.mini-panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  padding: 14px 16px;
-}
-.mini-label {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-}
-.mini-chart-box { position: relative; height: 96px; }
-.mini-values {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 6px;
-  line-height: 1.5;
-}
-.mini-subhead {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  color: var(--text-dim);
-  margin: 4px 0 4px;
-}
-.mini-mem-subhead { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 10px; }
 
 .panel {
   background: var(--bg-panel);
@@ -364,25 +330,6 @@ section.major { padding-top: 56px; }
     {% endif %}
   </div>
   {% endif %}
-
-  <details class="mini-details">
-    <summary>See per-entry detail ({{ op.n_entries }} corpus entries)</summary>
-    <div class="mini-grid">
-      {% for entry in op.entries %}
-      <div class="mini-panel">
-        <div class="mini-label">{{ entry.label }}</div>
-        <div class="mini-subhead">time (lower is better)</div>
-        <div class="mini-chart-box"><canvas id="{{ entry.id }}"></canvas></div>
-        <div class="mini-values">{{ entry.values_text }}</div>
-        {% if entry.mem_id %}
-        <div class="mini-subhead mini-mem-subhead">extra peak memory (lower is better)</div>
-        <div class="mini-chart-box"><canvas id="{{ entry.mem_id }}"></canvas></div>
-        <div class="mini-values">{{ entry.mem_text }}</div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </details>
 {% endmacro %}
 
 <section class="major" id="method">
@@ -406,7 +353,7 @@ section.major { padding-top: 56px; }
       (photo, gradient, noise, graphics). Each library's point is
       \(\bar t_L(z)=\Bigl(\prod_{i\in G_z} t_i^{L}\Bigr)^{1/|G_z|}\) for time, throughput
       \(\dfrac{z/10^{6}}{\bar t_L(z)}\) in MP/s, and \(\bar m_L(z)=\dfrac{1}{|G_z|}\sum_{i\in G_z} m_i^{L}\)
-      for memory. Real photographs have an odd size each, so they appear only in the per-entry bars.</li>
+      for memory. Real photographs each have an odd size of their own, so they are left out of these charts (they still count in every ratio above).</li>
     <li><strong>Reading a ratio.</strong> Averaging ratios is not symmetric: a library 10 times faster on one entry
       and 10 times slower on another scores \(\mathbb{E}=(0.1+10)/2=5.05\), not 1. Read it together with the win
       count \(W_L\).</li>
@@ -614,20 +561,6 @@ Chart.defaults.borderColor = '#232938';
 Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
 
 {{ chart_scripts | safe }}
-
-// Charts inside a collapsed <details> are built against a hidden (0x0)
-// canvas and can come out mis-sized; force a resize the first time each
-// block is actually opened, as a safety net alongside Chart.js's own
-// ResizeObserver.
-document.querySelectorAll('.mini-details').forEach(function (el) {
-  el.addEventListener('toggle', function () {
-    if (!el.open) return;
-    el.querySelectorAll('canvas').forEach(function (canvas) {
-      const chart = Chart.getChart(canvas);
-      if (chart) chart.resize();
-    });
-  });
-});
 </script>
 </body>
 </html>

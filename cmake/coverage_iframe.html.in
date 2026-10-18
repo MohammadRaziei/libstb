@@ -6,7 +6,7 @@
   | | | |_) \__ \ |_| |_) |
   |_|_|_.__/|___/\__|_.__/
 
-  libstb - C++17 image I/O, resizing and font rendering on top of stb
+  libstb - C++17 images, fonts and zlib on top of stb
   with a Python (nanobind) binding.
 
   Author  : Mohammad Raziei

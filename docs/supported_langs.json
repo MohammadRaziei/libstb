@@ -18,14 +18,14 @@
     "  'binding' - a language binding"
   ],
   "languages": [
-    {
-      "folder": "cpp",
-      "name": "C++",
-      "role": "core"
-    },
-    {
-      "folder": "python",
-      "name": "Python"
-    }
+      {
+          "folder": "python",
+          "name": "Python"
+      },
+      {
+          "folder": "cpp",
+          "name": "C++",
+          "role": "core"
+      }
   ]
 }

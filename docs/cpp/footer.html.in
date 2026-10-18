@@ -2,7 +2,7 @@
     <div class="footer-inner">
         <div>
             <div class="footer-brand"><img src="../../assets/libstb-sq.svg" alt="" width="34" height="34"><span>libstb</span></div>
-            <p>$projectname v$projectnumber: image I/O, resizing and font rendering on top of the stb single-header libraries. MIT license.</p>
+            <p>$projectname v$projectnumber: images, fonts and zlib on top of the stb single-header libraries. MIT license.</p>
         </div>
         <div class="footer-links">
             <a href="../../python/html/index.html">Python reference</a>

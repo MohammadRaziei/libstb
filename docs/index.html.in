@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>libstb: image I/O with no dependencies</title>
-<meta name="description" content="libstb wraps Sean Barrett's stb libraries in a typed C++17 API and a Python module: decode, resize, edit and encode PNG, JPEG, BMP and TGA, and render TrueType text.">
+<title>libstb: images, fonts and zlib with no dependencies</title>
+<meta name="description" content="libstb wraps Sean Barrett's stb libraries in a typed C++17 API and a Python module: decode, resize, edit and encode PNG, JPEG, BMP and TGA, render TrueType text, and compress zlib streams.">
 <link rel="icon" href="@FAVICON@" type="image/svg+xml">
 <script>
 (function () {
@@ -46,8 +46,8 @@
 <section class="hero">
   <div class="hero-grid">
     <div class="hero-copy">
-      <h1><span class="mask"><span>Image I/O with</span></span> <span class="mask"><span>no dependencies.</span></span></h1>
-      <p class="lede">A C++17 library and a Python module on top of Sean Barrett's <a href="https://github.com/nothings/stb">stb</a>. Decode, resize, edit and encode PNG, JPEG, BMP and TGA, and render TrueType text.</p>
+      <h1><span class="mask"><span>Images, fonts and zlib,</span></span> <span class="mask"><span>with no dependencies.</span></span></h1>
+      <p class="lede">A C++17 library and a Python module on top of Sean Barrett's <a href="https://github.com/nothings/stb">stb</a>. Decode, resize, edit and encode PNG, JPEG, BMP and TGA, render TrueType text, and compress zlib streams.</p>
       <div class="hero-actions">
         <a class="btn" href="#start">Install libstb</a>
         <a class="hero-link" href="cpp/html/index.html">C++ reference</a>
@@ -137,20 +137,21 @@ data = stb.zlib_decompress(
 
       <article class="tile tile-speed reveal">
         <h3>Quick, with the losses shown.</h3>
-        <p>The pixel kernels pick a SIMD backend at run time (AVX2, SSE2, NEON or scalar) and every backend gives identical output. The bars include the operations where Pillow or OpenCV is faster.</p>
+        <p>The pixel kernels pick a SIMD backend at run time (AVX2, SSE2, NEON or scalar) and every backend gives identical output. The bars include the operations where Pillow or OpenCV is faster, and what each library weighs when you install it.</p>
         <div class="proof" id="proof-speed">
           <div class="cap">Time per operation, averaged over every corpus entry, as a multiple of libstb (1.0&times; is libstb; larger is slower).</div>
+          <div id="proof-install"></div>
           <p class="proof-note"><a href="benchmarks/index.html">Open the full benchmark report</a>.</p>
         </div>
       </article>
 
+      <div class="proof-col">
+
       <article class="tile tile-deps reveal">
         <h3>Nothing else to install.</h3>
-        <p>No system libraries and no Python packages. The stb headers are private; the public API is <code>stb::image</code>, <code>stb::resizer</code> and <code>stb::font</code>.</p>
+        <p>No system libraries and no Python packages. The stb headers are private; the public API is <code>stb::image</code>, <code>stb::resizer</code>, <code>stb::font</code> and <code>stb::zlib_compress</code>.</p>
         <div class="proof">
           <div class="big">0<small>dependencies</small></div>
-          <div class="cap">numpy and Pillow are optional, and only imported when you ask for <code>img.numpy()</code> or <code>stb.imread()</code>.</div>
-          <div id="proof-install"></div>
         </div>
       </article>
 
@@ -163,17 +164,18 @@ data = stb.zlib_decompress(
       </article>
 
       <article class="tile tile-copy reveal">
-        <div>
-          <h3>Your arrays, not copies.</h3>
-          <p>The Python <code>Image</code> is the C++ image itself, not a wrapper. It shares memory with numpy and with DLPack consumers such as torch.</p>
-        </div>
+        <h3>Your arrays, not copies.</h3>
+        <p>The Python <code>Image</code> is the C++ image itself, not a wrapper. numpy and DLPack consumers such as torch get a view of the same memory, and Pillow converts with <code>to_pil()</code> and <code>from_pil()</code>.</p>
 <pre data-lang="python" data-label="python">import numpy as np
 import libstb as stb
 
 img = stb.Image.open("photo.png")
 a = np.asarray(img)          # no copy
-t = torch.from_dlpack(img)   # no copy</pre>
+t = torch.from_dlpack(img)   # no copy
+pil = img.to_pil()           # one copy</pre>
       </article>
+
+      </div>
 
     </div>
   </div>
@@ -192,7 +194,7 @@ t = torch.from_dlpack(img)   # no copy</pre>
   <div class="footer-inner">
     <div>
       <div class="footer-brand">@LOGO_CONTENT@<span>libstb</span></div>
-      <p>Image I/O, resizing and font rendering on top of the stb single-header libraries, with a binding for @BINDING_LIST@. MIT license. v@PROJECT_VERSION@</p>
+      <p>Images, fonts and zlib on top of the stb single-header libraries, with a binding for @BINDING_LIST@. MIT license. v@PROJECT_VERSION@</p>
       <p style="margin-top:.6rem">Demo photograph: fruits.jpg from OpenCV's sample data (Apache-2.0), resized by libstb.</p>
     </div>
     <div class="footer-links">

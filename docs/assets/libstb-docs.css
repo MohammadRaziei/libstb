@@ -255,8 +255,8 @@ tr.is-self td:first-child { box-shadow: inset 5px 0 0 var(--brand); }
 
 /* hero */
 .hero { background: var(--hero-bg); color: var(--hero-fg); }
-.hero-grid { max-width: 1120px; margin: 0 auto; padding: 4.5rem 1.5rem 5.5rem; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 4rem; align-items: center; }
-.hero h1 { font-size: clamp(2.2rem, 3.7vw, 3.5rem); letter-spacing: -.035em; line-height: 1.04; overflow-wrap: break-word; }
+.hero-grid { max-width: 1120px; margin: 0 auto; padding: 4.5rem 1.5rem 5.5rem; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr); gap: 3.5rem; align-items: center; }
+.hero h1 { font-size: clamp(2.1rem, 3.4vw, 3.2rem); letter-spacing: -.035em; line-height: 1.04; overflow-wrap: break-word; }
 .hero .lede { margin-top: 1.5rem; max-width: 32rem; font-size: 1.125rem; color: var(--hero-fg); }
 .hero .lede a { color: inherit; }
 .hero-actions { margin-top: 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: .7rem 1.6rem; }
@@ -319,11 +319,9 @@ input[type="range"] { flex: 1; accent-color: var(--hero-fg); height: 1.6rem; }
 .tour span { font-size: .8125rem; line-height: 1.2; overflow-wrap: anywhere; }
 
 /* proof: the figures come from benchmarks/benchmark.json (bench-teaser.js), the text is the fallback */
-.tile-speed { grid-column: 1 / span 7; grid-row: 1 / span 2; }
-.tile-deps { grid-column: 8 / span 5; }
-.tile-verify { grid-column: 8 / span 5; }
-.tile-copy { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 2.5rem; align-items: center; }
-.tile-copy .code { margin-top: 0; }
+.tile-speed { grid-column: 1 / span 7; }
+.proof-col { grid-column: 8 / span 5; display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.proof-col .tile-copy { flex: 1; }
 .proof { margin-top: 1.4rem; min-width: 0; }
 .proof .big { font-size: clamp(2.6rem, 5vw, 3.8rem); font-weight: 800; font-stretch: 120%; letter-spacing: -.04em; line-height: 1; color: var(--fg); }
 .proof .big small { display: block; margin: .5rem 0 0; font-size: .95rem; font-weight: 600; font-stretch: 100%; letter-spacing: 0; color: var(--fg3); }
@@ -358,10 +356,11 @@ input[type="range"] { flex: 1; accent-color: var(--hero-fg); height: 1.6rem; }
 @media (max-width: 900px) {
   .hero-grid { grid-template-columns: 1fr; padding-top: 3rem; gap: 2.5rem; }
   .step { grid-template-columns: 1fr; gap: .8rem; }
-  .job-images, .tile-copy { grid-template-columns: 1fr; gap: 1.6rem; }
-  .job-fonts, .job-zlib, .tile-speed, .tile-deps, .tile-verify { grid-column: 1 / -1; grid-row: auto; }
+  .job-images { grid-template-columns: 1fr; gap: 1.6rem; }
+  .job-fonts, .job-zlib, .tile-speed, .proof-col { grid-column: 1 / -1; }
   .job, .tile, .ref { padding: 1.4rem; }
   .section { padding-top: 5rem; }
+  .install-note code { white-space: normal; overflow-wrap: anywhere; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 @media (max-width: 760px) { .topbar-sub, .topbar-sep, .topbar-gh, .topbar-version { display: none; } .topbar { padding: 0 1rem; gap: .5rem; } .topbar-nav { margin-left: 0; } .topbar-link { padding: .35rem .45rem; font-size: .85rem; } }

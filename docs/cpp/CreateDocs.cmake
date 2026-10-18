@@ -59,7 +59,7 @@ execute_process(
 file(READ "${CPP_OUT}/header.default.html" HEADER_TEXT)
 configure_file("${TOPBAR_IN}" "${CPP_OUT}/topbar.html" @ONLY)
 file(READ "${CPP_OUT}/topbar.html" TOPBAR_TEXT)
-set(HEAD_EXTRA "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap\">\n<script>(function(){var t='light';try{var s=JSON.parse(localStorage.getItem('libstb-docs')||'{}');if(s.theme)t=s.theme;else if(matchMedia('(prefers-color-scheme: dark)').matches)t='dark';}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>\n")
+set(HEAD_EXTRA "<link rel=\"icon\" href=\"$relpath^libstb-sq.svg\" type=\"image/svg+xml\">\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;600&display=swap\">\n<script>(function(){var t='light';try{var s=JSON.parse(localStorage.getItem('libstb-docs')||'{}');if(s.theme)t=s.theme;else if(matchMedia('(prefers-color-scheme: dark)').matches)t='dark';}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>\n")
 string(REPLACE "</head>" "${HEAD_EXTRA}</head>" HEADER_TEXT "${HEADER_TEXT}")
 string(REPLACE "<body>" "<body>\n${TOPBAR_TEXT}" HEADER_TEXT "${HEADER_TEXT}")
 file(WRITE "${CPP_OUT}/header.html" "${HEADER_TEXT}")

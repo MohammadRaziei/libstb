@@ -3,7 +3,7 @@
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "libstb C++"
 PROJECT_NUMBER         = @PROJECT_VERSION@
-PROJECT_BRIEF          = "Image I/O, resizing and font rendering on top of stb"
+PROJECT_BRIEF          = "Images, fonts and zlib on top of stb"
 OUTPUT_DIRECTORY       = @LIBSTB_DOCS_CPP_OUT@
 OUTPUT_LANGUAGE        = English
 
