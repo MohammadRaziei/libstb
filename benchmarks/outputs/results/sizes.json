@@ -7,7 +7,7 @@
     "total_size": "2.1 MB",
     "filename": "libstb-0.5.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
     "dependencies": [],
-    "capability": "image decode, png/jpg/bmp/tga encode, resize, TrueType text (stb, no system dependencies)"
+    "capability": "image decode, png/jpg/bmp/tga encode, resize, TrueType text, zlib (stb, no system dependencies)"
   },
   "pillow": {
     "available": true,

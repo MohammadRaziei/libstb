@@ -19,7 +19,7 @@ import sys
 
 # name -> (pip spec to resolve, one-line capability summary shown next to it in the report)
 PACKAGES = {
-    "libstb":      ("libstb",                 "image decode, png/jpg/bmp/tga encode, resize, TrueType text (stb, no system dependencies)"),
+    "libstb":      ("libstb",                 "image decode, png/jpg/bmp/tga encode, resize, TrueType text, zlib (stb, no system dependencies)"),
     "pillow":      ("Pillow",                 "many-format image io, resize, filters, drawing, FreeType text"),
     "opencv":      ("opencv-python-headless", "image io, resize, and a large computer-vision toolkit"),
     "imageio":     ("imageio",                "many-format image io (delegates to Pillow and friends)"),
