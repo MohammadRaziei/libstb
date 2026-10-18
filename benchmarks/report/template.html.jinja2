@@ -259,7 +259,7 @@ code { font-family: var(--mono); background: var(--bg-panel-2); padding: 1px 6px
     {{ op_body(op) }}
   </div>
   {% endfor %}
-  {% if loop.last %}{{ download(['throughput', 'throughput_memory']) }}{% endif %}
+  {{ download(['throughput', 'throughput_memory']) }}
 </section>
 {% endfor %}
 
