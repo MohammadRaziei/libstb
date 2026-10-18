@@ -1,6 +1,6 @@
 /*
  * genhtml.css - libstb coverage theme
- * Aligned with libstb-docs.css dark palette.
+ * The dark tokens of docs/assets/libstb-docs.css (the coverage report is dark only, with no font links).
  *
  * Author  : Mohammad Raziei
  * Email   : mohammadraziei1375@gmail.com
@@ -8,20 +8,20 @@
  */
 
 :root {
-    --bg:           #0f0f12;
-    --bg2:          #1a1a1f;
-    --bg3:          #242429;
-    --fg:           #e8e8f0;
-    --fg2:          #9090a0;
-    --fg3:          #606070;
-    --border:       #2a2a35;
-    --accent:       #4dabf7;
-    --accent-hover: #74c0fc;
-    --cov-high:     #40c057;
-    --cov-med:      #fcc419;
-    --cov-low:      #ff6b6b;
-    --font:         'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --mono:         'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    --bg:           #0c0d0f;
+    --bg2:          #14161a;
+    --bg3:          #1d2025;
+    --fg:           #eef0f2;
+    --fg2:          #b3b9c1;
+    --fg3:          #858c96;
+    --border:       #25282e;
+    --accent:       #19cdb4;
+    --accent-hover: #5be3cf;
+    --cov-high:     #19cdb4;
+    --cov-med:      #f2b84b;
+    --cov-low:      #f28c3d;
+    --font:         'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono:         'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
@@ -205,7 +205,7 @@ td:has(pre.source) {
 }
 
 pre > span:hover {
-    background-color: rgba(77, 171, 247, 0.08);
+    background-color: rgba(25, 205, 180, 0.08);
     cursor: default;
     width: 100%;
 }
@@ -216,8 +216,8 @@ td.tlaUNC, td.tlaBgUNC, span.tlaUNC, span.tlaBgUNC, a.tlaBgUNC,
 td.tlaLBC, td.tlaBgLBC, span.tlaLBC, span.tlaBgLBC, a.tlaBgLBC,
 td.tlaUIC, td.tlaBgUIC, span.tlaUIC, span.tlaBgUIC, a.tlaBgUIC,
 td.tlaUBC, td.tlaBgUBC, span.tlaUBC, span.tlaBgUBC, a.tlaBgUBC {
-    background-color: rgba(255, 107, 107, 0.15);
-    color: #ff6b6b;
+    background-color: rgba(242, 140, 61, 0.16);
+    color: #f28c3d;
 }
 
 /* Gained / covered - blue tone (accent) */
@@ -225,7 +225,7 @@ td.tlaGBC, td.tlaBgGBC, span.tlaGBC, span.tlaBgGBC, a.tlaBgGBC,
 td.tlaGIC, td.tlaBgGIC, span.tlaGIC, span.tlaBgGIC, a.tlaBgGIC,
 td.tlaGNC, td.tlaBgGNC, span.tlaGNC, span.tlaBgGNC, a.tlaBgGNC,
 td.tlaCBC, td.tlaBgCBC, span.tlaCBC, span.tlaBgCBC, a.tlaBgCBC {
-    background-color: rgba(77, 171, 247, 0.12);
+    background-color: rgba(25, 205, 180, 0.12);
     color: var(--accent);
 }
 
@@ -238,4 +238,4 @@ td.tlaDCB, td.tlaBgDCB, span.tlaDCB, span.tlaBgDCB, a.tlaDCB {
     color: var(--fg3);
 }
 
-span.missBins { background-color: rgba(255, 107, 107, 0.2); }
+span.missBins { background-color: rgba(242, 140, 61, 0.22); }

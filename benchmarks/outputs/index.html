@@ -64,13 +64,18 @@
   --hero-fg: #0d0f12;
   --hero-fg2: #2b2810;
 
-  --code-bg: #101215;
-  --code-fg: #e8eaed;
-  --code-dim: #858c96;
-  --tok-k: #19cdb4;
-  --tok-s: #8fdcae;
-  --tok-n: #8ec5ff;
-  --tok-f: #ffffff;
+  /* one radius, a tile surface, and code as a soft tone step off its page (the same on every page) */
+  --r: 4px;
+  --gap: 12px;
+  --tile: #ffffff;
+  --code-bg: #e8ebee;
+  --code-fg: #12151a;
+  --code-dim: #5f6670;
+  --code-head: #dde1e5;
+  --tok-k: #086b5e;
+  --tok-s: #3b6a1f;
+  --tok-n: #1d5ba3;
+  --tok-f: #0d0f12;
 
   --bar-bg: #0d0f12;
   --bar-fg: #f3f4f6;
@@ -116,9 +121,19 @@
   --card-border: #25282e;
   --card-hover: #1d2025;
 
-  --hero-bg: #0c0d0f;
-  --hero-fg: #f3f4f6;
-  --hero-fg2: #b3b9c1;
+  --hero-bg: #19cdb4;
+  --hero-fg: #0d0f12;
+  --hero-fg2: #2b2810;
+
+  --tile: #14161a;
+  --code-bg: #1d2025;
+  --code-fg: #e8eaed;
+  --code-dim: #858c96;
+  --code-head: #25282e;
+  --tok-k: #19cdb4;
+  --tok-s: #8fdcae;
+  --tok-n: #8ec5ff;
+  --tok-f: #ffffff;
 
   --s-libstb: #19cdb4;
   --s-libstb_srgb: #0f8f7d;
@@ -285,7 +300,7 @@ code { font-family: var(--mono); background: var(--bg-panel-2); padding: 1px 6px
 </header>
 
 <div class="hero"><div class="hero-inner">
-  <div class="eyebrow">libstb benchmark report &middot; generated 2026-10-18 17:43 UTC</div>
+  <div class="eyebrow">libstb benchmark report &middot; generated 2026-10-18 22:41 UTC</div>
   <h1>libstb, measured honestly</h1>
   <p class="sub">Image decoding, encoding, resizing and text, each measured on its own against the libraries people actually reach for: Pillow, OpenCV, imageio and scikit-image.</p>
   <div class="meta">88 corpus entries · 7 repeats per cell · 225 output checks passed before timing</div>

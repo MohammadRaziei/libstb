@@ -13,15 +13,15 @@ html, html[data-theme="light"], html[data-theme="dark"] {
   --page-foreground-color: var(--fg);
   --page-secondary-foreground-color: var(--fg3);
   --separator-color: var(--border);
-  --border-radius-large: 4px; --border-radius-medium: 4px; --border-radius-small: 3px;
+  --border-radius-large: var(--r); --border-radius-medium: var(--r); --border-radius-small: 3px;
   --box-shadow: none;
   --odd-color: var(--bg2);
   --font-family: var(--font);
   --font-family-monospace: var(--font-mono);
   --code-background: var(--bg3);
   --code-foreground: var(--fg);
-  --fragment-background: var(--bg2);
-  --fragment-foreground: var(--fg);
+  --fragment-background: var(--code-bg);
+  --fragment-foreground: var(--code-fg);
   --fragment-keyword: var(--tok-k);
   --fragment-keywordtype: var(--tok-n);
   --fragment-keywordflow: var(--tok-k);
@@ -30,8 +30,8 @@ html, html[data-theme="light"], html[data-theme="dark"] {
   --fragment-link: var(--tok-n);
   --fragment-preprocessor: var(--tok-k);
   --fragment-linenumber-color: var(--code-dim);
-  --fragment-linenumber-background: #1a1d22;
-  --fragment-linenumber-border: #2c3138;
+  --fragment-linenumber-background: var(--code-head);
+  --fragment-linenumber-border: var(--code-head);
   --fragment-lineheight: 20px;
   --tablehead-background: var(--bg3);
   --blockquote-background: var(--bg2);
@@ -53,13 +53,13 @@ a { text-decoration-color: var(--brand); }
 #titlearea, #projectlogo { display: none; }
 #side-nav, #doc-content { background-color: var(--bg); }
 #nav-tree { background: var(--bg2); }
-/* the member tables share doxygen-awesome's fragment colours, so code blocks are dark explicitly */
+/* the member tables share doxygen-awesome's fragment colours, so the code surface is set explicitly */
 div.fragment, pre.fragment { border: 0; background: var(--code-bg); color: var(--code-fg); }
 div.fragment div.line, div.fragment span.lineno { color: var(--code-fg); }
 div.fragment div.line a, div.fragment div.line a:visited { color: var(--tok-n) !important; }
 .memitem, .memproto { border-color: var(--border); }
 table.memname, .memproto { background: var(--bg2); }
-.memproto { border-left: 5px solid var(--brand); border-radius: 0 4px 4px 0; }
+.memproto { border-radius: var(--r); }
 h1, h2, h3, h4, .title { font-family: var(--font); font-weight: 800; font-stretch: 112%; letter-spacing: -.02em; }
 #MSearchBox { background: var(--bg3); }
 
