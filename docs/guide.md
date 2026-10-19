@@ -36,8 +36,8 @@ img.resize(320, 240, stb.Resizer("linear", srgb=False))  # name + other options
 font = stb.Font.open("font.ttf")                    # trusted fonts only, see below
 text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
 text.bitmap.write("hello.png")
-# several texts on one copy of the image (draw_text copies it every call, a canvas once):
-out = img.canvas(font, 48, color="white").text("Title", 20, 20).text("Sub", 20, 90, color="gray").finish()
+# several texts on one copy of the image (draw_text copies it every call, a canvas once); each text can override the defaults:
+out = img.canvas(font, 48, color="white").text("Title", 20, 20).text("Sub", 20, 90).color("gray").finish()
 centred = img.draw_text("Hello\nworld", font, 32, img.width // 2, 10, align="center")  # x = centre of every line ("left" is the default; "right" too)
 labeled = img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))   # new Image with the text drawn on; color: int, (r,g,b), (r,g,b,a) or "red" / "#ff8800"
 font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measure("Hello", 32)
@@ -285,8 +285,10 @@ stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel i
 stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, {255, 255, 255});  // text onto a copy; colours: {r, g, b[, a]}, "red", "#ff8800", "red"_c, 0xff8800_rgb
 stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
 stb::canvas c(img);                                      // <stb/canvas.hpp>: one copy, many texts
-c.set_font(f, 48).set_color("white").draw_text("Title", 20, 20).draw_text("Sub", 20, 90, "gray");
-stb::image out = std::move(c).finish();
+c.set_font(f, 48).set_color("white");                    // defaults for the texts added next
+c.add_text("Title", 20, 20);
+c.add_text("Sub", 20, 90).set_color("gray").set_align(stb::text_align::left);   // per text
+stb::image out = std::move(c).finish();                  // the texts are drawn here, in order
 stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file: fixed sans / serif / mono tables
 ```

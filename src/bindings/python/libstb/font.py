@@ -172,22 +172,29 @@ Image.draw_text = _draw_text
 
 
 class Canvas:
-    """Draw several texts on ONE copy of an Image.
+    """Several texts on ONE copy of an Image.
 
-    ``Image.draw_text`` copies the image on every call; a Canvas copies it once, remembers the
-    font, size, color and alignment, and blends each text into that copy. The Image you pass in is
-    never modified. The calls chain::
+    ``Image.draw_text`` copies the image on every call; a Canvas copies it once, collects the
+    texts you add and draws them all in ``finish()``. The Image you pass in is never modified.
+    ``font()``, ``color()`` and ``align()`` set the defaults for the texts added after them;
+    ``text()`` adds a text and returns it, so that text's own font, size, colour and alignment
+    can be set. The calls chain::
 
         out = (img.canvas().font(font, 48).color("white")
                   .text("Title", 20, 20)
-                  .text("Subtitle", 20, 90, color="gray")
+                  .text("Sub", 200, 90).align("center").color("gray")
+                  .text("small", 20, 200).size(24)
                   .finish())
 
-    ``finish()`` hands the Image over without a copy and empties the Canvas: using it again
-    raises ValueError. ``text()`` before ``font()`` raises ValueError too.
+    A text takes the defaults as they are when ``text()`` is called: changing a default later
+    does not touch texts that already exist. Texts are drawn in the order they were added (a
+    later one lands on top). Nothing is drawn or checked before ``finish()``, which raises
+    ValueError for a text without a font, a bad colour or alignment, plus whatever
+    ``Image.draw_text`` raises. It hands the Image over without a copy and empties the Canvas:
+    using the Canvas or any of its texts again raises ValueError.
     """
 
-    __slots__ = ("_img", "_font", "_size", "_color", "_align")
+    __slots__ = ("_img", "_font", "_size", "_color", "_align", "_items")
 
     def __init__(self, base: Image, font: Optional[Font] = None, pixel_height: float = 0, *,
                  color=0, align: str = "left"):
@@ -196,6 +203,7 @@ class Canvas:
         self._size = pixel_height
         self._color = color
         self._align = align
+        self._items = []
 
     def _check(self) -> Image:
         if self._img is None:
@@ -203,38 +211,86 @@ class Canvas:
         return self._img
 
     def font(self, font: Font, pixel_height: float) -> "Canvas":
-        """Use `font` at `pixel_height` for the texts that follow."""
+        """Default font and `pixel_height` for the texts added from now on."""
         self._check()
         self._font, self._size = font, pixel_height
         return self
 
     def color(self, color) -> "Canvas":
-        """Use `color` (int, (r, g, b), (r, g, b, a) or a string) for the texts that follow."""
+        """Default colour (int, (r, g, b), (r, g, b, a) or a string) for the texts added from now on."""
         self._check()
         self._color = color
         return self
 
     def align(self, align: str) -> "Canvas":
-        """``"left"``, ``"center"`` or ``"right"``: how the texts that follow line up with their
-        x (see Image.draw_text)."""
+        """Default ``"left"``, ``"center"`` or ``"right"``: how the texts added from now on line
+        up with their x (see Image.draw_text)."""
         self._check()
         self._align = align
         return self
 
-    def text(self, text: str, x: int = 0, y: int = 0, *, color=None, align: Optional[str] = None) -> "Canvas":
-        """Draw `text` at (x, y); `color` and `align` override the current ones for this call only."""
-        img = self._check()
-        if self._font is None:
-            raise ValueError("call font() before text()")
-        self._font._f.draw_text_in_place(img, text, self._size, x, y,
-                                         self._color if color is None else color,
-                                         self._align if align is None else align)
-        return self
+    def text(self, text: str, x: int = 0, y: int = 0) -> "CanvasText":
+        """Add `text` at (x, y) with the current defaults and return it (a CanvasText)."""
+        self._check()
+        item = CanvasText(self, text, x, y)
+        self._items.append(item)
+        return item
 
     def finish(self) -> Image:
-        """The finished Image (no copy). The Canvas is empty afterwards."""
-        img, self._img = self._check(), None
+        """Draw every text in order and return the Image (no further copy). The Canvas is empty afterwards."""
+        img = self._check()
+        for i, t in enumerate(self._items):
+            if t._font is None:
+                raise ValueError(f"text #{i} has no font (call font() on the Canvas or on the text)")
+        for t in self._items:
+            t._font._f.draw_text_in_place(img, t._text, t._size, t._x, t._y, t._color, t._align)
+        self._img, self._items = None, []
         return img
+
+
+class CanvasText:
+    """One text on a Canvas, as returned by ``Canvas.text()``. Its own settings start from the
+    Canvas defaults of that moment; ``text()`` and ``finish()`` continue the Canvas chain."""
+
+    __slots__ = ("_canvas", "_text", "_x", "_y", "_font", "_size", "_color", "_align")
+
+    def __init__(self, canvas: Canvas, text: str, x: int, y: int):
+        self._canvas = canvas
+        self._text, self._x, self._y = text, x, y
+        self._font, self._size = canvas._font, canvas._size
+        self._color, self._align = canvas._color, canvas._align
+
+    def font(self, font: Font, pixel_height: float) -> "CanvasText":
+        """Font and `pixel_height` for this text only."""
+        self._canvas._check()
+        self._font, self._size = font, pixel_height
+        return self
+
+    def size(self, pixel_height: float) -> "CanvasText":
+        """Pixel height for this text only (the font stays the one it already has)."""
+        self._canvas._check()
+        self._size = pixel_height
+        return self
+
+    def color(self, color) -> "CanvasText":
+        """Colour for this text only."""
+        self._canvas._check()
+        self._color = color
+        return self
+
+    def align(self, align: str) -> "CanvasText":
+        """``"left"``, ``"center"`` or ``"right"`` for this text only."""
+        self._canvas._check()
+        self._align = align
+        return self
+
+    def text(self, text: str, x: int = 0, y: int = 0) -> "CanvasText":
+        """Same as ``Canvas.text``: add the next text."""
+        return self._canvas.text(text, x, y)
+
+    def finish(self) -> Image:
+        """Same as ``Canvas.finish``."""
+        return self._canvas.finish()
 
 
 Image.canvas = lambda self, font=None, pixel_height=0, *, color=0, align="left": Canvas(

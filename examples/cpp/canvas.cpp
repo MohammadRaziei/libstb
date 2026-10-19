@@ -15,25 +15,29 @@ int main(int argc, char** argv) {
         stb::image photo = stb::image::open(argv[1]);
         stb::font f = stb::font::open(argv[2]);
 
-        // The canvas copies `photo` once. Every draw_text blends into that copy.
+        // The canvas copies `photo` once. The texts are collected and drawn in finish().
         stb::canvas c(photo);
+
+        // Defaults for the texts added from now on.
         c.set_font(f, 48).set_color("white");
 
-        // Current font, size, colour and alignment (left: x is the left edge).
-        c.draw_text("Title", 20, 20);
+        c.add_text("Title", 20, 20);                                  // uses the defaults
 
-        // Colour for this call only.
-        c.draw_text("Subtitle", 20, 80, "#ffcc00");
+        // Settings for one text only.
+        c.add_text("Subtitle", 20, 80).set_color("#ffcc00");
 
         // center: x is the middle of every line.
         const int mid = photo.width() / 2;
-        c.set_align(stb::text_align::center);
-        c.draw_text("first line\nsecond, longer line", mid, photo.height() - 140);
+        c.add_text("first line\nsecond, longer line", mid, photo.height() - 140)
+            .set_align(stb::text_align::center);
 
         // Translucent text: the alpha of the colour scales the glyph coverage.
-        c.draw_text("watermark", mid, photo.height() - 50, {255, 255, 255, 120});
+        c.add_text("watermark", mid, photo.height() - 50)
+            .set_align(stb::text_align::center)
+            .set_color({255, 255, 255, 120})
+            .set_size(24);
 
-        // No copy here: the canvas is empty afterwards.
+        // Everything is drawn here, in the order added. The canvas is empty afterwards.
         stb::image out = std::move(c).finish();
         out.write_png(argv[3]);
     } catch (const std::exception& e) {

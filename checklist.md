@@ -16,6 +16,11 @@
 - [x] **`canvas` (C++) و `Canvas` (Python)**: چند متن روی یک کپی از تصویر (`Image.canvas()`).
       `image::composite_in_place` و `font::draw_text_in_place` اضافه شدن؛ `composite()` و
       `draw_text()` الان کپی + نسخه‌ی درجا هستن.
+      API: `c.add_text(متن, x, y)` (C++) و `c.text(متن, x, y)` (Python) یه شیء متن برمی‌گردونن
+      (`canvas::text_item`، `CanvasText`) که فونت، اندازه، رنگ و align خودش رو می‌گیره. `set_font`،
+      `set_color` و `set_align` روی خود canvas پیش‌فرضِ متن‌های بعدیه (موقع `add_text` کپی می‌شه).
+      کشیدن lazy هست: همه‌ی متن‌ها توی `finish()` به ترتیب اضافه‌شدن کشیده می‌شن، پس خطای
+      «بدون فونت» هم همون‌جا میاد. `draw_text` فوریِ canvas و `result()` حذف شدن.
 - [x] **`text_align` (left, center, right)** برای `draw_text` و `canvas` (`align=` توی Python). با center/right،
       x مرکز یا لبه‌ی راستِ هر خط می‌شه. `measure` از قبل وجود داشت (`font::measure`, `Font.measure`).
 - [x] README (خط ۳) و توضیح PyPI (`pyproject.toml`) حالا zlib و نوشتن متن رو هم می‌گن.
@@ -40,8 +45,8 @@
 - [ ] اگه گزینه‌ها زیاد شدن (فاصله‌ی خطوط، حداکثر عرض با شکستن خط، سایه، outline، anchor عمودی): یه struct گزینه
       با مقدار پیش‌فرض (`{.color = ..., .align = ...}` توی C++ و kwargs توی Python)، نه بیلدر.
 - [ ] `color` توی Python فقط رشته/عدد/tuple قبول می‌کنه و کلاس مستقل نیست. اگه لازم شد expose بشه.
-- [ ] هزینه‌ی `canvas` در برابر چند بار `draw_text` **اندازه‌گیری نشده**. فقط ثابت‌بودنِ اشاره‌گر داده
-      تست شده (یعنی کپی اضافه نیست). تا عدد نداریم ادعای سرعت ننویس.
+- [ ] هزینه‌ی `canvas` در برابر چند بار `draw_text` **اندازه‌گیری نشده** (و تست «بدون کپی اضافه»
+      با اشاره‌گر داده حذف شد، چون `result()` دیگه نیست). تا عدد نداریم ادعای سرعت ننویس.
 - [ ] تصمیم: دو نسخه‌ی `Color` (novasvg با CamelCase، libstb با snake_case). ببین `checklist.md`
       توی novasvg (بخش «Color مشترک با libstb»).
 

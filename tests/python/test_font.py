@@ -256,24 +256,53 @@ def test_draw_text_color_strings(font):
 def test_canvas_draws_many_texts_on_one_copy(font):
     white = stb.Image(np.full((100, 300, 3), 255, np.uint8))
     c = white.canvas(font, 100, color="red")
-    c.text("A", 0, 0).text("A", 100, 0, color=(0, 0, 255)).text("A", 200, 0)
+    c.text("A", 0, 0).text("A", 100, 0).color((0, 0, 255)).text("A", 200, 0)
     out = c.finish().numpy()
     assert out[10, 10].tolist() == [255, 0, 0]
-    assert out[10, 110].tolist() == [0, 0, 255]      # the override applied to that call only
+    assert out[10, 110].tolist() == [0, 0, 255]      # the override applied to that text only
     assert out[10, 210].tolist() == [255, 0, 0]
     assert (white.numpy() == 255).all()              # the input is untouched
     one = white.draw_text("A", font, 100, 5, 7, color="red").numpy()
     assert (white.canvas().font(font, 100).color("red").text("A", 5, 7).finish().numpy() == one).all()
+    own = white.canvas().text("A", 5, 7).font(font, 100).color("red").finish().numpy()
+    assert (own == one).all()                        # a text can bring its own font
+
+
+def test_canvas_text_takes_the_defaults_when_it_is_added(font):
+    white = stb.Image(np.full((100, 200, 3), 255, np.uint8))
+    c = white.canvas(font, 100, color="red")
+    c.text("A", 0, 0)
+    c.color("blue")                                  # later: must not touch the first text
+    c.text("A", 100, 0)
+    out = c.finish().numpy()
+    assert out[10, 10].tolist() == [255, 0, 0]
+    assert out[10, 110].tolist() == [0, 0, 255]
+
+
+def test_canvas_size_and_order(font):
+    white = stb.Image(np.full((200, 200, 3), 255, np.uint8))
+    small = white.draw_text("A", font, 40, 0, 0).numpy()
+    assert (white.canvas(font, 100).text("A", 0, 0).size(40).finish().numpy() == small).all()
+    top = (white.canvas(font, 100).text("A", 0, 0).color((0, 0, 0))
+                .text("A", 0, 0).color((255, 255, 255)).finish().numpy())
+    assert top[10, 10].tolist() == [255, 255, 255]   # the later text is on top
 
 
 def test_canvas_errors(font):
     img = stb.Image(np.zeros((10, 10, 3), np.uint8))
+    c = img.canvas()
+    c.text("A")                                      # nothing is checked yet
     with pytest.raises(ValueError):
-        img.canvas().text("A")                       # no font yet
+        c.finish()                                   # no font anywhere
+    with pytest.raises(ValueError):
+        img.canvas(font, 100).text("A").align("middle").finish()
     c = img.canvas(font, 100)
+    t = c.text("A")
     c.finish()
     with pytest.raises(ValueError):
         c.text("A")                                  # finished
+    with pytest.raises(ValueError):
+        t.color("red")                               # its canvas was finished
     with pytest.raises(ValueError):
         c.finish()
 
@@ -302,8 +331,8 @@ def test_draw_text_align_multiline_and_canvas(font):
     assert second < first                              # the longer line starts further left
     via_canvas = white.canvas(font, 100, align="center").text("A\nAAA", 200, 0).finish().numpy()
     assert (via_canvas == out).all()
-    over = white.canvas(font, 100, align="right").text("A", 300, 0, align="left").finish()
-    assert _black_columns(over)[0] == 300 + 10          # the per-call align won
+    over = white.canvas(font, 100, align="right").text("A", 300, 0).align("left").finish()
+    assert _black_columns(over)[0] == 300 + 10          # the text's own align won
 
 
 def test_draw_text_align_errors(font):
