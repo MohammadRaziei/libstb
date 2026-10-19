@@ -7,6 +7,8 @@ Only use fonts you trust: stb_truetype does no bounds checking.
 import sys
 from pathlib import Path
 
+import numpy as np
+
 import libstb as stb
 
 OUT = Path(__file__).parent / "output"
@@ -42,6 +44,13 @@ text = font.render("Hello\nworld", size)
 print("text    :", text.bitmap.width, "x", text.bitmap.height,
       "origin", (text.origin_x, text.origin_y))
 text.bitmap.write(OUT / "hello.png")
+
+# Draw it straight onto an image: draw_text returns a new Image. (x, y) is the top-left
+# of the text; color is an int, (r, g, b) or (r, g, b, a).
+ramp = (40 + np.arange(480) * 3 // 4).astype(np.uint8)            # a plain gradient (needs numpy)
+background = stb.Image(np.stack([np.tile(ramp, (120, 1))] * 2 + [np.full((120, 480), 160, np.uint8)], axis=-1))
+labeled = background.draw_text("Hello\nworld", font, size, 20, 16, color=(255, 255, 255))
+labeled.write(OUT / "labeled.png")
 
 # One glyph.
 glyph = font.render_glyph("A", size)

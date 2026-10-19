@@ -45,6 +45,22 @@ stb::font_family parse_family(const std::string& name) {
     throw std::invalid_argument("family must be \"sans\", \"serif\" or \"mono\"");
 }
 
+// A text colour: an int (gray), (r, g, b), (r, g, b, a) (a missing alpha is 255), or a string
+// stb::color parses ("red", "#ff8800", "#f80", "ff8800").
+stb::color text_colour(nb::handle obj) {
+    if (nb::isinstance<nb::str>(obj)) return stb::color(nb::cast<std::string>(obj));
+    if (PyLong_Check(obj.ptr())) {
+        const std::uint8_t v = byte_of(obj);
+        return stb::color(v, v, v);
+    }
+    if (nb::len(nb::cast<nb::sequence>(obj)) == 4) {
+        const auto c = colour_of<4>(obj, 4, "color");
+        return stb::color(c[0], c[1], c[2], c[3]);
+    }
+    const auto c = colour_of<3>(obj, 3, "color");
+    return stb::color(c[0], c[1], c[2]);
+}
+
 }  // namespace
 
 // Native tuples here; the Python package (font.py) wraps them in NamedTuples
@@ -106,6 +122,23 @@ void bind_font(nb::module_& m) {
                  return std::make_tuple(std::move(t.bitmap), t.origin_x, t.origin_y);
              },
              "text"_a, "pixel_height"_a, "max_bytes"_a = std::size_t(1) << 28)
+        .def("draw_text",
+             [](const font& f, const stb::image& dst, const std::string& text, float px, int x, int y,
+                nb::handle color) {
+                 const stb::color c = text_colour(color);
+                 nb::gil_scoped_release release;
+                 return f.draw_text(dst, text, px, x, y, c);
+             },
+             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0)
+        // Internal: libstb.Canvas draws on its own private copy with this.
+        .def("draw_text_in_place",
+             [](const font& f, stb::image& dst, const std::string& text, float px, int x, int y,
+                nb::handle color) {
+                 const stb::color c = text_colour(color);
+                 nb::gil_scoped_release release;
+                 f.draw_text_in_place(dst, text, px, x, y, c);
+             },
+             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0)
         .def("make_atlas",
              [](const font& f, const std::string& chars, float px, int width, int height, int padding) {
                  stb::atlas a = [&] {

@@ -178,28 +178,6 @@ stb::load_options make_options(int channels, bool flip, std::size_t max_bytes, b
     return o;
 }
 
-std::uint8_t byte_of(nb::handle h) {
-    const long v = nb::cast<long>(h);
-    if (v < 0 || v > 255) throw std::invalid_argument("colour values must be in 0..255");
-    return static_cast<std::uint8_t>(v);
-}
-
-// A colour argument: an int (every value the same) or a sequence of exactly `n` ints.
-template <std::size_t N>
-std::array<std::uint8_t, N> colour_of(nb::handle obj, std::size_t n, const char* what) {
-    std::array<std::uint8_t, N> out{};
-    if (PyLong_Check(obj.ptr())) {
-        out.fill(byte_of(obj));
-        return out;
-    }
-    nb::sequence seq = nb::cast<nb::sequence>(obj);
-    if (nb::len(seq) != n)
-        throw std::invalid_argument(std::string(what) + " needs one value per channel (" + std::to_string(n) +
-                                    ") or a single int");
-    for (std::size_t i = 0; i < n; ++i) out[i] = byte_of(seq[i]);
-    return out;
-}
-
 // Buffer protocol: memoryview(img) is a writable 3-D (height, width, channels)
 // uint8 view of the pixels, no copy, no numpy. The view holds a reference to the
 // image (view->obj), so the pixels cannot be freed under it. numpy also reads

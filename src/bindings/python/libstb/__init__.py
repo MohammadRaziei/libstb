@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover
     __version__ = "0.0.0+unknown"
 
 from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
-from .font import (Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize,
+from .font import (Atlas, AtlasGlyph, Canvas, Font, FontMetrics, Glyph, RenderedText, TextSize,
                    estimate_metrics, estimate_text)
 from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
 from .libstb_py import DecodeError, EncodeError, Error, LimitError, Resizer
@@ -138,7 +138,7 @@ def get_cmake_dir():
 __all__ = [
     "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "imresize",
     "Resizer",
-    "Font", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
+    "Font", "Canvas", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",
     "Error", "DecodeError", "EncodeError", "LimitError",

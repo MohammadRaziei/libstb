@@ -307,6 +307,33 @@ text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes)
     return {std::move(canvas), int(-minx), int(-miny)};
 }
 
+image font::draw_text(const image& dst, std::string_view utf8, float px, int x, int y,
+                      const color& text_color) const {
+    image out = dst.copy();
+    draw_text_in_place(out, utf8, px, x, y, text_color);
+    return out;
+}
+
+void font::draw_text_in_place(image& dst, std::string_view utf8, float px, int x, int y,
+                              const color& text_color) const {
+    // The coverage mask becomes the alpha of a solid-colour RGBA layer that image::composite
+    // blends: no second blending loop to keep in step with it (and it gets the SIMD kernels).
+    const text_bitmap t = render(utf8, px);
+    const image& cov = t.bitmap;
+    image layer(cov.width(), cov.height(), 4);
+    for (int row = 0; row < cov.height(); ++row) {
+        const std::uint8_t* s = cov.data() + std::size_t(row) * cov.stride();
+        std::uint8_t* d = layer.data() + std::size_t(row) * layer.stride();
+        for (int col = 0; col < cov.width(); ++col, d += 4) {
+            d[0] = text_color.r();
+            d[1] = text_color.g();
+            d[2] = text_color.b();
+            d[3] = static_cast<std::uint8_t>((int(s[col]) * text_color.a() + 127) / 255);
+        }
+    }
+    dst.composite_in_place(layer, int(std::int64_t(x) - t.origin_x), int(std::int64_t(y) - t.origin_y));
+}
+
 atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int height, int padding) const {
     check_px(px);
     if (width < 1 || height < 1) throw std::invalid_argument("atlas width and height must be >= 1");

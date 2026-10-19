@@ -147,6 +147,86 @@ class Font:
         return Atlas(bitmap, {e[0]: AtlasGlyph(*e) for e in entries})
 
 
+def _draw_text(self, text: str, font: Font, pixel_height: float, x: int = 0, y: int = 0, *,
+               color=0) -> Image:
+    """A copy of this Image with `text` drawn on it (multi-line, UTF-8).
+
+    (x, y) is where the text's layout box starts (its top-left corner); text that hangs over
+    the edges is clipped. `color` is an int (gray), (r, g, b), (r, g, b, a) or a string ("red", "#ff8800"): the alpha scales
+    the glyph coverage, so a < 255 gives translucent text; a string such as "red" or "#ff8800"
+    is parsed like stb::color does. The result has this Image's channel
+    count; on an image with alpha the text is blended with the usual "over" operator.
+
+    Raises ValueError (empty text, bad pixel_height or color), LimitError.
+
+    >>> img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))
+    """
+    return font._f.draw_text(self, text, pixel_height, x, y, color)
+
+
+Image.draw_text = _draw_text
+
+
+class Canvas:
+    """Draw several texts on ONE copy of an Image.
+
+    ``Image.draw_text`` copies the image on every call; a Canvas copies it once, remembers the
+    font, size and color, and blends each text into that copy. The Image you pass in is never
+    modified. The calls chain::
+
+        out = (img.canvas().font(font, 48).color("white")
+                  .text("Title", 20, 20)
+                  .text("Subtitle", 20, 90, color="gray")
+                  .finish())
+
+    ``finish()`` hands the Image over without a copy and empties the Canvas: using it again
+    raises ValueError. ``text()`` before ``font()`` raises ValueError too.
+    """
+
+    __slots__ = ("_img", "_font", "_size", "_color")
+
+    def __init__(self, base: Image, font: Optional[Font] = None, pixel_height: float = 0, *, color=0):
+        self._img = base.copy()
+        self._font = font
+        self._size = pixel_height
+        self._color = color
+
+    def _check(self) -> Image:
+        if self._img is None:
+            raise ValueError("this Canvas was finished")
+        return self._img
+
+    def font(self, font: Font, pixel_height: float) -> "Canvas":
+        """Use `font` at `pixel_height` for the texts that follow."""
+        self._check()
+        self._font, self._size = font, pixel_height
+        return self
+
+    def color(self, color) -> "Canvas":
+        """Use `color` (int, (r, g, b), (r, g, b, a) or a string) for the texts that follow."""
+        self._check()
+        self._color = color
+        return self
+
+    def text(self, text: str, x: int = 0, y: int = 0, *, color=None) -> "Canvas":
+        """Draw `text` with its layout box's top-left corner at (x, y); `color` overrides the
+        current color for this call only."""
+        img = self._check()
+        if self._font is None:
+            raise ValueError("call font() before text()")
+        self._font._f.draw_text_in_place(img, text, self._size, x, y, self._color if color is None else color)
+        return self
+
+    def finish(self) -> Image:
+        """The finished Image (no copy). The Canvas is empty afterwards."""
+        img, self._img = self._check(), None
+        return img
+
+
+Image.canvas = lambda self, font=None, pixel_height=0, *, color=0: Canvas(self, font, pixel_height, color=color)
+Image.canvas.__doc__ = "A Canvas for drawing several texts on one copy of this Image (see Canvas)."
+
+
 def estimate_text(text: str, pixel_height: float, family: str = "sans") -> TextSize:
     """Rough size of `text` without any font file.
 

@@ -221,6 +221,10 @@ public:
     // result has this image's channel count; if that has no alpha, the overlay's alpha
     // just weights the blend. Not fully inside: the rest of this image is a copy.
     image composite(const image& overlay, int x = 0, int y = 0) const;
+    // The same blend written into THIS image's pixels: no copy. If this image wraps memory it
+    // does not own (see wrap()), that memory changes. Use it when you own the image, e.g. a
+    // canvas that stamps many overlays onto one copy.
+    void composite_in_place(const image& overlay, int x = 0, int y = 0);
     // Blend an alpha channel onto a solid background colour (r, g, b) and drop it:
     // 2 -> 1 channel, 4 -> 3. Images without alpha are copied.
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const;

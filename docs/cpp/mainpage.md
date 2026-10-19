@@ -3,7 +3,7 @@
 **libstb** is a C++17 library over the [stb](https://github.com/nothings/stb)
 single-header libraries: image decoding and encoding (PNG, JPEG, BMP, TGA),
 resizing with selectable filters, image editing (crop, flip, rotate, pad, convert,
-composite, EXIF orientation), TrueType font rendering (plus a text size estimator
+composite, EXIF orientation), TrueType font rendering and drawing text onto images (`font::draw_text`, or `canvas` for many texts on one copy) (plus a text size estimator
 that needs no font file) and zlib compression and decompression with an output
 limit. The stb headers stay private: the public API is `stb::image`,
 `stb::resizer`, `stb::font`, `stb::zlib_compress`, `stb::zlib_decompress` and

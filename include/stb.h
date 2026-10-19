@@ -17,9 +17,11 @@
 #include "stb/env.hpp"
 #include "stb/error.hpp"
 #include "stb/utf8.hpp"
+#include "stb/color.hpp"
 #include "stb/image.hpp"
 #include "stb/resizer.hpp"
 #include "stb/font.hpp"
+#include "stb/canvas.hpp"
 #include "stb/zlib.hpp"
 #endif
 

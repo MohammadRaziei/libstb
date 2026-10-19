@@ -330,14 +330,19 @@ image image::merge(const std::vector<image>& channels) {
 // --------------------------------------------------------------------- alpha
 
 image image::composite(const image& overlay, int x, int y) const {
+    image out = copy();
+    out.composite_in_place(overlay, x, y);
+    return out;
+}
+
+void image::composite_in_place(const image& overlay, int x, int y) {
     need_pixels(*this);
     need_pixels(overlay);
-    image out = copy();
     // The part of the overlay that lands inside this image.
     const std::int64_t x0 = std::max<std::int64_t>(0, x), y0 = std::max<std::int64_t>(0, y);
     const std::int64_t x1 = std::min<std::int64_t>(width_, std::int64_t(x) + overlay.width());
     const std::int64_t y1 = std::min<std::int64_t>(height_, std::int64_t(y) + overlay.height());
-    if (x0 >= x1 || y0 >= y1) return out;
+    if (x0 >= x1 || y0 >= y1) return;
 
     const int dc = channels_, sc = overlay.channels();
     const std::size_t n = std::size_t(x1 - x0);
@@ -347,7 +352,7 @@ image image::composite(const image& overlay, int x, int y) const {
     const row_fn fn = blend ? pick_composite(sc, dc, detail::current_backend())
                             : (sc == dc ? nullptr : pick_convert(sc, dc, detail::current_backend()));
     for (std::int64_t py = y0; py < y1; ++py) {
-        std::uint8_t* d = out.data() + std::size_t(py) * stride() + std::size_t(x0) * std::size_t(dc);
+        std::uint8_t* d = data() + std::size_t(py) * stride() + std::size_t(x0) * std::size_t(dc);
         const std::uint8_t* s = overlay.data() + std::size_t(py - y) * overlay.stride() +
                                 std::size_t(x0 - x) * std::size_t(sc);
         if (fn)
@@ -355,7 +360,6 @@ image image::composite(const image& overlay, int x, int y) const {
         else
             std::memcpy(d, s, n * std::size_t(dc));
     }
-    return out;
 }
 
 image image::flatten(std::array<std::uint8_t, 3> background) const {

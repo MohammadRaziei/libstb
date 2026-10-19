@@ -14,6 +14,9 @@ Fonts
 .. autoclass:: libstb.Font
    :members:
 
+.. autoclass:: libstb.Canvas
+   :members:
+
 .. autoclass:: libstb.FontMetrics
    :members:
 

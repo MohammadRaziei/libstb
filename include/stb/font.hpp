@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "stb/color.hpp"
 #include "stb/error.hpp"
 #include "stb/image.hpp"
 
@@ -110,6 +111,18 @@ public:
     // (result would exceed max_bytes).
     text_bitmap render(std::string_view utf8, float pixel_height,
                        std::size_t max_bytes = std::size_t(1) << 28) const;
+
+    // A copy of `dst` with `utf8` drawn on it in `text_color` (its alpha scales the glyph coverage, so
+    // color(255, 255, 255, 128) gives translucent text; "red"_c and color("#ff8800") work too). (x, y) is where the text's layout box starts (its
+    // top-left corner); the text may hang over the edges and is clipped. `dst` may have 1 to 4
+    // channels: gray gets the luminance of `color`, and alpha is blended with the usual "over"
+    // operator (see image::composite). Throws what render() throws, plus invalid_argument for an
+    // empty `dst`.
+    image draw_text(const image& dst, std::string_view utf8, float pixel_height, int x, int y,
+                    const color& text_color = color()) const;
+    // The same, drawn into `dst` itself (no copy; see image::composite_in_place).
+    void draw_text_in_place(image& dst, std::string_view utf8, float pixel_height, int x, int y,
+                            const color& text_color = color()) const;
 
     // Packs the given characters (duplicates ignored) into one width x height
     // sheet with `padding` pixels between glyphs. Throws limit_error if they

@@ -1,8 +1,10 @@
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <thread>
 
 #include "test_common.hpp"
+#include "stb/canvas.hpp"
 
 // The test font (tests/data/make_test_font.py) has solid-rectangle glyphs and
 // unitsPerEm=1000, ascent=800, descent=-200, so at pixel_height=100 one font
@@ -232,4 +234,114 @@ UTEST(libstb_font_estimate_tests, test_errors) {
         ASSERT_THROWS(stb::estimate_text("A", bad), std::invalid_argument);
         ASSERT_THROWS(stb::estimate_metrics(bad), std::invalid_argument);
     }
+}
+
+// --- draw_text: at 100 px the test font's "A" is a solid rectangle, x 10..49 and y 10..79 of the box.
+
+namespace {
+stb::image filled(int w, int h, int c, std::uint8_t v) {
+    return stb::image(w, h, c, std::vector<std::uint8_t>(std::size_t(w) * std::size_t(h) * std::size_t(c), v));
+}
+const std::uint8_t* px(const stb::image& im, int x, int y) {
+    return im.data() + std::size_t(y) * im.stride() + std::size_t(x) * std::size_t(im.channels());
+}
+}  // namespace
+
+UTEST(libstb_font_tests, test_draw_text_paints_the_glyph_where_asked) {
+    const stb::image white = filled(200, 200, 3, 255);
+    const stb::image out = load().draw_text(white, "A", 100, 20, 30, stb::color(255, 0, 0));
+    ASSERT_EQ(3, out.channels());
+    // The glyph covers x 30..69, y 40..109.
+    ASSERT_EQ(255, px(out, 30, 40)[0]);
+    ASSERT_EQ(0, px(out, 30, 40)[1]);
+    ASSERT_EQ(0, px(out, 69, 109)[2]);
+    ASSERT_EQ(255, px(out, 29, 40)[1]);   // untouched around it
+    ASSERT_EQ(255, px(out, 30, 39)[1]);
+    ASSERT_EQ(255, px(out, 70, 109)[1]);
+    ASSERT_EQ(255, px(white, 30, 40)[1]);  // the source is not modified
+}
+
+UTEST(libstb_font_tests, test_draw_text_alpha_scales_the_coverage) {
+    const stb::image out = load().draw_text(filled(100, 100, 3, 0), "A", 100, 0, 0, stb::color(200, 200, 200, 128));
+    ASSERT_EQ(100, px(out, 10, 10)[0]);   // 200 * 128 / 255 over black
+}
+
+UTEST(libstb_font_tests, test_draw_text_gray_and_rgba_destinations) {
+    const stb::font f = load();
+    const stb::image gray = f.draw_text(filled(100, 100, 1, 0), "A", 100, 0, 0, stb::color(255, 255, 255));
+    ASSERT_EQ(1, gray.channels());
+    ASSERT_EQ(255, gray(10, 10));
+    ASSERT_EQ(0, gray(9, 10));
+    const stb::image rgba = f.draw_text(filled(100, 100, 4, 0), "A", 100, 0, 0, stb::color(10, 20, 30));
+    ASSERT_EQ(4, rgba.channels());
+    ASSERT_EQ(30, px(rgba, 10, 10)[2]);
+    ASSERT_EQ(255, px(rgba, 10, 10)[3]);  // opaque text on transparent black
+    ASSERT_EQ(0, px(rgba, 9, 10)[3]);
+}
+
+UTEST(libstb_font_tests, test_draw_text_is_clipped_at_the_edges) {
+    const stb::font f = load();
+    const stb::image white = filled(50, 50, 1, 255);
+    const stb::image part = f.draw_text(white, "A", 100, -30, -10, stb::color());
+    ASSERT_EQ(0, part(0, 0));      // glyph x -20..19, y 0..69: its right part lands in the image
+    ASSERT_EQ(0, part(19, 49));
+    ASSERT_EQ(255, part(20, 0));
+    const stb::image away = f.draw_text(white, "A", 100, 500, 500, stb::color());
+    ASSERT_EQ(255, away(25, 25));  // fully outside: an unchanged copy
+}
+
+UTEST(libstb_font_tests, test_draw_text_errors) {
+    const stb::font f = load();
+    ASSERT_THROWS(f.draw_text(filled(10, 10, 3, 0), "", 100, 0, 0), std::invalid_argument);
+    ASSERT_THROWS(f.draw_text(stb::image(), "A", 100, 0, 0), std::invalid_argument);
+    ASSERT_THROWS(f.draw_text(filled(10, 10, 3, 0), "A", 0, 0, 0), std::invalid_argument);
+}
+
+UTEST(libstb_font_tests, test_draw_text_takes_named_and_hex_colors) {
+    const stb::font f = load();
+    using namespace stb::color_literals;
+    const stb::image a = f.draw_text(filled(100, 100, 3, 0), "A", 100, 0, 0, "red"_c);
+    ASSERT_EQ(255, px(a, 10, 10)[0]);
+    ASSERT_EQ(0, px(a, 10, 10)[1]);
+    const stb::image b = f.draw_text(filled(100, 100, 3, 0), "A", 100, 0, 0, stb::color("#0a141e"));
+    ASSERT_EQ(10, px(b, 10, 10)[0]);
+    ASSERT_EQ(30, px(b, 10, 10)[2]);
+}
+
+UTEST(libstb_font_tests, test_canvas_stamps_many_texts_on_one_copy) {
+    using namespace stb::color_literals;
+    const stb::image white = filled(300, 100, 3, 255);
+    stb::canvas c(white);
+    c.set_font(load(), 100).set_color("red"_c);
+    const std::uint8_t* base = c.result().data();
+    c.draw_text("A", 0, 0).draw_text("A", 100, 0, stb::color(0, 0, 255)).draw_text("A", 200, 0);
+    ASSERT_TRUE(c.result().data() == base);          // drawn in place: no new copy per text
+    ASSERT_EQ(255, px(c.result(), 10, 10)[0]);       // red
+    ASSERT_EQ(0, px(c.result(), 10, 10)[1]);
+    ASSERT_EQ(255, px(c.result(), 110, 10)[2]);      // blue, for that call only
+    ASSERT_EQ(0, px(c.result(), 110, 10)[0]);
+    ASSERT_EQ(0, px(c.result(), 210, 10)[1]);        // back to red
+    ASSERT_EQ(255, px(white, 10, 10)[1]);            // the input image is untouched
+    const stb::image out = std::move(c).finish();
+    ASSERT_EQ(300, out.width());
+    ASSERT_EQ(0, px(out, 10, 10)[1]);
+}
+
+UTEST(libstb_font_tests, test_canvas_needs_a_font_and_matches_draw_text) {
+    const stb::image white = filled(100, 100, 3, 255);
+    stb::canvas c(white);
+    ASSERT_THROWS(c.draw_text("A", 0, 0), std::invalid_argument);
+    c.set_font(load(), 100).set_color(stb::color(10, 20, 30, 200)).draw_text("A", 5, 7);
+    const stb::image once = load().draw_text(white, "A", 100, 5, 7, stb::color(10, 20, 30, 200));
+    ASSERT_TRUE(std::memcmp(c.result().data(), once.data(), std::size_t(once.stride()) * once.height()) == 0);
+}
+
+UTEST(libstb_font_tests, test_composite_in_place_matches_composite) {
+    const stb::image base = filled(20, 20, 3, 100);
+    const stb::image over(4, 4, 4, std::vector<std::uint8_t>(64, 200));
+    stb::image a = base.copy();
+    a.composite_in_place(over, 18, -2);
+    const stb::image b = base.composite(over, 18, -2);
+    ASSERT_TRUE(std::memcmp(a.data(), b.data(), std::size_t(b.stride()) * b.height()) == 0);
+    ASSERT_EQ(100, px(base, 19, 0)[0]);              // composite() left its source alone
 }

@@ -195,3 +195,84 @@ def test_estimate_agrees_with_the_real_font(family, stem):
     assert stb.estimate_metrics(48, family) == pytest.approx(real.metrics(48))
     for text in SAMPLES:
         assert stb.estimate_text(text, 48, family).width == pytest.approx(real.measure(text, 48).width, rel=0.03)
+
+
+# --- Image.draw_text: at 100 px the font's "A" is a solid rectangle, x 10..49, y 10..79 of the box.
+
+def test_draw_text_paints_the_glyph_where_asked(font):
+    white = stb.Image(np.full((200, 200, 3), 255, np.uint8))
+    out = white.draw_text("A", font, 100, 20, 30, color=(255, 0, 0))
+    a = out.numpy()
+    assert out.shape == (200, 200, 3)
+    assert (a[40:110, 30:70] == (255, 0, 0)).all()
+    assert int((a != 255).any(axis=2).sum()) == 70 * 40   # nothing outside the glyph changed
+    assert (white.numpy() == 255).all()                   # the source is untouched
+
+
+def test_draw_text_color_forms_and_alpha(font):
+    black = stb.Image(np.zeros((100, 100, 3), np.uint8))
+    assert black.draw_text("A", font, 100, color=200).numpy()[10, 10].tolist() == [200, 200, 200]
+    assert black.draw_text("A", font, 100).numpy()[10, 10].tolist() == [0, 0, 0]  # default: black
+    half = black.draw_text("A", font, 100, color=(200, 200, 200, 128))
+    assert half.numpy()[10, 10].tolist() == [100, 100, 100]
+
+
+def test_draw_text_on_gray_and_rgba(font):
+    gray = stb.Image(np.zeros((100, 100, 1), np.uint8)).draw_text("A", font, 100, color=(255, 255, 255))
+    assert gray.channels == 1 and gray.numpy()[10, 10, 0] == 255 and gray.numpy()[10, 9, 0] == 0
+    rgba = stb.Image(np.zeros((100, 100, 4), np.uint8)).draw_text("A", font, 100, color=(10, 20, 30))
+    assert rgba.numpy()[10, 10].tolist() == [10, 20, 30, 255] and rgba.numpy()[10, 9, 3] == 0
+
+
+def test_draw_text_clips_and_multiline(font):
+    white = stb.Image(np.full((50, 50, 1), 255, np.uint8))
+    part = white.draw_text("A", font, 100, -30, -10).numpy()[:, :, 0]
+    assert part[0, 0] == 0 and part[49, 19] == 0 and part[0, 20] == 255
+    assert (white.draw_text("A", font, 100, 500, 500).numpy() == 255).all()  # fully outside
+    two = stb.Image(np.full((200, 100, 1), 255, np.uint8)).draw_text("A\nA", font, 100).numpy()[:, :, 0]
+    assert two[10, 10] == 0 and two[110, 10] == 0 and two[100, 10] == 255
+
+
+def test_draw_text_errors(font):
+    img = stb.Image(np.zeros((10, 10, 3), np.uint8))
+    with pytest.raises(ValueError):
+        img.draw_text("", font, 100)
+    with pytest.raises(ValueError):
+        img.draw_text("A", font, 0)
+    with pytest.raises(ValueError):
+        img.draw_text("A", font, 100, color=(1, 2))
+    with pytest.raises(ValueError):
+        img.draw_text("A", font, 100, color=(1, 2, 300))
+
+
+def test_draw_text_color_strings(font):
+    black = stb.Image(np.zeros((100, 100, 3), np.uint8))
+    assert black.draw_text("A", font, 100, color="red").numpy()[10, 10].tolist() == [255, 0, 0]
+    assert black.draw_text("A", font, 100, color="#0a141e").numpy()[10, 10].tolist() == [10, 20, 30]
+    with pytest.raises(ValueError):
+        black.draw_text("A", font, 100, color="not-a-colour")
+
+
+def test_canvas_draws_many_texts_on_one_copy(font):
+    white = stb.Image(np.full((100, 300, 3), 255, np.uint8))
+    c = white.canvas(font, 100, color="red")
+    c.text("A", 0, 0).text("A", 100, 0, color=(0, 0, 255)).text("A", 200, 0)
+    out = c.finish().numpy()
+    assert out[10, 10].tolist() == [255, 0, 0]
+    assert out[10, 110].tolist() == [0, 0, 255]      # the override applied to that call only
+    assert out[10, 210].tolist() == [255, 0, 0]
+    assert (white.numpy() == 255).all()              # the input is untouched
+    one = white.draw_text("A", font, 100, 5, 7, color="red").numpy()
+    assert (white.canvas().font(font, 100).color("red").text("A", 5, 7).finish().numpy() == one).all()
+
+
+def test_canvas_errors(font):
+    img = stb.Image(np.zeros((10, 10, 3), np.uint8))
+    with pytest.raises(ValueError):
+        img.canvas().text("A")                       # no font yet
+    c = img.canvas(font, 100)
+    c.finish()
+    with pytest.raises(ValueError):
+        c.text("A")                                  # finished
+    with pytest.raises(ValueError):
+        c.finish()

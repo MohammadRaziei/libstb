@@ -32,6 +32,7 @@ pixels = img.numpy()                              # zero-copy view (needs numpy)
 photo = stb.Image.open("IMG_0001.jpg", orient=True)   # apply the EXIF rotation while decoding
 
 font = stb.Font.open("font.ttf")                  # trusted fonts only
+labeled = img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))   # text onto a copy
 font.render("Hello", 32).bitmap.write("hello.png")
 stb.estimate_text("Hello", 16)                    # text size with no font file at all
 
@@ -62,6 +63,7 @@ small.write_jpg("small.jpg", 80);
 std::vector<std::uint8_t> bytes = small.to_png(9);
 
 stb::font f = stb::font::open("font.ttf");               // cheap to copy, thread-safe
+stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, stb::color("white"));
 stb::text_bitmap t = f.render("Hello", 32);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file needed
 
