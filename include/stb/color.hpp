@@ -10,6 +10,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <cstddef>
 #include <cstdint>
 #include <math.h>
 #include <sstream>
@@ -117,8 +118,11 @@ public:
      * color c3(0, 255, 0, 128); // Green, semi-transparent
      * @endcode
      */
-    explicit color(uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t a = 255)
-        : r_(r), g_(g), b_(b), a_(a) {}
+    color() : color(0, 0, 0, 255) {}
+
+    // Not explicit on purpose: `c.set_color({255, 0, 0})` works. There is no one- or two-value
+    // form, so a stray int (`color c = 5;`) does not turn into a colour by accident.
+    color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r_(r), g_(g), b_(b), a_(a) {}
 
     /**
      * @brief Construct a new color object from a string.
@@ -145,6 +149,11 @@ public:
      * @see from_name()
      */
     color(const std::string& str) : color(from_string(str)) {}
+
+    // So that a string literal converts directly: `c.set_color("white")`. (const char* ->
+    // std::string -> color would be two user conversions, which C++ does not chain.)
+    color(const char* str) : color(from_string(std::string(str))) {}
+    color(std::nullptr_t) = delete;  // keeps `color(0)` from meaning a null string
 
     // ==================== Interop with Other color Types ====================
 
@@ -685,6 +694,33 @@ public:
         return color(r, g, b, a);
     }
 
+    /**
+     * @brief Create an opaque color from a 24-bit 0xRRGGBB value.
+     *
+     * Unlike from_value() (0xRRGGBBAA), there is no alpha byte: the result is always opaque.
+     *
+     * @param value Color as 0xRRGGBB (bits 16-23 red, 8-15 green, 0-7 blue).
+     *
+     * @return An opaque color.
+     *
+     * @throws std::invalid_argument If value is larger than 0xFFFFFF (most likely a
+     *         0xRRGGBBAA value, which belongs to from_value()).
+     *
+     * @par Example
+     * @code
+     * color c1 = color::from_rgb(0xFF8800);  // orange
+     * color c2 = color::from_rgb(0x030303);  // almost black
+     * @endcode
+     */
+    static color from_rgb(uint32_t value) {
+        if (value > 0xFFFFFFu) {
+            throw std::invalid_argument("color::from_rgb: value does not fit in 0xRRGGBB (use from_value for 0xRRGGBBAA)");
+        }
+        return color(static_cast<uint8_t>((value >> 16) & 0xFF),
+                     static_cast<uint8_t>((value >> 8) & 0xFF),
+                     static_cast<uint8_t>(value & 0xFF));
+    }
+
     // ==================== Predefined Colors ====================
 
     /**
@@ -939,7 +975,7 @@ inline std::ostream& operator<<(std::ostream& os, const color_blend& blend) {
  * @brief String literal operators for creating color instances.
  * 
  * This namespace provides the _c suffix operator for creating colors
- * from string literals at compile-time (when possible).
+ * from string literals, and the _rgb suffix for 0xRRGGBB integers.
  * 
  * @par Usage
  * @code
@@ -986,6 +1022,29 @@ namespace stb::color_literals {
  */
 inline stb::color operator""_c(const char* str, std::size_t len) {
     return stb::color::from_string(std::string(str, len));
+}
+
+/**
+ * @brief Integer literal operator for opaque colors from 0xRRGGBB.
+ *
+ * @param value The 24-bit value.
+ *
+ * @return An opaque color (see color::from_rgb).
+ *
+ * @throws std::invalid_argument If value is larger than 0xFFFFFF.
+ *
+ * @par Example
+ * @code
+ * using namespace stb::color_literals;
+ *
+ * color c = 0x030303_rgb;   // almost black
+ * @endcode
+ */
+inline stb::color operator""_rgb(unsigned long long value) {
+    if (value > 0xFFFFFFull) {
+        throw std::invalid_argument("_rgb: value does not fit in 0xRRGGBB");
+    }
+    return stb::color::from_rgb(static_cast<uint32_t>(value));
 }
 
 } // namespace stb::color_literals

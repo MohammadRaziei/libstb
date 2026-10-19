@@ -282,10 +282,10 @@ stb::image upright = raw.orient(turn);                 // or apply it yourself
 
 stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-safe
 stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
-stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, stb::color(255, 255, 255));  // text onto a copy; also "red"_c, stb::color("#ff8800")
+stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, {255, 255, 255});  // text onto a copy; colours: {r, g, b[, a]}, "red", "#ff8800", "red"_c, 0xff8800_rgb
 stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
 stb::canvas c(img);                                      // <stb/canvas.hpp>: one copy, many texts
-c.set_font(f, 48).set_color("white"_c).draw_text("Title", 20, 20).draw_text("Sub", 20, 90, "gray"_c);
+c.set_font(f, 48).set_color("white").draw_text("Title", 20, 20).draw_text("Sub", 20, 90, "gray");
 stb::image out = std::move(c).finish();
 stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file: fixed sans / serif / mono tables

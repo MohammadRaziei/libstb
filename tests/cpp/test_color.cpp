@@ -342,3 +342,43 @@ UTEST(libstb_color_tests, test_roundtrip) {
         ASSERT_TRUE(s.find("50") != std::string::npos);
     }
 }
+static int red_of(const color& c) { return c.r(); }
+
+UTEST(libstb_color_tests, test_implicit_conversions) {
+    // string literal and braced rgb(a) convert without naming the type
+    ASSERT_TRUE(red_of("red") == 255);
+    ASSERT_TRUE(red_of({10, 20, 30}) == 10);
+    ASSERT_TRUE(red_of({10, 20, 30, 40}) == 10);
+    color c = {1, 2, 3};
+    ASSERT_TRUE(c.b() == 3 && c.a() == 255);
+    color h = "#ff8800";
+    ASSERT_TRUE(h.r() == 255 && h.g() == 136 && h.b() == 0);
+}
+
+UTEST(libstb_color_tests, test_from_rgb_and_rgb_literal) {
+    color a = color::from_rgb(0x030303);
+    ASSERT_TRUE(a.r() == 3 && a.g() == 3 && a.b() == 3 && a.a() == 255);
+    color b = color::from_rgb(0xFF8800);
+    ASSERT_TRUE(b.r() == 255 && b.g() == 136 && b.b() == 0 && b.a() == 255);
+    color c = 0x030303_rgb;
+    ASSERT_TRUE(c.r() == 3 && c.b() == 3 && c.a() == 255);
+    ASSERT_TRUE((0x00112233_rgb).b() == 0x33);
+    ASSERT_TRUE(color::from_rgb(0).a() == 255);
+}
+
+UTEST(libstb_color_tests, test_from_rgb_rejects_rgba_values) {
+    bool threw = false;
+    try {
+        (void)color::from_rgb(0xFF0000FFu);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    ASSERT_TRUE(threw);
+    threw = false;
+    try {
+        (void)(0x1000000_rgb);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    ASSERT_TRUE(threw);
+}
