@@ -148,20 +148,24 @@ class Font:
 
 
 def _draw_text(self, text: str, font: Font, pixel_height: float, x: int = 0, y: int = 0, *,
-               color=0) -> Image:
+               color=0, align: str = "left") -> Image:
     """A copy of this Image with `text` drawn on it (multi-line, UTF-8).
 
-    (x, y) is where the text's layout box starts (its top-left corner); text that hangs over
-    the edges is clipped. `color` is an int (gray), (r, g, b), (r, g, b, a) or a string ("red", "#ff8800"): the alpha scales
-    the glyph coverage, so a < 255 gives translucent text; a string such as "red" or "#ff8800"
-    is parsed like stb::color does. The result has this Image's channel
-    count; on an image with alpha the text is blended with the usual "over" operator.
+    (x, y) is where the text's layout box starts (its top-left corner). With ``align="center"``
+    or ``"right"``, x is instead the horizontal centre or right edge of every line, so
+    ``img.draw_text("a\\nlonger line", font, 32, 200, 10, align="center")`` centres both lines on
+    x = 200. Text that hangs over the edges is clipped.
 
-    Raises ValueError (empty text, bad pixel_height or color), LimitError.
+    `color` is an int (gray), (r, g, b), (r, g, b, a) or a string such as "red" or "#ff8800"
+    (parsed like stb::color does); the alpha scales the glyph coverage, so a < 255 gives
+    translucent text. The result has this Image's channel count; on an image with alpha the text
+    is blended with the usual "over" operator.
+
+    Raises ValueError (empty text, bad pixel_height, color or align), LimitError.
 
     >>> img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))
     """
-    return font._f.draw_text(self, text, pixel_height, x, y, color)
+    return font._f.draw_text(self, text, pixel_height, x, y, color, align)
 
 
 Image.draw_text = _draw_text
@@ -171,8 +175,8 @@ class Canvas:
     """Draw several texts on ONE copy of an Image.
 
     ``Image.draw_text`` copies the image on every call; a Canvas copies it once, remembers the
-    font, size and color, and blends each text into that copy. The Image you pass in is never
-    modified. The calls chain::
+    font, size, color and alignment, and blends each text into that copy. The Image you pass in is
+    never modified. The calls chain::
 
         out = (img.canvas().font(font, 48).color("white")
                   .text("Title", 20, 20)
@@ -183,13 +187,15 @@ class Canvas:
     raises ValueError. ``text()`` before ``font()`` raises ValueError too.
     """
 
-    __slots__ = ("_img", "_font", "_size", "_color")
+    __slots__ = ("_img", "_font", "_size", "_color", "_align")
 
-    def __init__(self, base: Image, font: Optional[Font] = None, pixel_height: float = 0, *, color=0):
+    def __init__(self, base: Image, font: Optional[Font] = None, pixel_height: float = 0, *,
+                 color=0, align: str = "left"):
         self._img = base.copy()
         self._font = font
         self._size = pixel_height
         self._color = color
+        self._align = align
 
     def _check(self) -> Image:
         if self._img is None:
@@ -208,13 +214,21 @@ class Canvas:
         self._color = color
         return self
 
-    def text(self, text: str, x: int = 0, y: int = 0, *, color=None) -> "Canvas":
-        """Draw `text` with its layout box's top-left corner at (x, y); `color` overrides the
-        current color for this call only."""
+    def align(self, align: str) -> "Canvas":
+        """``"left"``, ``"center"`` or ``"right"``: how the texts that follow line up with their
+        x (see Image.draw_text)."""
+        self._check()
+        self._align = align
+        return self
+
+    def text(self, text: str, x: int = 0, y: int = 0, *, color=None, align: Optional[str] = None) -> "Canvas":
+        """Draw `text` at (x, y); `color` and `align` override the current ones for this call only."""
         img = self._check()
         if self._font is None:
             raise ValueError("call font() before text()")
-        self._font._f.draw_text_in_place(img, text, self._size, x, y, self._color if color is None else color)
+        self._font._f.draw_text_in_place(img, text, self._size, x, y,
+                                         self._color if color is None else color,
+                                         self._align if align is None else align)
         return self
 
     def finish(self) -> Image:
@@ -223,7 +237,8 @@ class Canvas:
         return img
 
 
-Image.canvas = lambda self, font=None, pixel_height=0, *, color=0: Canvas(self, font, pixel_height, color=color)
+Image.canvas = lambda self, font=None, pixel_height=0, *, color=0, align="left": Canvas(
+    self, font, pixel_height, color=color, align=align)
 Image.canvas.__doc__ = "A Canvas for drawing several texts on one copy of this Image (see Canvas)."
 
 

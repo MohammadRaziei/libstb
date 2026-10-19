@@ -308,14 +308,32 @@ text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes)
 }
 
 image font::draw_text(const image& dst, std::string_view utf8, float px, int x, int y,
-                      const color& text_color) const {
+                      const color& text_color, text_align align) const {
     image out = dst.copy();
-    draw_text_in_place(out, utf8, px, x, y, text_color);
+    draw_text_in_place(out, utf8, px, x, y, text_color, align);
     return out;
 }
 
 void font::draw_text_in_place(image& dst, std::string_view utf8, float px, int x, int y,
-                              const color& text_color) const {
+                              const color& text_color, text_align align) const {
+    if (align != text_align::left && utf8.find_first_not_of("\n\r") != std::string_view::npos) {
+        // Each line goes where its own width puts it; lines keep the pitch the layout uses.
+        const text_size all = measure(utf8, px);
+        const float pitch = all.height / float(all.lines);
+        const float k = align == text_align::center ? 0.5f : 1.0f;
+        int line = 0;
+        for (std::size_t pos = 0; pos <= utf8.size(); ++line) {
+            std::size_t end = utf8.find('\n', pos);
+            if (end == std::string_view::npos) end = utf8.size();
+            const std::string_view text = utf8.substr(pos, end - pos);
+            pos = end + 1;
+            if (text.find_first_not_of('\r') == std::string_view::npos) continue;   // blank line
+            const float w = measure(text, px).width;
+            draw_text_in_place(dst, text, px, x - int(std::lround(w * k)), y + int(std::lround(float(line) * pitch)),
+                               text_color, text_align::left);
+        }
+        return;
+    }
     // The coverage mask becomes the alpha of a solid-colour RGBA layer that image::composite
     // blends: no second blending loop to keep in step with it (and it gets the SIMD kernels).
     const text_bitmap t = render(utf8, px);

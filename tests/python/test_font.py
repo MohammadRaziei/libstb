@@ -276,3 +276,38 @@ def test_canvas_errors(font):
         c.text("A")                                  # finished
     with pytest.raises(ValueError):
         c.finish()
+
+
+def _black_columns(img):
+    return np.flatnonzero((img.numpy()[..., 0] == 0).any(axis=0)).tolist()
+
+
+def test_draw_text_align(font):
+    white = stb.Image(np.full((100, 400, 3), 255, np.uint8))
+    w = font.measure("A", 100).width
+    left = _black_columns(white.draw_text("A", font, 100, 150, 0))
+    centre = _black_columns(white.draw_text("A", font, 100, 150, 0, align="center"))
+    right = _black_columns(white.draw_text("A", font, 100, 150, 0, align="right"))
+    assert centre[0] - left[0] == -round(w * 0.5)      # x is the centre of the line
+    assert right[0] - left[0] == -round(w)             # x is its right edge
+
+
+def test_draw_text_align_multiline_and_canvas(font):
+    white = stb.Image(np.full((400, 400, 3), 255, np.uint8))
+    out = white.draw_text("A\nAAA", font, 100, 200, 0, align="center").numpy()
+    pitch = font.measure("A\nAAA", 100).height / 2
+    row1, row2 = 10, round(pitch) + 10
+    first = np.flatnonzero((out[row1, :, 0] == 0))[0]
+    second = np.flatnonzero((out[row2, :, 0] == 0))[0]
+    assert second < first                              # the longer line starts further left
+    via_canvas = white.canvas(font, 100, align="center").text("A\nAAA", 200, 0).finish().numpy()
+    assert (via_canvas == out).all()
+    over = white.canvas(font, 100, align="right").text("A", 300, 0, align="left").finish()
+    assert _black_columns(over)[0] == 300 + 10          # the per-call align won
+
+
+def test_draw_text_align_errors(font):
+    img = stb.Image(np.zeros((10, 10, 3), np.uint8))
+    with pytest.raises(ValueError):
+        img.draw_text("A", font, 100, align="middle")
+

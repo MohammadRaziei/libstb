@@ -1,7 +1,7 @@
 # libstb
 
-Fast image and font processing for **Python and C++**, with no system dependencies and no
-Python dependencies: decode, encode, resize, edit and draw text with one small library.
+Fast image, font and zlib processing for **Python and C++**, with no system dependencies and no
+Python dependencies: decode, encode, resize, edit, draw text and compress with one small library.
 
 libstb is highly powered by [stb](https://github.com/nothings/stb), and that is where the name
 comes from. It is not a thin wrapper, though. The API is our own (typed, with explicit
@@ -33,6 +33,7 @@ photo = stb.Image.open("IMG_0001.jpg", orient=True)   # apply the EXIF rotation 
 
 font = stb.Font.open("font.ttf")                  # trusted fonts only
 labeled = img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))   # text onto a copy
+centred = img.draw_text("Hello", font, 32, img.width // 2, 10, align="center")  # x is the centre of the line
 font.render("Hello", 32).bitmap.write("hello.png")
 stb.estimate_text("Hello", 16)                    # text size with no font file at all
 
@@ -64,6 +65,7 @@ std::vector<std::uint8_t> bytes = small.to_png(9);
 
 stb::font f = stb::font::open("font.ttf");               // cheap to copy, thread-safe
 stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, stb::color("white"));
+stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
 stb::text_bitmap t = f.render("Hello", 32);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file needed
 

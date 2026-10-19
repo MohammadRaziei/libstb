@@ -38,6 +38,7 @@ text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image
 text.bitmap.write("hello.png")
 # several texts on one copy of the image (draw_text copies it every call, a canvas once):
 out = img.canvas(font, 48, color="white").text("Title", 20, 20).text("Sub", 20, 90, color="gray").finish()
+centred = img.draw_text("Hello\nworld", font, 32, img.width // 2, 10, align="center")  # x = centre of every line ("left" is the default; "right" too)
 labeled = img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))   # new Image with the text drawn on; color: int, (r,g,b), (r,g,b,a) or "red" / "#ff8800"
 font.metrics(32), font.advance("A", 32), font.kerning("A", "V", 32), font.measure("Hello", 32)
 font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_offset, advance)
@@ -282,6 +283,7 @@ stb::image upright = raw.orient(turn);                 // or apply it yourself
 stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-safe
 stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
 stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, stb::color(255, 255, 255));  // text onto a copy; also "red"_c, stb::color("#ff8800")
+stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
 stb::canvas c(img);                                      // <stb/canvas.hpp>: one copy, many texts
 c.set_font(f, 48).set_color("white"_c).draw_text("Title", 20, 20).draw_text("Sub", 20, 90, "gray"_c);
 stb::image out = std::move(c).finish();

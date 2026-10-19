@@ -345,3 +345,54 @@ UTEST(libstb_font_tests, test_composite_in_place_matches_composite) {
     ASSERT_TRUE(std::memcmp(a.data(), b.data(), std::size_t(b.stride()) * b.height()) == 0);
     ASSERT_EQ(100, px(base, 19, 0)[0]);              // composite() left its source alone
 }
+
+UTEST(libstb_font_tests, test_draw_text_align_puts_x_at_the_centre_or_right_edge) {
+    const stb::font f = load();
+    const stb::image white = filled(400, 100, 1, 255);
+    const float w = f.measure("A", 100).width;
+    const stb::color black;
+    // The glyph's ink starts 10 px into the layout box (see above).
+    const int centre0 = 200 - int(std::lround(w * 0.5f)) + 10;
+    const stb::image c = f.draw_text(white, "A", 100, 200, 0, black, stb::text_align::center);
+    ASSERT_EQ(0, c(centre0, 10));
+    ASSERT_EQ(255, c(centre0 - 1, 10));
+    const int right0 = 300 - int(std::lround(w)) + 10;
+    const stb::image r = f.draw_text(white, "A", 100, 300, 0, black, stb::text_align::right);
+    ASSERT_EQ(0, r(right0, 10));
+    ASSERT_EQ(255, r(right0 - 1, 10));
+    // left is the default
+    const stb::image l = f.draw_text(white, "A", 100, 50, 0, black, stb::text_align::left);
+    const stb::image d = f.draw_text(white, "A", 100, 50, 0);
+    ASSERT_TRUE(std::memcmp(l.data(), d.data(), std::size_t(d.stride()) * d.height()) == 0);
+}
+
+UTEST(libstb_font_tests, test_draw_text_align_centres_every_line_on_x) {
+    const stb::font f = load();
+    const stb::image white = filled(400, 400, 1, 255);
+    const stb::text_size all = f.measure("A\nAAA", 100);
+    const float pitch = all.height / float(all.lines);
+    const int row2 = int(std::lround(pitch)) + 10;
+    const stb::image img = f.draw_text(white, "A\nAAA", 100, 200, 0, stb::color(), stb::text_align::center);
+    const int a0 = 200 - int(std::lround(f.measure("A", 100).width * 0.5f)) + 10;
+    const int a1 = 200 - int(std::lround(f.measure("AAA", 100).width * 0.5f)) + 10;
+    ASSERT_TRUE(a1 < a0);                 // the longer line starts further left
+    ASSERT_EQ(0, img(a0, 10));
+    ASSERT_EQ(255, img(a0 - 1, 10));
+    ASSERT_EQ(0, img(a1, row2));
+    ASSERT_EQ(255, img(a1 - 1, row2));
+    ASSERT_EQ(255, img(a1, 10));          // line 1 is not wide enough to reach there
+    // a blank line only moves the next one down
+    const stb::image gap = f.draw_text(white, "A\n\nA", 100, 200, 0, stb::color(), stb::text_align::center);
+    ASSERT_EQ(0, gap(a0, int(std::lround(2 * f.measure("A\n\nA", 100).height / 3)) + 10));
+}
+
+UTEST(libstb_font_tests, test_canvas_align) {
+    const stb::font f = load();
+    stb::canvas c(filled(400, 100, 1, 255));
+    c.set_font(f, 100).set_align(stb::text_align::right).draw_text("A", 300, 0);
+    const int right0 = 300 - int(std::lround(f.measure("A", 100).width)) + 10;
+    ASSERT_EQ(0, c.result()(right0, 10));
+    c.draw_text("A", 100, 0, stb::color(), stb::text_align::left);   // this call only
+    ASSERT_EQ(0, c.result()(110, 10));
+}
+

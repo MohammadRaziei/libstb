@@ -38,11 +38,20 @@ public:
         return *this;
     }
 
-    // Text with the current colour, or with `c` for this call only.
-    canvas& draw_text(std::string_view utf8, int x, int y) { return draw_text(utf8, x, y, color_); }
+    // How the texts that follow line up with their x (see text_align). Default: left.
+    canvas& set_align(text_align a) {
+        align_ = a;
+        return *this;
+    }
+
+    // Text with the current colour and alignment, or with `c` (and `a`) for this call only.
+    canvas& draw_text(std::string_view utf8, int x, int y) { return draw_text(utf8, x, y, color_, align_); }
     canvas& draw_text(std::string_view utf8, int x, int y, const color& c) {
+        return draw_text(utf8, x, y, c, align_);
+    }
+    canvas& draw_text(std::string_view utf8, int x, int y, const color& c, text_align a) {
         if (!font_) throw std::invalid_argument("canvas: call set_font() before draw_text()");
-        font_->draw_text_in_place(img_, utf8, px_, x, y, c);
+        font_->draw_text_in_place(img_, utf8, px_, x, y, c, a);
         return *this;
     }
 
@@ -56,6 +65,7 @@ private:
     std::optional<font> font_;
     float px_ = 0;
     color color_;
+    text_align align_ = text_align::left;
 };
 
 }  // namespace stb

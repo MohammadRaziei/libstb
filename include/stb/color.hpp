@@ -474,10 +474,10 @@ public:
      *         the color name is not recognized.
      * 
      * @par Supported Hex Formats
-     * - #RRGGBB   (e.g., "#FF0000" = red)
-     * - #RGB      (e.g., "#F00" = red)
-     * - #RRGGBBAA (e.g., "#FF000080" = red with 50% alpha)
-     * - #RGBA     (e.g., "#F008" = red with 50% alpha)
+     * - \#RRGGBB   (e.g., "#FF0000" = red)
+     * - \#RGB      (e.g., "#F00" = red)
+     * - \#RRGGBBAA (e.g., "#FF000080" = red with 50% alpha)
+     * - \#RGBA     (e.g., "#F008" = red with 50% alpha)
      * 
      * @par Supported color Names
      * All standard CSS color names are supported:
@@ -538,10 +538,10 @@ public:
      * @par Supported Formats
      * | Format    | Example    | Description                          |
      * |-----------|------------|--------------------------------------|
-     * | #RRGGBB   | #FF0000    | Full hex (red)                      |
-     * | #RGB      | #F00       | Shorthand (red)                     |
-     * | #RRGGBBAA | #FF000080  | Full hex with alpha (50% red)       |
-     * | #RGBA     | #F008      | Shorthand with alpha (50% red)       |
+     * | \#RRGGBB   | \#FF0000    | Full hex (red)                      |
+     * | \#RGB      | \#F00       | Shorthand (red)                     |
+     * | \#RRGGBBAA | \#FF000080  | Full hex with alpha (50% red)       |
+     * | \#RGBA     | \#F008      | Shorthand with alpha (50% red)       |
      * 
      * @par Example
      * @code
@@ -888,15 +888,7 @@ struct color_blend {
     }
 };
 
-/**
- * @brief Blend a color with transparent by a percentage.
- * 
- * Creates a color_blend that can be further chained with other colors.
- * 
- * @param color The base color.
- * @param percentage Percentage of transparent to mix (0-100).
- * @return color_blend object for further chaining.
- */
+// Documented at its declaration in class color; defined here because color_blend is incomplete there.
 inline color_blend color::operator|(int percentage) const {
     return color_blend(*this, percentage);
 }
@@ -909,7 +901,7 @@ inline color_blend color::operator|(int percentage) const {
  * Allows using color with std::cout and other output streams.
  * 
  * @param os Output stream (e.g., std::cout).
- * @param color color to output.
+ * @param c color to output.
  * @return Reference to the output stream.
  * 
  * @par Example

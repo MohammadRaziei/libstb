@@ -61,6 +61,14 @@ stb::color text_colour(nb::handle obj) {
     return stb::color(c[0], c[1], c[2]);
 }
 
+// "left", "center" or "right".
+stb::text_align text_alignment(const std::string& name) {
+    if (name == "left") return stb::text_align::left;
+    if (name == "center") return stb::text_align::center;
+    if (name == "right") return stb::text_align::right;
+    throw std::invalid_argument("align must be \"left\", \"center\" or \"right\", got \"" + name + "\"");
+}
+
 }  // namespace
 
 // Native tuples here; the Python package (font.py) wraps them in NamedTuples
@@ -124,21 +132,25 @@ void bind_font(nb::module_& m) {
              "text"_a, "pixel_height"_a, "max_bytes"_a = std::size_t(1) << 28)
         .def("draw_text",
              [](const font& f, const stb::image& dst, const std::string& text, float px, int x, int y,
-                nb::handle color) {
+                nb::handle color, const std::string& align) {
                  const stb::color c = text_colour(color);
+                 const stb::text_align a = text_alignment(align);
                  nb::gil_scoped_release release;
-                 return f.draw_text(dst, text, px, x, y, c);
+                 return f.draw_text(dst, text, px, x, y, c, a);
              },
-             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0)
+             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0,
+             "align"_a = "left")
         // Internal: libstb.Canvas draws on its own private copy with this.
         .def("draw_text_in_place",
              [](const font& f, stb::image& dst, const std::string& text, float px, int x, int y,
-                nb::handle color) {
+                nb::handle color, const std::string& align) {
                  const stb::color c = text_colour(color);
+                 const stb::text_align a = text_alignment(align);
                  nb::gil_scoped_release release;
-                 f.draw_text_in_place(dst, text, px, x, y, c);
+                 f.draw_text_in_place(dst, text, px, x, y, c, a);
              },
-             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0)
+             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0,
+             "align"_a = "left")
         .def("make_atlas",
              [](const font& f, const std::string& chars, float px, int width, int height, int padding) {
                  stb::atlas a = [&] {

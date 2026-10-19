@@ -58,6 +58,7 @@ h1:hover .headerlink, h2:hover .headerlink, h3:hover .headerlink, dt:hover .head
 .highlight pre .nf, .highlight pre .nb, .highlight pre .nc, .highlight pre .fm { color: var(--tok-f); font-weight: 600; background: none; }
 .highlight pre .o, .highlight pre .p, .highlight pre .n, .highlight pre .nn, .highlight pre .nd { color: var(--code-fg); background: none; }
 .highlight pre .err { color: inherit; background: none; border: 0; }
+.highlight pre .gp, .highlight pre .go { color: var(--code-dim); background: none; }   /* doctest prompt (>>>) and printed output: Pygments' dark blue is unreadable on the dark code surface */
 .page-article code.literal, .page-article tt.literal { background: var(--bg3); color: var(--fg); border: 0; }
 .page-article code.xref, .page-article .xref code { background: none; padding: 0; font-weight: 600; }
 .page-article div.highlight + div.highlight { margin-top: 1.1rem; }

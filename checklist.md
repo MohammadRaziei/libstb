@@ -16,26 +16,28 @@
 - [x] **`canvas` (C++) و `Canvas` (Python)**: چند متن روی یک کپی از تصویر (`Image.canvas()`).
       `image::composite_in_place` و `font::draw_text_in_place` اضافه شدن؛ `composite()` و
       `draw_text()` الان کپی + نسخه‌ی درجا هستن.
+- [x] **`text_align` (left, center, right)** برای `draw_text` و `canvas` (`align=` توی Python). با center/right،
+      x مرکز یا لبه‌ی راستِ هر خط می‌شه. `measure` از قبل وجود داشت (`font::measure`, `Font.measure`).
+- [x] README (خط ۳) و توضیح PyPI (`pyproject.toml`) حالا zlib و نوشتن متن رو هم می‌گن.
+- [x] مستندات: بیلد `stb_docs` با صفر هشدار (هشدارهای Doxygen توی `color.hpp` و docstring اسفینکس درست شد)؛
+      رنگ prompt (`>>>`) توی بلوک doctest دارک اسفینکس خوانا شد.
 - [x] README، `docs/guide.md`، `docs/cpp/mainpage.md`، `docs/python/source/font.rst` و
       `examples/python/05_font_render.py` آپدیت شدن.
-- [x] تست: ۱۷۷ تست C++ پاس. Python قبل از rebase: ۱۱۷۳ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
-- [x] چهار کامیت روی `054ea1f` (rebase شد، بدون conflict): `draw_text`، `color`، rename به snake_case،
-      `canvas`. با اسم placeholder `Claude` (اگه خواستی `git commit --amend --reset-author`).
+- [x] تست: ۱۸۰ تست C++ پاس. Python: ۱۱۷۶ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
+- [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
+      اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
 
 ## قبل از هر چیز دیگه
 
 - [ ] **push و چک CI.** `git push origin master`؛ اگه چیزی push شده بود قبلش `git pull --rebase`.
       ببین job `build-docs` سبز می‌شه و `Canvas`/`Image.draw_text` توی Sphinx و Doxygen درست دیده
       می‌شن (سایت رو من بیلد نکردم). سایت فقط با push به `master` ساخته می‌شه (`orchestrator.yml`).
-- [ ] **تست‌های Python بعد از rebase دوباره اجرا نشدن** (فقط C++ اجرا شد). روی CI ببین.
 - [ ] **ویندوز/macOS/Clang تست نشده.** همه‌چی فقط روی لینوکس/GCC اجرا شد. `color.hpp` از
       `std::clamp` استفاده می‌کنه (ماکروهای `<windows.h>` فقط `min`/`max` رو می‌گیرن)، ولی تایید با CI میاد.
 
 ## قابلیت‌ها
 
-- [ ] **`measure` و تراز متن.** الان فقط (x, y) گوشه‌ی بالا-چپ رو می‌گیریم. برای وسط‌چین باید عرض متن
-      رو خودت حساب کنی. اولویت پیشنهادی: `align` (چپ/وسط/راست) یا حداقل اندازه‌گیریِ متن.
-- [ ] اگه گزینه‌ها زیاد شدن (تراز، فاصله‌ی خطوط، حداکثر عرض با شکستن خط، سایه، outline): یه struct گزینه
+- [ ] اگه گزینه‌ها زیاد شدن (فاصله‌ی خطوط، حداکثر عرض با شکستن خط، سایه، outline، anchor عمودی): یه struct گزینه
       با مقدار پیش‌فرض (`{.color = ..., .align = ...}` توی C++ و kwargs توی Python)، نه بیلدر.
 - [ ] `color` توی Python فقط رشته/عدد/tuple قبول می‌کنه و کلاس مستقل نیست. اگه لازم شد expose بشه.
 - [ ] هزینه‌ی `canvas` در برابر چند بار `draw_text` **اندازه‌گیری نشده**. فقط ثابت‌بودنِ اشاره‌گر داده
@@ -45,11 +47,13 @@
 
 ## سایت و مستندات
 
-- [ ] **دارک تم یکدست:** هیرو landing، Sphinx و Doxygen توی دارک سبز برند بشن (مثل گزارش بنچمارک)؛
-      بعد Sphinx و Doxygen با توکن‌های landing یکی بشن (تم تاریک، سطح کد ملایم، بدون خط تزئینی)؛
-      بعد `tests/genhtml.css` (پالت قدیمی).
-- [ ] **متن‌های «فقط تصویر»:** `pyproject.toml` خط ۸ (توضیحِ صفحه‌ی PyPI) و `README.md` خط ۳ باید
-      zlib و نوشتن متن رو هم بگن؛ `docs/guide.md` و `docs/python/source/index.rst` رو هم بررسی کن.
+- [x] دارک تم: هیرو landing توی دارک سبز برنده (توکن `--hero-bg` توی هر دو تم یکیه) و Sphinx و Doxygen توکن‌های
+      مشترک `libstb-docs.css` رو می‌گیرن. این رو با اسکرین‌شات ۱۲۸۰ پیکسل (روشن و تاریک، landing و مرجع Python و
+      C++) چک کردم؛ هیچ‌کدوم هیرو ندارن که سبز بشه.
+- [ ] `tests/genhtml.css` (گزارش پوشش) رو بررسی نکردم و دارک تمش چک نشده.
+- [ ] اسکرین‌شات‌ها با فونت‌های fallback گرفته شدن (Google Fonts توی سندباکس دسترس نیست)، پس Archivo و JetBrains Mono
+      واقعی دیده نشدن. موبایل هم چک نشده.
+- [ ] متن‌های «فقط تصویر»: `docs/guide.md` و `docs/python/source/index.rst` هنوز بررسی نشدن.
 - [ ] لوگوی PNG، و بررسی موبایل **گزارش بنچمارک** (فقط landing روی ۳۹۰ پیکسل چک شده بود).
 - [ ] فایل‌های قالب Sphinx به `DEPENDS` اضافه بشن (الان بعد از ویرایش قالب باید `build/docs/out`
       پاک بشه یا `conf.py` touch بشه).
