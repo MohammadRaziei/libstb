@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <deque>
 #include <optional>
 #include <stdexcept>
@@ -181,16 +182,17 @@ private:
     // The text's layout box grown by its padding, clipped to the image, as one solid layer.
     void fill_box(const text_item& t) {
         const text_size s = t.font_->measure(t.text_, t.px_);
-        const long w = std::lround(s.width);
-        const long h = std::lround(s.height);
-        long left = t.x_;
-        if (t.align_ == text_align::center) left -= std::lround(s.width * 0.5f);
+        // 64-bit: `long` is 32 bits on Windows, and padding() may be any int.
+        const std::int64_t w = std::llround(s.width);
+        const std::int64_t h = std::llround(s.height);
+        std::int64_t left = t.x_;
+        if (t.align_ == text_align::center) left -= std::llround(s.width * 0.5f);
         if (t.align_ == text_align::right) left -= w;
-        const long pad = t.padding_;
-        const long x0 = std::max(left - pad, 0L);
-        const long y0 = std::max(long(t.y_) - pad, 0L);
-        const long x1 = std::min(left + w + pad, long(img_.width()));
-        const long y1 = std::min(long(t.y_) + h + pad, long(img_.height()));
+        const std::int64_t pad = t.padding_;
+        const std::int64_t x0 = (std::max)(left - pad, std::int64_t(0));
+        const std::int64_t y0 = (std::max)(std::int64_t(t.y_) - pad, std::int64_t(0));
+        const std::int64_t x1 = (std::min)(left + w + pad, std::int64_t(img_.width()));
+        const std::int64_t y1 = (std::min)(std::int64_t(t.y_) + h + pad, std::int64_t(img_.height()));
         if (x1 <= x0 || y1 <= y0) return;  // entirely outside the image
         image layer(int(x1 - x0), int(y1 - y0), 4);
         for (int row = 0; row < layer.height(); ++row) {

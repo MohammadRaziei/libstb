@@ -363,9 +363,9 @@ UTEST(libstb_font_tests, test_canvas_set_size_and_order) {
     stb::canvas c(white);
     c.set_font(load(), 100);
     c.add_text("A", 0, 0).size(40);
-    const stb::image small = load().draw_text(white, "A", 40, 0, 0);
+    const stb::image at_40 = load().draw_text(white, "A", 40, 0, 0);
     stb::image out = std::move(c).finish();
-    ASSERT_TRUE(std::memcmp(out.data(), small.data(), std::size_t(small.stride()) * small.height()) == 0);
+    ASSERT_TRUE(std::memcmp(out.data(), at_40.data(), std::size_t(at_40.stride()) * at_40.height()) == 0);
     // drawn in the order added: the later text is on top (opaque white over opaque black)
     stb::canvas d(white);
     d.set_font(load(), 100);
