@@ -515,3 +515,139 @@ UTEST(libstb_font_tests, test_canvas_matches_the_python_golden_hash) {
     }
     ASSERT_TRUE(h == 0xd7f088b011c4d0ddull);
 }
+
+// ---- shapes on a canvas ----
+
+static bool is_color(const stb::image& im, int x, int y, int r, int g, int b) {
+    const std::uint8_t* p = px(im, x, y);
+    return p[0] == r && p[1] == g && p[2] == b;
+}
+
+UTEST(libstb_shape_tests, test_rect_has_sharp_edges_and_defaults_to_the_canvas_colour) {
+    stb::canvas c(filled(30, 30, 3, 255));
+    c.set_color("blue");
+    c.add_rect(5, 5, 10, 8);                                   // filled with the canvas colour
+    c.add_rect(20, 20, 5, 5).fill("red");
+    const stb::image out = c.finish();
+    ASSERT_TRUE(is_color(out, 5, 5, 0, 0, 255) && is_color(out, 14, 12, 0, 0, 255));
+    ASSERT_TRUE(is_color(out, 4, 5, 255, 255, 255) && is_color(out, 15, 5, 255, 255, 255));
+    ASSERT_TRUE(is_color(out, 5, 4, 255, 255, 255) && is_color(out, 5, 13, 255, 255, 255));
+    ASSERT_TRUE(is_color(out, 20, 20, 255, 0, 0) && is_color(out, 24, 24, 255, 0, 0));
+}
+
+UTEST(libstb_shape_tests, test_stroke_is_drawn_inside_the_box) {
+    stb::canvas c(filled(30, 30, 3, 255));
+    c.add_rect(0, 0, 20, 20).no_fill().stroke(3, "black");
+    const stb::image out = c.finish();
+    ASSERT_TRUE(is_color(out, 0, 10, 0, 0, 0) && is_color(out, 2, 10, 0, 0, 0));
+    ASSERT_TRUE(is_color(out, 3, 10, 255, 255, 255) && is_color(out, 10, 10, 255, 255, 255));   // not filled
+    ASSERT_TRUE(is_color(out, 19, 10, 0, 0, 0) && is_color(out, 20, 10, 255, 255, 255));        // not outside the box
+    ASSERT_TRUE(is_color(out, 10, 0, 0, 0, 0) && is_color(out, 10, 19, 0, 0, 0));
+}
+
+UTEST(libstb_shape_tests, test_rounded_corners_and_circle_area) {
+    stb::canvas c(filled(40, 40, 3, 255));
+    c.set_color("black");
+    c.add_rect(0, 0, 20, 20).radius(10);                       // a circle
+    c.add_ellipse(20, 0, 20, 20);
+    const stb::image out = c.finish();
+    ASSERT_TRUE(is_color(out, 0, 0, 255, 255, 255));            // the corner is cut away
+    ASSERT_TRUE(is_color(out, 10, 10, 0, 0, 0));
+    bool soft = false;
+    double rounded = 0, ellipse = 0;
+    for (int y = 0; y < 20; ++y) {
+        for (int x = 0; x < 20; ++x) {
+            const int a = px(out, x, y)[0], b = px(out, x + 20, y)[0];
+            soft = soft || (a > 10 && a < 245);
+            rounded += (255 - a) / 255.0;
+            ellipse += (255 - b) / 255.0;
+        }
+    }
+    ASSERT_TRUE(soft);                                          // edge pixels are partly covered
+    const double area = 3.14159265358979 * 10 * 10;
+    ASSERT_TRUE(std::fabs(rounded - area) < 2.0);               // the soft edge keeps the area right
+    ASSERT_TRUE(std::fabs(ellipse - area) < 2.0);
+}
+
+UTEST(libstb_shape_tests, test_line_width_alpha_clipping_and_order) {
+    stb::canvas c(filled(20, 12, 3, 255));
+    c.set_color("black");
+    c.add_line(2, 5, 17, 5);                                    // width 1: exactly row 5
+    c.add_line(2, 8, 17, 8).stroke(3, stb::color(0, 0, 0, 128));
+    const stb::image out = c.finish();
+    ASSERT_TRUE(is_color(out, 2, 5, 0, 0, 0) && is_color(out, 17, 5, 0, 0, 0));
+    ASSERT_TRUE(is_color(out, 1, 5, 255, 255, 255) && is_color(out, 18, 5, 255, 255, 255));
+    ASSERT_TRUE(is_color(out, 10, 4, 255, 255, 255) && is_color(out, 10, 6, 255, 255, 255));
+    for (int row = 7; row <= 9; ++row) {                                    // translucent, 3 px wide: rows 7 to 9
+        ASSERT_TRUE(px(out, 10, row)[0] >= 126 && px(out, 10, row)[0] <= 128);
+    }
+    ASSERT_TRUE(is_color(out, 10, 6, 255, 255, 255) && is_color(out, 10, 10, 255, 255, 255));
+    // an even width straddles pixel rows: width 2 at row 8 covers half of rows 7 and 9
+    stb::canvas two(filled(20, 12, 3, 255));
+    two.add_line(2, 8, 17, 8).stroke(2, "black");
+    const stb::image t = two.finish();
+    ASSERT_TRUE(is_color(t, 10, 8, 0, 0, 0));
+    ASSERT_TRUE(px(t, 10, 7)[0] >= 126 && px(t, 10, 7)[0] <= 129 && px(t, 10, 9)[0] >= 126 && px(t, 10, 9)[0] <= 129);
+
+    stb::canvas d(filled(20, 20, 3, 255));
+    d.add_rect(-1000000, -1000000, 2000000, 2000000).fill("black");   // clipped, no giant layer
+    d.add_rect(5, 5, 5, 5).fill("red");                                // later = on top
+    const stb::image big = d.finish();
+    ASSERT_TRUE(is_color(big, 0, 0, 0, 0, 0) && is_color(big, 19, 19, 0, 0, 0));
+    ASSERT_TRUE(is_color(big, 5, 5, 255, 0, 0));
+    stb::canvas e(filled(20, 20, 3, 255));
+    e.add_rect(100, 100, 5, 5);                                         // entirely outside: nothing happens
+    ASSERT_TRUE(is_color(e.finish(), 0, 0, 255, 255, 255));
+}
+
+UTEST(libstb_shape_tests, test_shapes_and_texts_are_drawn_in_the_order_added_and_need_no_font) {
+    const stb::font f = load();
+    stb::canvas c(filled(100, 100, 3, 255));
+    c.set_font(f, 100).set_color("black");
+    c.add_text("A", 0, 0);
+    c.add_rect(0, 0, 100, 100).fill("white");                           // covers the text
+    ASSERT_TRUE(is_color(c.finish(), 10, 10, 255, 255, 255));
+    stb::canvas d(filled(10, 10, 3, 255));
+    d.add_rect(0, 0, 5, 5);                                             // no font needed for shapes
+    ASSERT_TRUE(is_color(d.finish(), 0, 0, 0, 0, 0));                   // black: the default canvas colour
+}
+
+UTEST(libstb_shape_tests, test_errors) {
+    stb::canvas c(filled(20, 20, 3, 255));
+    ASSERT_THROWS(c.add_rect(0, 0, 0, 5), std::invalid_argument);
+    ASSERT_THROWS(c.add_ellipse(0, 0, 5, -1), std::invalid_argument);
+    auto& e = c.add_ellipse(0, 0, 5, 5);
+    ASSERT_THROWS(e.radius(2), std::invalid_argument);
+    ASSERT_THROWS(e.stroke(0), std::invalid_argument);
+    ASSERT_THROWS(e.stroke(-1, "red"), std::invalid_argument);
+    auto& r = c.add_rect(0, 0, 5, 5);
+    ASSERT_THROWS(r.radius(-1), std::invalid_argument);
+    auto& l = c.add_line(0, 0, 5, 5);
+    ASSERT_THROWS(l.fill("red"), std::invalid_argument);
+    ASSERT_THROWS(l.no_fill(), std::invalid_argument);
+    ASSERT_THROWS(l.radius(1), std::invalid_argument);
+    c.finish();
+    ASSERT_THROWS(c.add_rect(0, 0, 5, 5), std::invalid_argument);
+    ASSERT_THROWS(r.fill("red"), std::invalid_argument);
+}
+
+// Shapes and texts together; test_canvas_shapes_match_the_cpp_golden_hash in tests/python/test_font.py
+// builds the same scene and must reach the same value.
+UTEST(libstb_shape_tests, test_canvas_shapes_match_the_python_golden_hash) {
+    const stb::font f = load();
+    stb::canvas c(filled(200, 120, 3, 128));
+    c.set_font(f, 30).set_color("white");
+    c.add_rect(10, 10, 80, 50).fill("#224488").radius(12).stroke(3, "white");
+    c.add_ellipse(100, 10, 90, 50).fill({255, 200, 0, 160}).stroke(2, {0, 0, 0, 200});
+    c.add_line(5, 100, 195, 70).stroke(3, "red");
+    c.add_line(5, 110, 195, 110);
+    c.add_rect(60, 75, 70, 36).no_fill().stroke(2, "black");
+    c.add_text("AA", 70, 80).color("black");
+    const stb::image out = c.finish();
+    std::uint64_t h = 0xCBF29CE484222325ull;
+    for (int row = 0; row < out.height(); ++row) {
+        const std::uint8_t* p = out.data() + std::size_t(row) * out.stride();
+        for (int i = 0; i < out.width() * out.channels(); ++i) h = (h ^ p[i]) * 0x100000001B3ull;
+    }
+    ASSERT_TRUE(h == 0x49444ac71d1c9d17ull);
+}

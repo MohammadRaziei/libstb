@@ -20,6 +20,9 @@ Fonts
 .. autoclass:: libstb.CanvasText
    :members:
 
+.. autoclass:: libstb.CanvasShape
+   :members:
+
 .. autoclass:: libstb.FontMetrics
    :members:
 

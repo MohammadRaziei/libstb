@@ -80,6 +80,15 @@ function(libstb_apply_core_build_settings target)
     )
     apply_optimization_flags(${target})
 
+    # shape.cpp draws with floating point and the result must be the same on every platform
+    # (the C++ and Python canvas tests compare against one fixed hash), so no fused multiply-add
+    # contraction: GCC and Clang would otherwise use FMA on ARM and give last-bit differences.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/shape.cpp
+            TARGET_DIRECTORY ${target}
+            PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+    endif()
+
     # image_kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
     # compiler's auto-vectoriser off. (MSVC has no such switch: there it may still vectorise,
     # with identical results.) TARGET_DIRECTORY: source file properties are per directory scope.

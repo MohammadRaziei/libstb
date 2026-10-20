@@ -1,4 +1,4 @@
-// Draw several texts on one image with stb::canvas.
+// Draw several texts and shapes on one image with stb::canvas.
 //
 //   canvas_example photo.jpg font.ttf out.png
 #include <iostream>
@@ -20,6 +20,10 @@ int main(int argc, char** argv) {
 
         // Defaults for the texts added from now on.
         c.set_font(f, 48).set_color("white");
+
+        // Shapes: smooth edges, filled with the canvas colour unless told otherwise.
+        c.add_rect(10, 10, 220, 60).fill({0, 0, 0, 140}).radius(12).stroke(2, "white");
+        c.add_line(10, 78, 230, 78).stroke(3, "#ffcc00");
 
         c.add_text("Title", 20, 20);                                  // uses the defaults
 

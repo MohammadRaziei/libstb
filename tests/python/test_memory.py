@@ -170,7 +170,15 @@ def test_text_and_canvas_leave_nothing_behind(small):
         del c
         with pytest.raises(ValueError):
             kept.color("red")                        # finished: refused, but alive
+        c = stb.Canvas(img)                          # shapes: kept after finish, and dropped unfinished
+        kept_shape = c.add_rect(5, 5, 100, 80).radius(10).stroke(3, "white")
+        c.add_ellipse(0, 0, 60, 40)
+        c.add_line(0, 0, 200, 150).stroke(4)
+        c.finish()
+        with pytest.raises(ValueError):
+            kept_shape.fill("red")
         d = stb.Canvas(img)
+        d.add_rect(1, 1, 50, 50).no_fill().stroke(2)
         d.set_font(font, 30)
         d.add_text("A", 1, 1)
         with pytest.raises(ValueError):

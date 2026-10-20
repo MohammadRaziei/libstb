@@ -36,9 +36,10 @@ img.resize(320, 240, stb.Resizer("linear", srgb=False))  # name + other options
 font = stb.Font.open("font.ttf")                    # trusted fonts only, see below
 text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
 text.bitmap.write("hello.png")
-# several texts on one copy of the image (draw_text copies it every call, a canvas once); each text can override the defaults:
+# several texts and shapes on one copy of the image (draw_text copies it every call, a canvas once); each item can override the defaults:
 c = stb.Canvas(img)                                 # same methods as C++ stb::canvas, same pixels
 c.set_font(font, 48).set_color("white")             # defaults for the texts added next
+c.add_rect(10, 10, 220, 60).fill("#222").radius(12).stroke(2, "white")   # shapes: add_rect, add_ellipse, add_line
 c.add_text("Title", 20, 20)
 c.add_text("Sub", 20, 90).color("gray").bg_color("#222").padding(8)   # per text: also .font() .size() .align()
 out = c.finish()                                    # the texts are drawn here, in order
@@ -290,6 +291,7 @@ stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, {255, 255, 255});  //
 stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
 stb::canvas c(img);                                      // <stb/canvas.hpp>: one copy, many texts
 c.set_font(f, 48).set_color("white");                    // defaults for the texts added next
+c.add_rect(10, 10, 220, 60).fill("#222").radius(12).stroke(2, "white");   // shapes: add_rect, add_ellipse, add_line
 c.add_text("Title", 20, 20);
 c.add_text("Sub", 20, 90).color("gray").bg_color("#222").padding(8);               // per text: also .font() .size() .align()
 stb::image out = c.finish();                             // the texts are drawn here, in order

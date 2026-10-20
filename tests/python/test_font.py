@@ -444,3 +444,111 @@ def test_canvas_and_draw_text_arguments(font):
     c = _canvas(img, font._f, 20, "red")
     c.add_text("A")
     assert (a == b).all() and (a == c.finish().numpy()).all()
+
+
+# Shapes and texts together; test_canvas_shapes_match_the_python_golden_hash in tests/cpp/test_font.cpp
+# builds the same scene and must reach the same value.
+GOLDEN_SHAPES_FNV1A64 = 0x49444ac71d1c9d17
+
+
+def test_canvas_shapes_match_the_cpp_golden_hash(font):
+    c = stb.Canvas(stb.Image(np.full((120, 200, 3), 128, np.uint8)))
+    c.set_font(font, 30).set_color("white")
+    c.add_rect(10, 10, 80, 50).fill("#224488").radius(12).stroke(3, "white")
+    c.add_ellipse(100, 10, 90, 50).fill((255, 200, 0, 160)).stroke(2, (0, 0, 0, 200))
+    c.add_line(5, 100, 195, 70).stroke(3, "red")
+    c.add_line(5, 110, 195, 110)
+    c.add_rect(60, 75, 70, 36).no_fill().stroke(2, "black")
+    c.add_text("AA", 70, 80).color("black")
+    assert _fnv1a64(c.finish().numpy().tobytes()) == GOLDEN_SHAPES_FNV1A64
+
+
+def _px(img, x, y):
+    return img.numpy()[y, x].tolist()
+
+
+def test_canvas_rect_sharp_edges_and_default_colour():
+    c = stb.Canvas(stb.Image(np.full((30, 30, 3), 255, np.uint8)))
+    c.set_color("blue")
+    c.add_rect(5, 5, 10, 8)                           # filled with the canvas colour
+    c.add_rect(20, 20, 5, 5).fill("red")
+    out = c.finish()
+    assert _px(out, 5, 5) == [0, 0, 255] and _px(out, 14, 12) == [0, 0, 255]
+    assert _px(out, 4, 5) == [255, 255, 255] and _px(out, 15, 5) == [255, 255, 255]
+    assert _px(out, 5, 4) == [255, 255, 255] and _px(out, 5, 13) == [255, 255, 255]
+    assert _px(out, 20, 20) == [255, 0, 0] and _px(out, 24, 24) == [255, 0, 0]
+
+
+def test_canvas_stroke_is_inside_and_no_fill():
+    c = stb.Canvas(stb.Image(np.full((30, 30, 3), 255, np.uint8)))
+    c.add_rect(0, 0, 20, 20).no_fill().stroke(3, "black")
+    out = c.finish()
+    assert _px(out, 0, 10) == [0, 0, 0] and _px(out, 2, 10) == [0, 0, 0]
+    assert _px(out, 3, 10) == [255, 255, 255] and _px(out, 10, 10) == [255, 255, 255]
+    assert _px(out, 19, 10) == [0, 0, 0] and _px(out, 20, 10) == [255, 255, 255]
+
+
+def test_canvas_circle_area_line_and_clipping():
+    c = stb.Canvas(stb.Image(np.full((40, 40, 3), 255, np.uint8)))
+    c.set_color("black")
+    c.add_rect(0, 0, 20, 20).radius(10)
+    c.add_ellipse(20, 0, 20, 20)
+    out = c.finish().numpy()[:20, :, 0].astype(float)
+    area = np.pi * 100
+    assert abs((255 - out[:, :20]).sum() / 255 - area) < 2 and abs((255 - out[:, 20:]).sum() / 255 - area) < 2
+    assert ((out > 10) & (out < 245)).any()           # soft edge pixels exist
+    assert out[0, 0] == 255 and out[10, 10] == 0      # the corner is cut away
+
+    c = stb.Canvas(stb.Image(np.full((12, 20, 3), 255, np.uint8)))
+    c.set_color("black")
+    c.add_line(2, 5, 17, 5)                           # width 1: exactly row 5
+    c.add_line(2, 8, 17, 8).stroke(3, (0, 0, 0, 128))
+    out = c.finish()
+    assert _px(out, 2, 5) == [0, 0, 0] and _px(out, 17, 5) == [0, 0, 0] and _px(out, 1, 5) == [255, 255, 255]
+    assert _px(out, 10, 4) == [255, 255, 255] and _px(out, 10, 6) == [255, 255, 255]
+    assert all(126 <= _px(out, 10, r)[0] <= 128 for r in (7, 8, 9))
+
+    c = stb.Canvas(stb.Image(np.full((20, 20, 3), 255, np.uint8)))
+    c.add_rect(-1000000, -1000000, 2000000, 2000000).fill("black")   # clipped: no giant layer
+    c.add_rect(5, 5, 5, 5).fill("red")                               # later = on top
+    c.add_rect(100, 100, 5, 5)                                       # outside: nothing happens
+    out = c.finish()
+    assert _px(out, 0, 0) == [0, 0, 0] and _px(out, 5, 5) == [255, 0, 0]
+
+
+def test_canvas_shapes_and_texts_keep_their_order_and_shapes_need_no_font(font):
+    c = _canvas(stb.Image(np.full((100, 100, 3), 255, np.uint8)), font, 100, "black")
+    c.add_text("A", 0, 0)
+    c.add_rect(0, 0, 100, 100).fill("white")          # covers the text
+    assert _px(c.finish(), 10, 10) == [255, 255, 255]
+    c = stb.Canvas(stb.Image(np.full((10, 10, 3), 255, np.uint8)))
+    c.add_rect(0, 0, 5, 5)                            # no font needed
+    assert _px(c.finish(), 0, 0) == [0, 0, 0]
+
+
+def test_canvas_shape_errors():
+    c = stb.Canvas(stb.Image(np.full((20, 20, 3), 255, np.uint8)))
+    with pytest.raises(ValueError):
+        c.add_rect(0, 0, 0, 5)
+    with pytest.raises(ValueError):
+        c.add_ellipse(0, 0, 5, -1)
+    e = c.add_ellipse(0, 0, 5, 5)
+    with pytest.raises(ValueError):
+        e.radius(2)
+    with pytest.raises(ValueError):
+        e.stroke(0)
+    with pytest.raises(ValueError):
+        e.stroke(-1, "red")
+    r = c.add_rect(0, 0, 5, 5)
+    with pytest.raises(ValueError):
+        r.radius(-1)
+    l = c.add_line(0, 0, 5, 5)
+    for call in (lambda: l.fill("red"), lambda: l.no_fill(), lambda: l.radius(1)):
+        with pytest.raises(ValueError):
+            call()
+    assert r.fill("red") is r and r.stroke(2) is r and r.stroke(2, "white") is r and r.no_fill() is r
+    c.finish()
+    with pytest.raises(ValueError):
+        c.add_rect(0, 0, 5, 5)
+    with pytest.raises(ValueError):
+        r.fill("red")

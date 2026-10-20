@@ -219,23 +219,55 @@ void bind_font(nb::module_& m) {
             "padding", [](text_item& t, int px) -> text_item& { return t.padding(px); }, "pixels"_a, keep,
             "Pixels added on every side of the background box (default 0). ValueError if negative.");
 
+    using shape_item = stb::canvas::shape_item;
+    nb::class_<shape_item>(
+        m, "CanvasShape",
+        "One rectangle, ellipse or line on a Canvas, as returned by Canvas.add_rect(), "
+        "add_ellipse() and add_line(). Each method changes this shape only and returns it, so calls "
+        "chain; the next item starts again from the Canvas. Every method raises ValueError once the "
+        "Canvas was finished.")
+        .def(
+            "fill", [](shape_item& t, nb::handle c) -> shape_item& { return t.fill(text_colour(c)); },
+            "color"_a, keep,
+            "Fill colour (rectangles and ellipses; they start filled with the Canvas colour). "
+            "Takes the same values as CanvasText.color(). ValueError for a line.")
+        .def(
+            "no_fill", [](shape_item& t) -> shape_item& { return t.no_fill(); }, keep,
+            "Do not fill (rectangles and ellipses). ValueError for a line.")
+        .def(
+            "stroke",
+            [](shape_item& t, float width, nb::handle c) -> shape_item& {
+                return c.is_none() ? t.stroke(width) : t.stroke(width, text_colour(c));
+            },
+            "width"_a, "color"_a = nb::none(), keep,
+            "Border of `width` pixels drawn inside the box (rectangles and ellipses), in `color` or "
+            "the Canvas colour. For a line: its width and colour (it starts with width 1). "
+            "ValueError if width <= 0.")
+        .def(
+            "radius", [](shape_item& t, float px) -> shape_item& { return t.radius(px); }, "pixels"_a, keep,
+            "Corner radius in pixels (rectangles only; at most half the short side is used). "
+            "ValueError if negative or not a rectangle.");
+
     nb::class_<canvas>(
         m, "Canvas",
-        "Several texts on ONE copy of an Image.\n\n"
+        "Several texts and shapes on ONE copy of an Image.\n\n"
         "Image.draw_text copies the image on every call; a Canvas copies it once, collects the texts "
         "you add and draws them all in finish(). The Image you pass in is never modified. The "
-        "set_*() methods set the defaults for the texts added after them; add_text() adds a text and "
+        "set_*() methods set the defaults for what is added after them; add_text() adds a text and "
         "returns it (a CanvasText), so that text's own font, size, colour, alignment and background "
-        "can be set. Every text starts again from the Canvas::\n\n"
+        "can be set; add_rect(), add_ellipse() and add_line() add shapes (a CanvasShape). Every item "
+        "starts again from the Canvas::\n\n"
         "    c = stb.Canvas(img)\n"
         "    c.set_font(font, 48).set_color(\"white\")\n\n"
         "    c.add_text(\"Title\", 20, 20)\n"
         "    c.add_text(\"Sub\", 200, 90).align(\"center\").color(\"#ffcc00\").bg_color(\"red\").padding(10)\n"
-        "    c.add_text(\"small\", 20, 200).size(24)\n\n"
+        "    c.add_text(\"small\", 20, 200).size(24)\n"
+        "    c.add_rect(10, 240, 300, 40).fill(\"#222\").radius(8).stroke(2, \"white\")\n"
+        "    c.add_line(0, 300, 400, 300).stroke(3, \"red\")\n\n"
         "    out = c.finish()\n\n"
-        "A text takes the defaults as they are when add_text() is called: changing a default later "
-        "does not touch texts that already exist. Texts are drawn in the order they were added (a "
-        "later one lands on top). Nothing is drawn or checked before finish(), which raises "
+        "An item takes the defaults as they are when it is added: changing a default later does not "
+        "touch items that already exist. Items are drawn in the order they were added (a later one "
+        "lands on top). Nothing is drawn or checked before finish(), which raises "
         "ValueError for a text without a font, a bad colour or alignment, plus whatever "
         "Image.draw_text raises. It hands the Image over without a copy; the Canvas and all its "
         "texts raise ValueError afterwards. This is the C++ class stb::canvas, with the same "
@@ -267,6 +299,25 @@ void bind_font(nb::module_& m) {
             [](canvas& c, const std::string& text, int x, int y) -> text_item& { return c.add_text(text, x, y); },
             "text"_a, "x"_a = 0, "y"_a = 0, keep,
             "Add `text` at (x, y) with the current defaults and return it (a CanvasText).")
+        .def(
+            "add_rect",
+            [](canvas& c, int x, int y, int w, int h) -> shape_item& { return c.add_rect(x, y, w, h); },
+            "x"_a, "y"_a, "w"_a, "h"_a, keep,
+            "Add a rectangle with the box x, y, w, h, filled with the current colour. Smooth edges, "
+            "so a rounded corner (CanvasShape.radius) is not jagged. ValueError if w or h <= 0.")
+        .def(
+            "add_ellipse",
+            [](canvas& c, int x, int y, int w, int h) -> shape_item& { return c.add_ellipse(x, y, w, h); },
+            "x"_a, "y"_a, "w"_a, "h"_a, keep,
+            "Add an ellipse that fits the box x, y, w, h, filled with the current colour. "
+            "ValueError if w or h <= 0.")
+        .def(
+            "add_line",
+            [](canvas& c, int x1, int y1, int x2, int y2) -> shape_item& { return c.add_line(x1, y1, x2, y2); },
+            "x1"_a, "y1"_a, "x2"_a, "y2"_a, keep,
+            "Add a line of width 1 in the current colour from (x1, y1) to (x2, y2); CanvasShape.stroke() "
+            "sets its width and colour. It goes through the centres of the end pixels, so an odd "
+            "width stays crisp.")
         .def(
             "finish", [](canvas& c) { return finish_canvas(c); },
             "Draw every text in order and return the Image (no further copy).");

@@ -13,7 +13,7 @@
       نام‌های snake_case (`color`, `color_blend`, `invalid_color_error`, `r()`, `set_r()`,
       `from_string`, ...). بلوک engine-facing و ثابت‌های `Color::Black/White/Transparent` حذف شدن.
       توی Python رنگ می‌تونه رشته (`"red"`, `"#ff8800"`)، عدد یا tuple باشه. ۲۰ تست از novasvg پورت شد.
-- [x] **`canvas` (C++) و `Canvas` (Python)**: چند متن روی یک کپی از تصویر.
+- [x] **`canvas` (C++) و `Canvas` (Python)**: چند متن و شکل روی یک کپی از تصویر.
       `image::composite_in_place` و `font::draw_text_in_place` اضافه شدن؛ `composite()` و
       `draw_text()` الان کپی + نسخه‌ی درجا هستن.
       API (C++ و Python دقیقاً یکی، `Canvas(img)`): `c.add_text(متن, x, y)` یه شیء متن برمی‌گردونه
@@ -26,6 +26,15 @@
       نه کد Python. خروجی C++ و Python بایت به بایت یکیه: دو تست (`test_canvas_matches_*_golden_hash`) همون صحنه رو می‌سازن و باید به یک FNV-1a برسن.
       پس‌زمینه: جعبه‌ی layout متن + padding، به اندازه‌ی تصویر clip می‌شه (padding بزرگ حافظه‌ی
       زیاد نمی‌گیره). آلفای رنگ رعایت می‌شه.
+      شکل‌ها: `add_rect(x,y,w,h)` (با `.radius()`)، `add_ellipse(x,y,w,h)`، `add_line(x1,y1,x2,y2)`
+      با `.fill() .no_fill() .stroke(عرض[, رنگ])`. پیش‌فرض: رنگ canvas (پر برای rect/ellipse، خط با
+      عرض ۱). لبه‌ها صافن (anti-aliased، SDF)، حاشیه داخل جعبه کشیده می‌شه و خط از مرکز پیکسل‌های
+      دو سرش می‌گذره (عرض فرد crisp می‌مونه، عرض زوج بین دو ردیف می‌افته). کد توی `src/core/shape.cpp`
+      با `-ffp-contract=off` کامپایل می‌شه که روی ARM هم همون بیت‌ها دربیاد.
+      بیضی با تخمین مرتبه‌ی اول فاصله کشیده می‌شه: روی محورها ضخامت حاشیه دقیقه (اختلاف تا ۰.۰۴
+      پیکسل اندازه‌گیری شد)، بین محورها اندازه‌گیری نشده.
+      دو golden hash (متن، و شکل+متن) بین تست C++ و Python مشترکن؛ ثابت‌هاشون روی ویندوز/macOS هنوز
+      تأیید نشده (متن با stb_truetype و کامپایلرهای دیگه ممکنه آخرین بیت رو عوض کنه).
 - [x] **`text_align` (left, center, right)** برای `draw_text` و `canvas` (`align=` توی Python). با center/right،
       x مرکز یا لبه‌ی راستِ هر خط می‌شه. `measure` از قبل وجود داشت (`font::measure`, `Font.measure`).
 - [x] README (خط ۳) و توضیح PyPI (`pyproject.toml`) حالا zlib و نوشتن متن رو هم می‌گن.

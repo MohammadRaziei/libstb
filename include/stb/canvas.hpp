@@ -9,42 +9,46 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "stb/color.hpp"
 #include "stb/font.hpp"
 #include "stb/image.hpp"
+#include "stb/shape.hpp"
 
 namespace stb {
 
-// Several texts on ONE copy of an image. font::draw_text copies the image on every call; a
-// canvas copies it once, collects the texts you add, and draws them all in finish(). The
-// image you pass in is never modified. The Python class libstb.Canvas has exactly the same
-// methods, and draws through this class, so both give identical pixels.
+// Several texts and shapes on ONE copy of an image. font::draw_text copies the image on every
+// call; a canvas copies it once, collects what you add, and draws it all in finish(). The image
+// you pass in is never modified. The Python class libstb.Canvas has exactly the same methods,
+// and draws through this class, so both give identical pixels.
 //
 //   stb::canvas c(photo);
-//   c.set_font(f, 48).set_color("white");                          // defaults for the next texts
+//   c.set_font(f, 48).set_color("white");                          // defaults for what is added next
 //
+//   c.add_rect(10, 10, 300, 90).fill("#222").radius(12).stroke(2, "white");   // a shape
 //   c.add_text("Title", 20, 20);                                   // uses the defaults
 //   c.add_text("Sub", mid, 90).align(stb::text_align::center).color("#ffcc00")
 //       .font(other).bg_color("red").padding(10);                  // this text only
 //   c.add_text("small", 20, 200).size(24);
+//   c.add_line(0, 240, 400, 240).stroke(3, "red");
 //
 //   stb::image out = c.finish();                                   // drawn here, in order
 //
-// add_text returns the new text, so its own font, size, colour, alignment and background can
-// be set; every text starts again from `c`. A text takes the canvas defaults as they are when
-// it is added: changing a default later does not touch texts that already exist. Texts are
-// drawn in the order they were added, so a later one lands on top of an earlier one.
+// add_text and the add_rect, add_ellipse and add_line shapes return the new item, so its own
+// settings can be chained onto it; every item starts again from `c`. An item takes the canvas
+// defaults as they are when it is added: changing a default later does not touch items that
+// already exist. Items are drawn in the order they were added, so a later one lands on top.
 //
 // Nothing is drawn (and nothing is checked) before finish(). It throws invalid_argument if a
-// text has no font, plus whatever font::draw_text_in_place throws (bad size, empty text). If
-// it throws, the canvas is unusable. A canvas keeps a reference to the font's shared data
-// (fonts are cheap to copy), so a font may go out of scope after it was set.
+// text has no font, plus whatever font::draw_text_in_place and draw_shape throw. If it throws,
+// the canvas is unusable. A canvas keeps a reference to the font's shared data (fonts are cheap
+// to copy), so a font may go out of scope after it was set.
 //
-// After finish() the canvas is finished: add_text, the set_* calls, a text's setters and a
-// second finish() throw invalid_argument. The texts stay valid objects until the canvas is
-// destroyed, so a reference kept from add_text never dangles. A canvas can be neither copied
-// nor moved (its texts point back to it).
+// After finish() the canvas is finished: add_*, the set_* calls, an item's setters and a second
+// finish() throw invalid_argument. The items stay valid objects until the canvas is destroyed,
+// so a reference kept from add_text never dangles. A canvas can be neither copied nor moved
+// (its items point back to it).
 class canvas {
 public:
     // One text on a canvas, as returned by add_text. It belongs to the canvas.
@@ -113,6 +117,59 @@ public:
         int padding_ = 0;
     };
 
+    // One rectangle, ellipse or line on a canvas, as returned by add_rect, add_ellipse and
+    // add_line. It belongs to the canvas, like a text_item.
+    class shape_item {
+    public:
+        // Fill colour (rect and ellipse). They start filled with the canvas colour.
+        shape_item& fill(const stb::color& c) {
+            check();
+            need_closed("fill");
+            s_.fill = c;
+            return *this;
+        }
+        shape_item& no_fill() {
+            check();
+            need_closed("no_fill");
+            s_.fill.reset();
+            return *this;
+        }
+        // Border of `width` pixels, drawn inside the box (rect and ellipse), in the canvas colour
+        // or in `c`. For a line: its width and colour (a line starts with width 1 in the canvas
+        // colour). Throws invalid_argument if width <= 0.
+        shape_item& stroke(float width) { return stroke(width, default_); }
+        shape_item& stroke(float width, const stb::color& c) {
+            check();
+            if (!(width > 0)) throw std::invalid_argument("canvas: stroke width must be > 0");
+            s_.stroke_color = c;
+            s_.stroke_width = width;
+            return *this;
+        }
+        // Corner radius in pixels (rect only; clamped to half the short side). Throws
+        // invalid_argument if negative or if this is not a rect.
+        shape_item& radius(float px) {
+            check();
+            if (s_.type != shape::kind::rect) throw std::invalid_argument("canvas: radius() is for rectangles only");
+            if (px < 0) throw std::invalid_argument("canvas: radius must be >= 0");
+            s_.radius = px;
+            return *this;
+        }
+
+    private:
+        friend class canvas;
+        shape_item(canvas* owner, shape s, const stb::color& c) : owner_(owner), s_(std::move(s)), default_(c) {}
+        void check() const { owner_->check(); }
+        void need_closed(const char* what) const {
+            if (s_.type == shape::kind::line) {
+                throw std::invalid_argument(std::string("canvas: a line has no fill (") + what + "); use stroke()");
+            }
+        }
+
+        canvas* owner_;
+        shape s_;
+        stb::color default_;
+    };
+
     // Copies `base` once.
     explicit canvas(const image& base) : img_(base.copy()) {}
     canvas(const canvas&) = delete;
@@ -149,8 +206,21 @@ public:
     // Adds a text (UTF-8, copied) at (x, y) with the current defaults.
     text_item& add_text(std::string_view utf8, int x, int y) {
         check();
-        items_.push_back(text_item(this, std::string(utf8), x, y, font_, px_, color_, align_));
-        return items_.back();
+        items_.emplace_back(text_item(this, std::string(utf8), x, y, font_, px_, color_, align_));
+        return std::get<text_item>(items_.back());
+    }
+
+    // Adds a rectangle / ellipse with the box x, y, w, h (filled with the canvas colour until
+    // told otherwise), or a line from (x1, y1) to (x2, y2). Throws invalid_argument if w or h is
+    // not positive.
+    shape_item& add_rect(int x, int y, int w, int h) {
+        return add_shape(shape::make_rect(x, y, w, h), true);
+    }
+    shape_item& add_ellipse(int x, int y, int w, int h) {
+        return add_shape(shape::make_ellipse(x, y, w, h), true);
+    }
+    shape_item& add_line(int x1, int y1, int x2, int y2) {
+        return add_shape(shape::make_line(x1, y1, x2, y2), false);
     }
 
     bool finished() const { return finished_; }
@@ -158,16 +228,24 @@ public:
     // Draws every text in order onto the copy and hands the image over (no further copy).
     image finish() {
         check();
-        for (std::size_t i = 0; i < items_.size(); ++i) {
-            if (!items_[i].font_) {
-                throw std::invalid_argument("canvas: text #" + std::to_string(i) +
-                                            " has no font (call font() on the canvas or on the text)");
+        std::size_t n = 0;  // texts so far, for the message
+        for (const item& it : items_) {
+            if (const text_item* t = std::get_if<text_item>(&it)) {
+                if (!t->font_) {
+                    throw std::invalid_argument("canvas: text #" + std::to_string(n) +
+                                                " has no font (call set_font() on the canvas or font() on the text)");
+                }
+                ++n;
             }
         }
         finished_ = true;
-        for (const text_item& t : items_) {
-            if (t.bg_) fill_box(t);
-            t.font_->draw_text_in_place(img_, t.text_, t.px_, t.x_, t.y_, t.color_, t.align_);
+        for (const item& it : items_) {
+            if (const text_item* t = std::get_if<text_item>(&it)) {
+                if (t->bg_) fill_box(*t);
+                t->font_->draw_text_in_place(img_, t->text_, t->px_, t->x_, t->y_, t->color_, t->align_);
+            } else {
+                draw_shape(img_, std::get<shape_item>(it).s_);
+            }
         }
         return std::move(img_);
     }
@@ -175,6 +253,14 @@ public:
 private:
     void check() const {
         if (finished_) throw std::invalid_argument("canvas: already finished");
+    }
+
+    shape_item& add_shape(shape s, bool filled) {
+        check();
+        if (filled) s.fill = color_;
+        else s.stroke_color = color_;  // a line: its colour (the width stays 1 until stroke())
+        items_.emplace_back(shape_item(this, std::move(s), color_));
+        return std::get<shape_item>(items_.back());
     }
 
     // The text's layout box grown by its padding, clipped to the image, as one solid layer.
@@ -206,7 +292,8 @@ private:
     }
 
     image img_;
-    std::deque<text_item> items_;  // a deque: add_text's references stay valid
+    using item = std::variant<text_item, shape_item>;
+    std::deque<item> items_;  // a deque: the references add_* returns stay valid
     std::optional<font> font_;
     float px_ = 0;
     stb::color color_;

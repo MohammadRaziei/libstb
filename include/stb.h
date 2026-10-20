@@ -21,6 +21,7 @@
 #include "stb/image.hpp"
 #include "stb/resizer.hpp"
 #include "stb/font.hpp"
+#include "stb/shape.hpp"
 #include "stb/canvas.hpp"
 #include "stb/zlib.hpp"
 #endif
