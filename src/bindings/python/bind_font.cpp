@@ -1,8 +1,11 @@
 #include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/unique_ptr.h>
 #include <nanobind/stl/vector.h>
 
+#include <memory>
 #include <tuple>
 
 #include "binding.hpp"
@@ -69,6 +72,28 @@ stb::text_align text_alignment(const std::string& name) {
     throw std::invalid_argument("align must be \"left\", \"center\" or \"right\", got \"" + name + "\"");
 }
 
+// A font argument: the native Font, or the Python Font wrapper that holds one in `_f`.
+stb::font font_of(nb::handle h) {
+    nb::object o = nb::borrow(h);
+    if (nb::hasattr(o, "_f")) o = o.attr("_f");
+    if (!nb::isinstance<stb::font>(o)) throw nb::type_error("font must be a libstb.Font");
+    return nb::cast<stb::font>(o);
+}
+
+// Defaults a new Canvas starts with (the Canvas constructor and Image.canvas share this).
+void setup_canvas(stb::canvas& c, nb::handle f, float px, nb::handle color, const std::string& align) {
+    if (!f.is_none()) c.set_font(font_of(f));
+    c.set_size(px);
+    c.set_color(text_colour(color));
+    c.set_align(text_alignment(align));
+}
+
+// Draws the texts on the canvas's copy without holding the GIL; the Image is made after it returns.
+stb::image finish_canvas(stb::canvas& c) {
+    nb::gil_scoped_release release;
+    return std::move(c).finish();
+}
+
 }  // namespace
 
 // Native tuples here; the Python package (font.py) wraps them in NamedTuples
@@ -130,27 +155,6 @@ void bind_font(nb::module_& m) {
                  return std::make_tuple(std::move(t.bitmap), t.origin_x, t.origin_y);
              },
              "text"_a, "pixel_height"_a, "max_bytes"_a = std::size_t(1) << 28)
-        .def("draw_text",
-             [](const font& f, const stb::image& dst, const std::string& text, float px, int x, int y,
-                nb::handle color, const std::string& align) {
-                 const stb::color c = text_colour(color);
-                 const stb::text_align a = text_alignment(align);
-                 nb::gil_scoped_release release;
-                 return f.draw_text(dst, text, px, x, y, c, a);
-             },
-             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0,
-             "align"_a = "left")
-        // Internal: libstb.Canvas draws on its own private copy with this.
-        .def("draw_text_in_place",
-             [](const font& f, stb::image& dst, const std::string& text, float px, int x, int y,
-                nb::handle color, const std::string& align) {
-                 const stb::color c = text_colour(color);
-                 const stb::text_align a = text_alignment(align);
-                 nb::gil_scoped_release release;
-                 f.draw_text_in_place(dst, text, px, x, y, c, a);
-             },
-             "image"_a, "text"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, "color"_a = 0,
-             "align"_a = "left")
         .def("make_atlas",
              [](const font& f, const std::string& chars, float px, int width, int height, int padding) {
                  stb::atlas a = [&] {
@@ -181,4 +185,153 @@ void bind_font(nb::module_& m) {
               return std::make_tuple(v.ascent, v.descent, v.line_gap);
           },
           "pixel_height"_a, "family"_a = "sans");
+
+    // ---- Canvas: several texts on one copy of an Image (stb::canvas) ----
+    using stb::canvas;
+    using text_item = stb::canvas::text_item;
+    constexpr auto keep = nb::rv_policy::reference_internal;  // a text keeps its canvas alive
+
+    nb::class_<text_item>(
+        m, "CanvasText",
+        "One text on a Canvas, as returned by Canvas.text(). Its settings start from the Canvas "
+        "defaults of that moment, and each method changes this text only and returns it, so calls "
+        "chain. text() and finish() continue the Canvas chain. Every method raises ValueError once "
+        "the Canvas was finished.")
+        .def(
+            "font",
+            [](text_item& t, nb::handle f, std::optional<float> px) -> text_item& {
+                if (px) t.font(font_of(f), *px);
+                else t.font(font_of(f));
+                return t;
+            },
+            "font"_a, "pixel_height"_a = nb::none(), keep,
+            "Font for this text. The pixel height stays what it was unless `pixel_height` is given.")
+        .def(
+            "size", [](text_item& t, float px) -> text_item& { return t.size(px); }, "pixel_height"_a, keep,
+            "Pixel height for this text (the font stays the one it already has).")
+        .def(
+            "color", [](text_item& t, nb::handle c) -> text_item& { return t.color(text_colour(c)); },
+            "color"_a, keep,
+            "Colour for this text: an int (gray), (r, g, b), (r, g, b, a) or a string such as "
+            "\"red\" or \"#ff8800\".")
+        .def(
+            "align",
+            [](text_item& t, const std::string& a) -> text_item& { return t.align(text_alignment(a)); },
+            "align"_a, keep,
+            "\"left\", \"center\" or \"right\": how this text lines up with its x (see Image.draw_text).")
+        .def(
+            "bg_color",
+            [](text_item& t, nb::handle c) -> text_item& { return t.bg_color(text_colour(c)); },
+            "color"_a, keep,
+            "Fill this text's layout box (grown by padding() on every side) with `color` before the "
+            "text is drawn. Takes the same values as color(); its alpha is honoured. No background by default.")
+        .def(
+            "padding", [](text_item& t, int px) -> text_item& { return t.padding(px); }, "pixels"_a, keep,
+            "Pixels added on every side of the background box (default 0). ValueError if negative.")
+        .def(
+            "text",
+            [](text_item& t, const std::string& text, int x, int y) -> text_item& {
+                return t.owner().add_text(text, x, y);
+            },
+            "text"_a, "x"_a = 0, "y"_a = 0, keep, "Same as Canvas.text: add the next text.")
+        .def(
+            "finish", [](text_item& t) { return finish_canvas(t.owner()); },
+            "Same as Canvas.finish.");
+
+    nb::class_<canvas>(
+        m, "Canvas",
+        "Several texts on ONE copy of an Image.\n\n"
+        "Image.draw_text copies the image on every call; a Canvas copies it once, collects the texts "
+        "you add and draws them all in finish(). The Image you pass in is never modified. font(), "
+        "color(), align() and size() set the defaults for the texts added after them; text() adds a "
+        "text and returns it (a CanvasText), so that text's own font, size, colour, alignment and "
+        "background can be set::\n\n"
+        "    out = (img.canvas().font(font, 48).color(\"white\")\n"
+        "              .text(\"Title\", 20, 20)\n"
+        "              .text(\"Sub\", 200, 90).align(\"center\").color(\"#ffcc00\").bg_color(\"red\").padding(10)\n"
+        "              .text(\"small\", 20, 200).size(24)\n"
+        "              .finish())\n\n"
+        "A text takes the defaults as they are when text() is called: changing a default later does "
+        "not touch texts that already exist. Texts are drawn in the order they were added (a later "
+        "one lands on top). Nothing is drawn or checked before finish(), which raises ValueError for "
+        "a text without a font, a bad colour or alignment, plus whatever Image.draw_text raises. It "
+        "hands the Image over without a copy; the Canvas and all its texts raise ValueError "
+        "afterwards.")
+        .def(
+            "__init__",
+            [](canvas* self, const stb::image& base, nb::handle f, float px, nb::handle color,
+               const std::string& align) {
+                new (self) canvas(base);
+                setup_canvas(*self, f, px, color, align);
+            },
+            "image"_a, "font"_a = nb::none(), "pixel_height"_a = 0.0f, nb::kw_only(), "color"_a = 0,
+            "align"_a = "left")
+        .def(
+            "font",
+            [](canvas& c, nb::handle f, std::optional<float> px) -> canvas& {
+                if (px) c.set_font(font_of(f), *px);
+                else c.set_font(font_of(f));
+                return c;
+            },
+            "font"_a, "pixel_height"_a = nb::none(), nb::rv_policy::none,
+            "Default font (and `pixel_height`, if given) for the texts added from now on.")
+        .def(
+            "size", [](canvas& c, float px) -> canvas& { return c.set_size(px); }, "pixel_height"_a,
+            nb::rv_policy::none, "Default pixel height for the texts added from now on.")
+        .def(
+            "color", [](canvas& c, nb::handle col) -> canvas& { return c.set_color(text_colour(col)); },
+            "color"_a, nb::rv_policy::none,
+            "Default colour (int, (r, g, b), (r, g, b, a) or a string) for the texts added from now on.")
+        .def(
+            "align",
+            [](canvas& c, const std::string& a) -> canvas& { return c.set_align(text_alignment(a)); },
+            "align"_a, nb::rv_policy::none,
+            "Default \"left\", \"center\" or \"right\" for the texts added from now on.")
+        .def(
+            "text",
+            [](canvas& c, const std::string& text, int x, int y) -> text_item& { return c.add_text(text, x, y); },
+            "text"_a, "x"_a = 0, "y"_a = 0, keep,
+            "Add `text` at (x, y) with the current defaults and return it (a CanvasText).")
+        .def(
+            "finish", [](canvas& c) { return finish_canvas(c); },
+            "Draw every text in order and return the Image (no further copy).");
+
+    // Image.draw_text(text, font, pixel_height, x=0, y=0, *, color=0, align="left")
+    nb::setattr(
+        nb::type<stb::image>(), "draw_text",
+        nb::cpp_function(
+            [](const stb::image& self, const std::string& text, nb::handle f, float px, int x, int y,
+               nb::handle color, const std::string& align) {
+                const stb::font fo = font_of(f);
+                const stb::color c = text_colour(color);
+                const stb::text_align a = text_alignment(align);
+                nb::gil_scoped_release release;
+                return fo.draw_text(self, text, px, x, y, c, a);
+            },
+            nb::is_method(), "text"_a, "font"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, nb::kw_only(),
+            "color"_a = 0, "align"_a = "left",
+            "A copy of this Image with `text` drawn on it (multi-line, UTF-8).\n\n"
+            "(x, y) is where the text's layout box starts (its top-left corner). With "
+            "``align=\"center\"`` or ``\"right\"``, x is instead the horizontal centre or right edge of "
+            "every line, so ``img.draw_text(\"a\\nlonger line\", font, 32, 200, 10, align=\"center\")`` "
+            "centres both lines on x = 200. Text that hangs over the edges is clipped.\n\n"
+            "`color` is an int (gray), (r, g, b), (r, g, b, a) or a string such as \"red\" or "
+            "\"#ff8800\" (parsed like stb::color does); the alpha scales the glyph coverage, so a < 255 "
+            "gives translucent text. The result has this Image's channel count; on an image with "
+            "alpha the text is blended with the usual \"over\" operator.\n\n"
+            "Raises ValueError (empty text, bad pixel_height, color or align), LimitError.\n\n"
+            ">>> img.draw_text(\"Hello\", font, 32, 10, 10, color=(255, 255, 255))"));
+
+    // Image.canvas(font=None, pixel_height=0, *, color=0, align="left")
+    nb::setattr(
+        nb::type<stb::image>(), "canvas",
+        nb::cpp_function(
+            [](const stb::image& self, nb::handle f, float px, nb::handle color, const std::string& align) {
+                auto c = std::make_unique<canvas>(self);
+                setup_canvas(*c, f, px, color, align);
+                return c;
+            },
+            nb::is_method(), "font"_a = nb::none(), "pixel_height"_a = 0.0f, nb::kw_only(), "color"_a = 0,
+            "align"_a = "left",
+            "A Canvas for drawing several texts on one copy of this Image (see Canvas)."));
 }

@@ -23,21 +23,23 @@ int main(int argc, char** argv) {
 
         c.add_text("Title", 20, 20);                                  // uses the defaults
 
-        // Settings for one text only.
-        c.add_text("Subtitle", 20, 80).set_color("#ffcc00");
+        // Settings for one text only (a font of its own: .font(other_font)).
+        c.add_text("Subtitle", 20, 80).color("#ffcc00").bg_color("#222").padding(10);
 
         // center: x is the middle of every line.
         const int mid = photo.width() / 2;
         c.add_text("first line\nsecond, longer line", mid, photo.height() - 140)
-            .set_align(stb::text_align::center);
+            .align(stb::text_align::center);
 
-        // Translucent text: the alpha of the colour scales the glyph coverage.
+        // Translucent text on a translucent box: the alpha of a colour is honoured.
         c.add_text("watermark", mid, photo.height() - 50)
-            .set_align(stb::text_align::center)
-            .set_color({255, 255, 255, 120})
-            .set_size(24);
+            .align(stb::text_align::center)
+            .color({255, 255, 255, 120})
+            .bg_color({0, 0, 0, 90})
+            .padding(6)
+            .size(24);
 
-        // Everything is drawn here, in the order added. The canvas is empty afterwards.
+        // Everything is drawn here, in the order added.
         stb::image out = std::move(c).finish();
         out.write_png(argv[3]);
     } catch (const std::exception& e) {

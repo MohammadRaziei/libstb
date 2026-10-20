@@ -17,10 +17,15 @@
       `image::composite_in_place` و `font::draw_text_in_place` اضافه شدن؛ `composite()` و
       `draw_text()` الان کپی + نسخه‌ی درجا هستن.
       API: `c.add_text(متن, x, y)` (C++) و `c.text(متن, x, y)` (Python) یه شیء متن برمی‌گردونن
-      (`canvas::text_item`، `CanvasText`) که فونت، اندازه، رنگ و align خودش رو می‌گیره. `set_font`،
-      `set_color` و `set_align` روی خود canvas پیش‌فرضِ متن‌های بعدیه (موقع `add_text` کپی می‌شه).
-      کشیدن lazy هست: همه‌ی متن‌ها توی `finish()` به ترتیب اضافه‌شدن کشیده می‌شن، پس خطای
-      «بدون فونت» هم همون‌جا میاد. `draw_text` فوریِ canvas و `result()` حذف شدن.
+      (`canvas::text_item`، `CanvasText`) با `.font() .size() .color() .align() .bg_color() .padding()`.
+      روی خود canvas `set_font`/`set_size`/`set_color`/`set_align` پیش‌فرضِ متن‌های بعدیه (موقع
+      `add_text` کپی می‌شه). کشیدن lazy هست: همه‌ی متن‌ها توی `finish()` به ترتیب اضافه‌شدن کشیده
+      می‌شن، پس خطای «بدون فونت» هم همون‌جا میاد. بعد از `finish()` canvas و متن‌هاش
+      `invalid_argument` (`ValueError`) می‌دن ولی dangling نمی‌شن. `draw_text` فوریِ canvas و
+      `result()` حذف شدن. `Canvas`/`CanvasText` و `Image.canvas`/`Image.draw_text` توی Python با nanobind بایند شدن (`bind_font.cpp`)،
+      نه کد Python.
+      پس‌زمینه: جعبه‌ی layout متن + padding، به اندازه‌ی تصویر clip می‌شه (padding بزرگ حافظه‌ی
+      زیاد نمی‌گیره). آلفای رنگ رعایت می‌شه.
 - [x] **`text_align` (left, center, right)** برای `draw_text` و `canvas` (`align=` توی Python). با center/right،
       x مرکز یا لبه‌ی راستِ هر خط می‌شه. `measure` از قبل وجود داشت (`font::measure`, `Font.measure`).
 - [x] README (خط ۳) و توضیح PyPI (`pyproject.toml`) حالا zlib و نوشتن متن رو هم می‌گن.
