@@ -14,6 +14,7 @@ call cannot fully settle.
 """
 
 import gc
+import os
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
@@ -152,6 +153,28 @@ def test_exceptions_leave_nothing_behind(small):
             stb.Image.open(b"not an image")
         with pytest.raises(ValueError):
             stb.simd("nope")
+
+
+@pytest.mark.limit_leaks(LEAK_LIMIT)
+def test_text_and_canvas_leave_nothing_behind(small):
+    img = stb.Image(small)
+    font = stb.Font.open(os.path.join(os.path.dirname(__file__), "..", "data", "libstb-test.ttf"))
+    for i in range(ROUNDS):
+        img.draw_text("AA\nA", font, 40 + i % 3, 5, 5, color=(255, 0, 0, 200), align="center")
+        # a finished canvas, texts that outlive their canvas variable, and a canvas that is never finished
+        c = stb.Canvas(img)
+        c.set_font(font, 40).set_color("white")
+        kept = c.add_text("A", 0, 0).bg_color("black").padding(5)
+        c.add_text("AA", 50, 50).align("right").size(24)
+        c.finish()
+        del c
+        with pytest.raises(ValueError):
+            kept.color("red")                        # finished: refused, but alive
+        d = stb.Canvas(img)
+        d.set_font(font, 30)
+        d.add_text("A", 1, 1)
+        with pytest.raises(ValueError):
+            stb.Canvas(img).add_text("A", 0, 0).color("not-a-colour")
 
 
 # ------------------------------------------------------------------ no hidden copies
