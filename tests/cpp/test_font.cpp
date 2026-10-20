@@ -315,7 +315,7 @@ UTEST(libstb_font_tests, test_canvas_draws_many_texts_on_one_copy) {
     c.add_text("A", 0, 0);
     c.add_text("A", 100, 0).color(stb::color(0, 0, 255));      // this text only
     c.add_text("A", 200, 0);
-    const stb::image out = std::move(c).finish();
+    const stb::image out = c.finish();
     ASSERT_EQ(300, out.width());
     ASSERT_EQ(255, px(out, 10, 10)[0]);                              // red
     ASSERT_EQ(0, px(out, 10, 10)[1]);
@@ -332,7 +332,7 @@ UTEST(libstb_font_tests, test_canvas_text_takes_the_defaults_when_it_is_added) {
     c.add_text("A", 0, 0);
     c.set_color("blue");                                             // later: must not touch the first text
     c.add_text("A", 100, 0);
-    const stb::image out = std::move(c).finish();
+    const stb::image out = c.finish();
     ASSERT_EQ(255, px(out, 10, 10)[0]);
     ASSERT_EQ(0, px(out, 10, 10)[2]);
     ASSERT_EQ(255, px(out, 110, 10)[2]);
@@ -344,17 +344,17 @@ UTEST(libstb_font_tests, test_canvas_matches_draw_text_and_needs_a_font) {
     {
         stb::canvas c(white);
         c.add_text("A", 0, 0);
-        ASSERT_THROWS(std::move(c).finish(), std::invalid_argument);   // no font anywhere
+        ASSERT_THROWS(c.finish(), std::invalid_argument);   // no font anywhere
     }
     stb::canvas c(white);
     c.set_font(load(), 100).add_text("A", 5, 7).color(stb::color(10, 20, 30, 200));
-    const stb::image got = std::move(c).finish();
+    const stb::image got = c.finish();
     const stb::image once = load().draw_text(white, "A", 100, 5, 7, stb::color(10, 20, 30, 200));
     ASSERT_TRUE(std::memcmp(got.data(), once.data(), std::size_t(once.stride()) * once.height()) == 0);
     // a text can bring its own font instead of the canvas default
     stb::canvas d(white);
     d.add_text("A", 5, 7).font(load(), 100).color(stb::color(10, 20, 30, 200));
-    const stb::image own = std::move(d).finish();
+    const stb::image own = d.finish();
     ASSERT_TRUE(std::memcmp(own.data(), once.data(), std::size_t(once.stride()) * once.height()) == 0);
 }
 
@@ -364,14 +364,14 @@ UTEST(libstb_font_tests, test_canvas_set_size_and_order) {
     c.set_font(load(), 100);
     c.add_text("A", 0, 0).size(40);
     const stb::image at_40 = load().draw_text(white, "A", 40, 0, 0);
-    stb::image out = std::move(c).finish();
+    stb::image out = c.finish();
     ASSERT_TRUE(std::memcmp(out.data(), at_40.data(), std::size_t(at_40.stride()) * at_40.height()) == 0);
     // drawn in the order added: the later text is on top (opaque white over opaque black)
     stb::canvas d(white);
     d.set_font(load(), 100);
     d.add_text("A", 0, 0).color(stb::color(0, 0, 0));
     d.add_text("A", 0, 0).color(stb::color(255, 255, 255));
-    const stb::image top = std::move(d).finish();
+    const stb::image top = d.finish();
     ASSERT_EQ(255, top(10, 10));
 }
 
@@ -431,7 +431,7 @@ UTEST(libstb_font_tests, test_canvas_align) {
     c.set_font(f, 100).set_align(stb::text_align::right);
     c.add_text("A", 300, 0);                                         // the canvas default
     c.add_text("A", 100, 0).align(stb::text_align::left);        // this text only
-    const stb::image out = std::move(c).finish();
+    const stb::image out = c.finish();
     const int right0 = 300 - int(std::lround(f.measure("A", 100).width)) + 10;
     ASSERT_EQ(0, out(right0, 10));
     ASSERT_EQ(0, out(110, 10));
@@ -445,7 +445,7 @@ UTEST(libstb_font_tests, test_canvas_background_box_and_padding) {
     stb::canvas c(filled(300, 300, 3, 255));
     c.set_font(f, 100);
     c.add_text("A", 50, 60).bg_color("red").padding(10).color(stb::color(0, 0, 255));
-    const stb::image out = std::move(c).finish();
+    const stb::image out = c.finish();
     // the box is the layout box grown by 10 on every side, in red; outside it the image is white
     ASSERT_EQ(255, px(out, 50 - 10, 60 - 10)[0]);
     ASSERT_EQ(0, px(out, 50 - 10, 60 - 10)[1]);
@@ -466,13 +466,13 @@ UTEST(libstb_font_tests, test_canvas_background_follows_align_and_clips) {
     c.set_font(f, 100);
     c.add_text("A", 300, 0).align(stb::text_align::right).bg_color(stb::color(0, 0, 0)).padding(5);
     c.add_text("A", 0, 0).bg_color(stb::color(0, 0, 0)).padding(1000).color(stb::color(0, 0, 0));  // clipped, no huge allocation
-    const stb::image out = std::move(c).finish();
+    const stb::image out = c.finish();
     ASSERT_EQ(0, out(0, 0));
     ASSERT_EQ(0, out(399, 199));
     stb::canvas d(filled(400, 200, 1, 255));
     d.set_font(f, 100);
     d.add_text("A", 300, 20).align(stb::text_align::right).bg_color(stb::color(0, 0, 0)).padding(5).color(stb::color(255, 255, 255));
-    const stb::image r = std::move(d).finish();
+    const stb::image r = d.finish();
     ASSERT_EQ(0, r(300 - w - 5, 20 - 5));
     ASSERT_EQ(255, r(300 - w - 6, 20 + 3));
     ASSERT_EQ(0, r(300 + 4, 20 + 3));
@@ -489,10 +489,29 @@ UTEST(libstb_font_tests, test_canvas_font_without_size_keeps_the_size_and_finish
     stb::canvas c2(white);
     c2.set_font(load(), 100).add_text("A", 5, 7);
     const stb::image once = load().draw_text(white, "A", 100, 5, 7);
-    stb::image a = std::move(c2).finish();
+    stb::image a = c2.finish();
     ASSERT_TRUE(std::memcmp(a.data(), once.data(), std::size_t(once.stride()) * once.height()) == 0);
     ASSERT_THROWS(c2.add_text("A", 0, 0), std::invalid_argument);
     ASSERT_THROWS(c2.set_color("red"), std::invalid_argument);
-    ASSERT_THROWS(std::move(c2).finish(), std::invalid_argument);
+    ASSERT_THROWS(c2.finish(), std::invalid_argument);
     ASSERT_TRUE(c2.finished());
+}
+
+// The same scene is built by test_canvas_matches_the_cpp_golden_hash in tests/python/test_font.py:
+// both must reach this value, so C++ and Python draw byte-identical pixels.
+UTEST(libstb_font_tests, test_canvas_matches_the_python_golden_hash) {
+    const stb::font f = load();
+    stb::canvas c(filled(200, 120, 3, 128));
+    c.set_font(f, 40).set_color("white");
+    c.add_text("AA", 10, 5);
+    c.add_text("A\nAAA", 100, 5).align(stb::text_align::center).color("#ffcc00").bg_color("#222").padding(6);
+    c.add_text("AA", 190, 70).align(stb::text_align::right).color({255, 255, 255, 120}).bg_color({0, 0, 0, 90}).padding(4).size(24);
+    c.add_text("A", 5, 80).font(f).size(30).color("red");
+    const stb::image out = c.finish();
+    std::uint64_t h = 0xCBF29CE484222325ull;
+    for (int row = 0; row < out.height(); ++row) {
+        const std::uint8_t* p = out.data() + std::size_t(row) * out.stride();
+        for (int i = 0; i < out.width() * out.channels(); ++i) h = (h ^ p[i]) * 0x100000001B3ull;
+    }
+    ASSERT_TRUE(h == 0xd7f088b011c4d0ddull);
 }

@@ -13,17 +13,17 @@
       نام‌های snake_case (`color`, `color_blend`, `invalid_color_error`, `r()`, `set_r()`,
       `from_string`, ...). بلوک engine-facing و ثابت‌های `Color::Black/White/Transparent` حذف شدن.
       توی Python رنگ می‌تونه رشته (`"red"`, `"#ff8800"`)، عدد یا tuple باشه. ۲۰ تست از novasvg پورت شد.
-- [x] **`canvas` (C++) و `Canvas` (Python)**: چند متن روی یک کپی از تصویر (`Image.canvas()`).
+- [x] **`canvas` (C++) و `Canvas` (Python)**: چند متن روی یک کپی از تصویر.
       `image::composite_in_place` و `font::draw_text_in_place` اضافه شدن؛ `composite()` و
       `draw_text()` الان کپی + نسخه‌ی درجا هستن.
-      API: `c.add_text(متن, x, y)` (C++) و `c.text(متن, x, y)` (Python) یه شیء متن برمی‌گردونن
+      API (C++ و Python دقیقاً یکی، `Canvas(img)`): `c.add_text(متن, x, y)` یه شیء متن برمی‌گردونه
       (`canvas::text_item`، `CanvasText`) با `.font() .size() .color() .align() .bg_color() .padding()`.
       روی خود canvas `set_font`/`set_size`/`set_color`/`set_align` پیش‌فرضِ متن‌های بعدیه (موقع
       `add_text` کپی می‌شه). کشیدن lazy هست: همه‌ی متن‌ها توی `finish()` به ترتیب اضافه‌شدن کشیده
       می‌شن، پس خطای «بدون فونت» هم همون‌جا میاد. بعد از `finish()` canvas و متن‌هاش
       `invalid_argument` (`ValueError`) می‌دن ولی dangling نمی‌شن. `draw_text` فوریِ canvas و
-      `result()` حذف شدن. `Canvas`/`CanvasText` و `Image.canvas`/`Image.draw_text` توی Python با nanobind بایند شدن (`bind_font.cpp`)،
-      نه کد Python.
+      `result()` حذف شدن. هر متن دوباره از `c` شروع می‌شه (به هم پایپ نمی‌شن). `finish()` توی هر دو `c.finish()` هست. `Canvas`/`CanvasText` و `Image.draw_text` توی Python با nanobind بایند شدن (`bind_font.cpp`)،
+      نه کد Python. خروجی C++ و Python بایت به بایت یکیه: دو تست (`test_canvas_matches_*_golden_hash`) همون صحنه رو می‌سازن و باید به یک FNV-1a برسن.
       پس‌زمینه: جعبه‌ی layout متن + padding، به اندازه‌ی تصویر clip می‌شه (padding بزرگ حافظه‌ی
       زیاد نمی‌گیره). آلفای رنگ رعایت می‌شه.
 - [x] **`text_align` (left, center, right)** برای `draw_text` و `canvas` (`align=` توی Python). با center/right،

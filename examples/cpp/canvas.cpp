@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
             .size(24);
 
         // Everything is drawn here, in the order added.
-        stb::image out = std::move(c).finish();
+        stb::image out = c.finish();
         out.write_png(argv[3]);
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << '\n';

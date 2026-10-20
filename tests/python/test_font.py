@@ -253,27 +253,41 @@ def test_draw_text_color_strings(font):
         black.draw_text("A", font, 100, color="not-a-colour")
 
 
+def _canvas(img, font=None, size=0, color=None):
+    c = stb.Canvas(img)
+    if font is not None:
+        c.set_font(font, size)
+    if color is not None:
+        c.set_color(color)
+    return c
+
+
 def test_canvas_draws_many_texts_on_one_copy(font):
     white = stb.Image(np.full((100, 300, 3), 255, np.uint8))
-    c = white.canvas(font, 100, color="red")
-    c.text("A", 0, 0).text("A", 100, 0).color((0, 0, 255)).text("A", 200, 0)
+    c = _canvas(white, font, 100, "red")
+    c.add_text("A", 0, 0)
+    c.add_text("A", 100, 0).color((0, 0, 255))
+    c.add_text("A", 200, 0)
     out = c.finish().numpy()
     assert out[10, 10].tolist() == [255, 0, 0]
     assert out[10, 110].tolist() == [0, 0, 255]      # the override applied to that text only
     assert out[10, 210].tolist() == [255, 0, 0]
     assert (white.numpy() == 255).all()              # the input is untouched
     one = white.draw_text("A", font, 100, 5, 7, color="red").numpy()
-    assert (white.canvas().font(font, 100).color("red").text("A", 5, 7).finish().numpy() == one).all()
-    own = white.canvas().text("A", 5, 7).font(font, 100).color("red").finish().numpy()
-    assert (own == one).all()                        # a text can bring its own font
+    c = _canvas(white, font, 100, "red")
+    c.add_text("A", 5, 7)
+    assert (c.finish().numpy() == one).all()
+    c = stb.Canvas(white)
+    c.add_text("A", 5, 7).font(font, 100).color("red")
+    assert (c.finish().numpy() == one).all()         # a text can bring its own font
 
 
 def test_canvas_text_takes_the_defaults_when_it_is_added(font):
     white = stb.Image(np.full((100, 200, 3), 255, np.uint8))
-    c = white.canvas(font, 100, color="red")
-    c.text("A", 0, 0)
-    c.color("blue")                                  # later: must not touch the first text
-    c.text("A", 100, 0)
+    c = _canvas(white, font, 100, "red")
+    c.add_text("A", 0, 0)
+    c.set_color("blue")                              # later: must not touch the first text
+    c.add_text("A", 100, 0)
     out = c.finish().numpy()
     assert out[10, 10].tolist() == [255, 0, 0]
     assert out[10, 110].tolist() == [0, 0, 255]
@@ -281,30 +295,35 @@ def test_canvas_text_takes_the_defaults_when_it_is_added(font):
 
 def test_canvas_size_and_order(font):
     white = stb.Image(np.full((200, 200, 3), 255, np.uint8))
-    small = white.draw_text("A", font, 40, 0, 0).numpy()
-    assert (white.canvas(font, 100).text("A", 0, 0).size(40).finish().numpy() == small).all()
-    top = (white.canvas(font, 100).text("A", 0, 0).color((0, 0, 0))
-                .text("A", 0, 0).color((255, 255, 255)).finish().numpy())
-    assert top[10, 10].tolist() == [255, 255, 255]   # the later text is on top
+    at_40 = white.draw_text("A", font, 40, 0, 0).numpy()
+    c = _canvas(white, font, 100)
+    c.add_text("A", 0, 0).size(40)
+    assert (c.finish().numpy() == at_40).all()
+    c = _canvas(white, font, 100)
+    c.add_text("A", 0, 0).color((0, 0, 0))
+    c.add_text("A", 0, 0).color((255, 255, 255))
+    assert c.finish().numpy()[10, 10].tolist() == [255, 255, 255]   # the later text is on top
 
 
 def test_canvas_errors(font):
     img = stb.Image(np.zeros((10, 10, 3), np.uint8))
-    c = img.canvas()
-    c.text("A")                                      # nothing is checked yet
+    c = stb.Canvas(img)
+    c.add_text("A")                                  # nothing is checked yet
     with pytest.raises(ValueError):
         c.finish()                                   # no font anywhere
     with pytest.raises(ValueError):
-        img.canvas(font, 100).text("A").align("middle")
+        _canvas(img, font, 100).add_text("A").align("middle")
     with pytest.raises(ValueError):
-        img.canvas(font, 100).text("A").color("not-a-colour")
+        _canvas(img, font, 100).add_text("A").color("not-a-colour")
     with pytest.raises(ValueError):
-        img.canvas(font, 100).text("A").padding(-1)
-    c = img.canvas(font, 100)
-    t = c.text("A")
+        _canvas(img, font, 100).add_text("A").padding(-1)
+    c = _canvas(img, font, 100)
+    t = c.add_text("A")
     c.finish()
     with pytest.raises(ValueError):
-        c.text("A")                                  # finished
+        c.add_text("A")                              # finished
+    with pytest.raises(ValueError):
+        c.set_color("red")
     with pytest.raises(ValueError):
         t.color("red")                               # its canvas was finished
     with pytest.raises(ValueError):
@@ -315,8 +334,9 @@ def test_canvas_background_and_padding(font):
     white = stb.Image(np.full((300, 300, 3), 255, np.uint8))
     s = font.measure("A", 100)
     w, h = round(s.width), round(s.height)
-    out = (white.canvas(font, 100).text("A", 50, 60).bg_color("red").padding(10).color((0, 0, 255))
-                .finish().numpy())
+    c = _canvas(white, font, 100)
+    c.add_text("A", 50, 60).bg_color("red").padding(10).color((0, 0, 255))
+    out = c.finish().numpy()
     assert out[60 - 10, 50 - 10].tolist() == [255, 0, 0]            # box = layout box + 10 on every side
     assert out[60 + h + 9, 50 + w + 9].tolist() == [255, 0, 0]
     assert out[60 + 5, 50 - 11].tolist() == [255, 255, 255]
@@ -324,25 +344,50 @@ def test_canvas_background_and_padding(font):
     assert out[60 - 11, 50 + 5].tolist() == [255, 255, 255]
     assert out[60 + h + 10, 50 + 5].tolist() == [255, 255, 255]
     assert out[70, 60].tolist() == [0, 0, 255]                      # the text is drawn over it
-    huge = white.canvas(font, 100).text("A", 0, 0).bg_color("black").padding(100000).finish().numpy()
-    assert (huge == 0).all()                                        # clipped to the image: no giant layer
+    c = _canvas(white, font, 100)
+    c.add_text("A", 0, 0).bg_color("black").padding(100000)
+    assert (c.finish().numpy() == 0).all()                          # clipped to the image: no giant layer
 
 
 def test_canvas_background_follows_align(font):
     white = stb.Image(np.full((200, 400, 3), 255, np.uint8))
     w = round(font.measure("A", 100).width)
-    out = (white.canvas(font, 100).text("A", 300, 20).align("right").bg_color((0, 0, 0)).padding(5)
-                .color((255, 255, 255)).finish().numpy())
+    c = _canvas(white, font, 100)
+    c.add_text("A", 300, 20).align("right").bg_color((0, 0, 0)).padding(5).color((255, 255, 255))
+    out = c.finish().numpy()
     assert out[20 - 5, 300 - w - 5, 0] == 0 and out[23, 300 - w - 6, 0] == 255
     assert out[23, 300 + 4, 0] == 0 and out[23, 300 + 5, 0] == 255
 
 
-def test_canvas_chain_returns_the_same_text_and_keeps_the_canvas_alive(font):
-    t = stb.Image(np.zeros((50, 50, 3), np.uint8)).canvas(font, 20).text("A")   # the canvas is not named
+def test_canvas_setters_return_the_same_object_and_keep_the_canvas_alive(font):
+    t = stb.Canvas(stb.Image(np.zeros((50, 50, 3), np.uint8))).set_font(font, 20).add_text("A")   # canvas not named
     import gc
     gc.collect()
     assert t.color("red") is t and t.size(10) is t and t.padding(1) is t
-    assert t.finish().width == 50
+    c = stb.Canvas(stb.Image(np.zeros((50, 50, 3), np.uint8)))
+    assert c.set_font(font, 20) is c and c.set_color("red") is c and c.set_align("left") is c and c.set_size(9) is c
+
+
+# The same scene is built by test_canvas_matches_the_cpp_golden_hash in tests/cpp/test_font.cpp:
+# both must reach this value, so C++ and Python draw byte-identical pixels.
+GOLDEN_CANVAS_FNV1A64 = 0xd7f088b011c4d0dd
+
+
+def _fnv1a64(data: bytes) -> int:
+    h = 0xCBF29CE484222325
+    for b in data:
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def test_canvas_matches_the_cpp_golden_hash(font):
+    c = stb.Canvas(stb.Image(np.full((120, 200, 3), 128, np.uint8)))
+    c.set_font(font, 40).set_color("white")
+    c.add_text("AA", 10, 5)
+    c.add_text("A\nAAA", 100, 5).align("center").color("#ffcc00").bg_color("#222").padding(6)
+    c.add_text("AA", 190, 70).align("right").color((255, 255, 255, 120)).bg_color((0, 0, 0, 90)).padding(4).size(24)
+    c.add_text("A", 5, 80).font(font).size(30).color("red")
+    assert _fnv1a64(c.finish().numpy().tobytes()) == GOLDEN_CANVAS_FNV1A64
 
 
 def _black_columns(img):
@@ -367,9 +412,14 @@ def test_draw_text_align_multiline_and_canvas(font):
     first = np.flatnonzero((out[row1, :, 0] == 0))[0]
     second = np.flatnonzero((out[row2, :, 0] == 0))[0]
     assert second < first                              # the longer line starts further left
-    via_canvas = white.canvas(font, 100, align="center").text("A\nAAA", 200, 0).finish().numpy()
-    assert (via_canvas == out).all()
-    over = white.canvas(font, 100, align="right").text("A", 300, 0).align("left").finish()
+    c = _canvas(white, font, 100)
+    c.set_align("center")
+    c.add_text("A\nAAA", 200, 0)
+    assert (c.finish().numpy() == out).all()
+    c = _canvas(white, font, 100)
+    c.set_align("right")
+    c.add_text("A", 300, 0).align("left")
+    over = c.finish()
     assert _black_columns(over)[0] == 300 + 10          # the text's own align won
 
 
@@ -383,21 +433,14 @@ def test_draw_text_align_errors(font):
 def test_canvas_and_draw_text_arguments(font):
     img = stb.Image(np.zeros((40, 40, 3), np.uint8))
     with pytest.raises(TypeError):
-        img.canvas(font, 20, "red")                  # colour is keyword-only
+        img.draw_text("A", font, 20, 0, 0, "red")    # colour is keyword-only
     with pytest.raises(TypeError):
-        img.draw_text("A", font, 20, 0, 0, "red")    # so is draw_text's
-    with pytest.raises(TypeError):
-        img.canvas("not a font", 20).text("A").finish()
+        _canvas(img).set_font("not a font", 20)
     with pytest.raises(ValueError):
-        img.canvas(font, 20, align="middle")
+        stb.Canvas(img).set_align("middle")
     # the Python Font and the native one it wraps are both accepted
     a = img.draw_text("A", font, 20, color="red").numpy()
     b = img.draw_text("A", font._f, 20, color="red").numpy()
-    c = img.canvas(font._f, 20, color="red").text("A").finish().numpy()
-    assert (a == b).all() and (a == c).all()
-
-
-def test_canvas_text_chain_continues_the_canvas(font):
-    img = stb.Image(np.full((60, 200, 3), 255, np.uint8))
-    out = (img.canvas(font, 30).text("A", 0, 0).size(20).text("A", 100, 0).color("red").finish().numpy())
-    assert out[:, :60].min() == 0 and out[:, 100:160, 0].min() == 255 and out[:, 100:160, 1].min() == 0
+    c = _canvas(img, font._f, 20, "red")
+    c.add_text("A")
+    assert (a == b).all() and (a == c.finish().numpy()).all()

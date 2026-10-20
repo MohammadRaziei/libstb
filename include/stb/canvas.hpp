@@ -18,22 +18,23 @@ namespace stb {
 
 // Several texts on ONE copy of an image. font::draw_text copies the image on every call; a
 // canvas copies it once, collects the texts you add, and draws them all in finish(). The
-// image you pass in is never modified.
+// image you pass in is never modified. The Python class libstb.Canvas has exactly the same
+// methods, and draws through this class, so both give identical pixels.
 //
 //   stb::canvas c(photo);
-//   c.set_font(f, 48).set_color("white");                          // defaults
+//   c.set_font(f, 48).set_color("white");                          // defaults for the next texts
 //
 //   c.add_text("Title", 20, 20);                                   // uses the defaults
 //   c.add_text("Sub", mid, 90).align(stb::text_align::center).color("#ffcc00")
 //       .font(other).bg_color("red").padding(10);                  // this text only
 //   c.add_text("small", 20, 200).size(24);
 //
-//   stb::image out = std::move(c).finish();                        // drawn here, in order
+//   stb::image out = c.finish();                                   // drawn here, in order
 //
 // add_text returns the new text, so its own font, size, colour, alignment and background can
-// be set. A text takes the canvas defaults as they are when it is added: changing a default
-// later does not touch texts that already exist. Texts are drawn in the order they were
-// added, so a later one lands on top of an earlier one.
+// be set; every text starts again from `c`. A text takes the canvas defaults as they are when
+// it is added: changing a default later does not touch texts that already exist. Texts are
+// drawn in the order they were added, so a later one lands on top of an earlier one.
 //
 // Nothing is drawn (and nothing is checked) before finish(). It throws invalid_argument if a
 // text has no font, plus whatever font::draw_text_in_place throws (bad size, empty text). If
@@ -93,9 +94,6 @@ public:
             padding_ = pixels;
             return *this;
         }
-        // The canvas this text belongs to (to continue a chain: t.owner().add_text(...)).
-        canvas& owner() const { return *owner_; }
-
     private:
         friend class canvas;
         text_item(canvas* owner, std::string utf8, int x, int y, std::optional<stb::font> f, float px,
@@ -158,7 +156,7 @@ public:
     bool finished() const { return finished_; }
 
     // Draws every text in order onto the copy and hands the image over (no further copy).
-    image finish() && {
+    image finish() {
         check();
         for (std::size_t i = 0; i < items_.size(); ++i) {
             if (!items_[i].font_) {
