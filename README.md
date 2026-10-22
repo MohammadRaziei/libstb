@@ -35,6 +35,7 @@ font = stb.Font.open("font.ttf")                  # trusted fonts only
 labeled = img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))   # text onto a copy
 centred = img.draw_text("Hello", font, 32, img.width // 2, 10, align="center")  # x is the centre of the line
 font.render("Hello", 32).bitmap.write("hello.png")
+# Persian / Arabic text works as typed: the font's GSUB shapes and ligates it, the line is reordered (no GPOS, see docs/guide.md)
 stb.estimate_text("Hello", 16)                    # text size with no font file at all
 
 packed = stb.zlib_compress(data)                  # zlib streams: the compressor that writes PNG

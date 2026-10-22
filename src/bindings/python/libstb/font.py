@@ -126,6 +126,14 @@ class Font:
         bitmap, xo, yo, adv = self._f.render_glyph(char, pixel_height)
         return Glyph(bitmap, xo, yo, adv)
 
+    def shape_glyphs(self, text: str) -> list[int]:
+        """Glyph indices of the font that `text` is drawn with, in visual order ('\\n' is 0).
+
+        This is the result of shaping: joined letter shapes, ligatures, mirrored brackets and the
+        right-to-left order. A letter's marks follow it. For diagnostics and tests.
+        """
+        return self._f.shape_glyphs(text)
+
     def measure(self, text: str, pixel_height: float) -> TextSize:
         return TextSize(*self._f.measure(text, pixel_height))
 

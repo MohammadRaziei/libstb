@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
@@ -19,6 +20,8 @@
 #endif
 
 #include "file.hpp"
+#include "stb/shaping.hpp"
+#include "text_shaper.hpp"
 #include "stb/utf8.hpp"
 
 // STATIC: internal linkage for every stbtt_* / stbrp_* function (see image.cpp).
@@ -87,6 +90,18 @@ struct font::impl {
     int index = 0;
 
     float scale(float pixel_height) const { return stbtt_ScaleForPixelHeight(&info, pixel_height); }
+
+    // The font's GSUB data for Arabic script, parsed the first time right-to-left text is shaped.
+    const arabic_layout& arabic() const {
+        std::call_once(arabic_once_, [this] {
+            arabic_ = arabic_layout::build(otl::byte_view(data.ptr, data.len), std::uint32_t(info.fontstart));
+        });
+        return arabic_;
+    }
+
+private:
+    mutable std::once_flag arabic_once_;
+    mutable arabic_layout arabic_;
 };
 
 namespace {
@@ -109,7 +124,7 @@ struct bitmap_free {
 // One pass over the text: where every glyph's pen and baseline are.
 struct layout {
     struct item {
-        char32_t cp;
+        int gid;         // glyph index in the font
         float x;         // pen position
         float baseline;
     };
@@ -119,33 +134,73 @@ struct layout {
     int lines = 1;
 };
 
-layout do_layout(const font::impl& f, const std::u32string& text, float px) {
+// The shaper's view of a font.
+class font_glyphs final : public glyph_source {
+public:
+    explicit font_glyphs(const font::impl& f) : f_(f) {}
+    std::uint32_t glyph(char32_t cp) const override {
+        return cp > 0x10FFFF ? 0 : std::uint32_t(stbtt_FindGlyphIndex(&f_.info, int(cp)));
+    }
+    const arabic_layout* arabic() const override { return &f_.arabic(); }
+
+private:
+    const font::impl& f_;
+};
+
+layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
+    // Glyphs in visual order: right-to-left lines (Persian, Arabic, ...) are joined, substituted
+    // with the font's GSUB features and reordered; other text is one glyph per character.
+    const std::vector<shaped_glyph> glyphs = text_shaper(font_glyphs(f)).shape(logical);
     const float s = f.scale(px);
     int asc = 0, desc = 0, gap = 0;
     stbtt_GetFontVMetrics(&f.info, &asc, &desc, &gap);
     const float ascent = asc * s;
     const float line_h = (asc - desc + gap) * s;
 
+    // Marks (harakat) are placed without a GPOS table: centred on the ink of the letter before them
+    // and stacked above or below its ink box. `base` is that letter.
+    struct ink_box { bool valid = false; float cx = 0, top = 0, bottom = 0; } base;
+    const float mark_gap = 0.05f * px;
+
     layout L;
     float x = 0;
     int line = 0;
-    char32_t prev = 0;
+    int prev = 0;
     bool has_prev = false;
-    for (char32_t cp : text) {
-        if (cp == U'\n') {
+    for (const shaped_glyph& sg : glyphs) {
+        if (sg.cp == U'\n' && sg.gid == 0) {
             L.width = std::max(L.width, x);
             x = 0;
             ++line;
             has_prev = false;
+            base.valid = false;
             continue;
         }
-        if (cp == U'\r') continue;
-        if (has_prev) x += stbtt_GetCodepointKernAdvance(&f.info, int(prev), int(cp)) * s;
+        if (sg.cp == U'\r') continue;
+        const int gid = int(sg.gid);
+        const float baseline = ascent + line * line_h;
+        int bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
+        stbtt_GetGlyphBitmapBox(&f.info, gid, s, s, &bx0, &by0, &bx1, &by1);
+        const bool has_ink = bx1 > bx0 && by1 > by0;
+        if (base.valid && has_ink && is_arabic_mark(sg.cp)) {
+            float dy;
+            if (is_arabic_mark_below(sg.cp)) {
+                dy = (base.bottom + mark_gap) - float(by0);
+                base.bottom = float(by1) + dy;
+            } else {
+                dy = (base.top - mark_gap) - float(by1);
+                base.top = float(by0) + dy;
+            }
+            L.items.push_back({gid, base.cx - 0.5f * float(bx0 + bx1), baseline + dy});
+            continue;  // a mark takes no room and does not break kerning
+        }
+        if (has_prev) x += stbtt_GetGlyphKernAdvance(&f.info, prev, gid) * s;
         int adv = 0, lsb = 0;
-        stbtt_GetCodepointHMetrics(&f.info, int(cp), &adv, &lsb);
-        L.items.push_back({cp, x, ascent + line * line_h});
+        stbtt_GetGlyphHMetrics(&f.info, gid, &adv, &lsb);
+        L.items.push_back({gid, x, baseline});
+        base = has_ink ? ink_box{true, x + 0.5f * float(bx0 + bx1), float(by0), float(by1)} : ink_box{};
         x += adv * s;
-        prev = cp;
+        prev = gid;
         has_prev = true;
     }
     L.width = std::max(L.width, x);
@@ -232,24 +287,37 @@ float font::kerning(char32_t left, char32_t right, float px) const {
     return stbtt_GetCodepointKernAdvance(&impl_->info, check_cp(left), check_cp(right)) * impl_->scale(px);
 }
 
-glyph font::render_glyph(char32_t cp, float px) const {
-    check_px(px);
-    const int c = check_cp(cp);
-    const float s = impl_->scale(px);
+namespace {
 
+// Rasterises one glyph of the font by glyph index.
+glyph render_glyph_index(const font::impl& f, int gid, float px) {
+    const float s = f.scale(px);
     int w = 0, h = 0, xo = 0, yo = 0;
-    std::unique_ptr<unsigned char, bitmap_free> bmp(
-        stbtt_GetCodepointBitmap(&impl_->info, s, s, c, &w, &h, &xo, &yo));
+    std::unique_ptr<unsigned char, bitmap_free> bmp(stbtt_GetGlyphBitmap(&f.info, s, s, gid, &w, &h, &xo, &yo));
 
     glyph g;
     g.x_offset = xo;
     g.y_offset = yo;
     int adv = 0, lsb = 0;
-    stbtt_GetCodepointHMetrics(&impl_->info, c, &adv, &lsb);
+    stbtt_GetGlyphHMetrics(&f.info, gid, &adv, &lsb);
     g.advance = adv * s;
     if (bmp && w > 0 && h > 0)
         g.bitmap = image(w, h, 1, std::vector<std::uint8_t>(bmp.get(), bmp.get() + std::size_t(w) * std::size_t(h)));
     return g;
+}
+
+}  // namespace
+
+glyph font::render_glyph(char32_t cp, float px) const {
+    check_px(px);
+    return render_glyph_index(*impl_, stbtt_FindGlyphIndex(&impl_->info, check_cp(cp)), px);
+}
+
+std::vector<std::uint32_t> font::shape_glyphs(std::string_view utf8) const {
+    std::vector<std::uint32_t> out;
+    for (const shaped_glyph& g : text_shaper(font_glyphs(*impl_)).shape(utf8_decode(utf8)))
+        if (!(g.cp == U'\r' && g.gid == 0)) out.push_back(g.gid);
+    return out;
 }
 
 text_size font::measure(std::string_view utf8, float px) const {
@@ -263,9 +331,9 @@ text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes)
     const layout L = do_layout(*impl_, utf8_decode(utf8), px);
 
     // Rasterise each distinct character once.
-    std::unordered_map<char32_t, glyph> cache;
+    std::unordered_map<int, glyph> cache;
     for (const auto& it : L.items)
-        if (!cache.count(it.cp)) cache.emplace(it.cp, render_glyph(it.cp, px));
+        if (!cache.count(it.gid)) cache.emplace(it.gid, render_glyph_index(*impl_, it.gid, px));
 
     // Canvas = layout box plus any overhanging ink.
     long long minx = 0, miny = 0;
@@ -277,7 +345,7 @@ text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes)
     };
     std::vector<placed> placements;
     for (const auto& it : L.items) {
-        const glyph& g = cache.at(it.cp);
+        const glyph& g = cache.at(it.gid);
         if (g.bitmap.empty()) continue;
         const long long gx = std::llround(it.x) + g.x_offset;
         const long long gy = std::llround(it.baseline) + g.y_offset;

@@ -651,3 +651,188 @@ UTEST(libstb_shape_tests, test_canvas_shapes_match_the_python_golden_hash) {
     }
     ASSERT_TRUE(h == 0x49444ac71d1c9d17ull);
 }
+
+// ---- right-to-left text: shape_for_display (no font needed: every form is assumed present) ----
+
+static std::u32string shaped(const std::u32string& s) { return stb::shape_for_display(s); }
+
+UTEST(libstb_shaping_tests, test_left_to_right_text_is_returned_unchanged) {
+    ASSERT_TRUE(shaped(U"Hello, world 123") == U"Hello, world 123");
+    ASSERT_TRUE(shaped(U"line one\nline two\n") == U"line one\nline two\n");
+    ASSERT_TRUE(shaped(U"") == U"");
+    ASSERT_FALSE(stb::has_rtl(U"Hello"));
+    ASSERT_TRUE(stb::has_rtl(U"a \u0633"));
+}
+
+UTEST(libstb_shaping_tests, test_letters_take_their_joined_forms_and_the_line_is_reversed) {
+    // seen lam alef meem: seen initial, lam-alef final ligature joined to it, then meem isolated.
+    // Logical order seen, lam, alef, meem. Shaped: seen(initial) lam-alef(final) meem(isolated).
+    // Displayed right to left, so the visual string is reversed: meem, lam-alef, seen.
+    ASSERT_TRUE(shaped(U"\u0633\u0644\u0627\u0645") == U"\uFEE1\uFEFC\uFEB3");
+    // a lone letter is isolated
+    ASSERT_TRUE(shaped(U"\u0633") == U"\uFEB1");
+    // dual joining letter between two others is medial: ba ba ba -> initial, medial, final
+    ASSERT_TRUE(shaped(U"\u0628\u0628\u0628") == U"\uFE90\uFE92\uFE91");
+    // a right-joining letter (alef) does not join the letter after it: ba alef ba -> ba(initial) alef(final) ba(isolated) in logical order, reversed for display
+    ASSERT_TRUE(shaped(U"\u0628\u0627\u0628") == U"\uFE8F\uFE8E\uFE91");
+}
+
+UTEST(libstb_shaping_tests, test_persian_letters_and_the_non_joiner) {
+    // peh (U+067E) has its own forms: initial FB58, final FB57
+    ASSERT_TRUE(shaped(U"\u067E\u067E") == U"\uFB57\uFB58");
+    // a zero width non-joiner stops the joining and is not drawn: ba ZWNJ ba -> two isolated letters
+    // (nothing joins across the ZWNJ and neither ba has a joining neighbour on its other side).
+    ASSERT_TRUE(shaped(U"\u0628\u200C\u0628") == U"\uFE8F\uFE8F");
+    // a zero width joiner forces the join
+    ASSERT_TRUE(shaped(U"\u0628\u200D") == U"\uFE91");
+    ASSERT_TRUE(shaped(U"\u0628\u200D").find(U'\u200D') == std::u32string::npos);
+}
+
+UTEST(libstb_shaping_tests, test_marks_stay_after_their_letter_and_do_not_break_joining) {
+    // ba, fatha, ba: the fatha is transparent, so the two letters still join; marks follow their letter
+    // after reordering. Shaped logical: ba(initial) fatha ba(final); visual (reversed clusters): ba(final) ba(initial) fatha.
+    const std::u32string v = shaped(U"\u0628\u064E\u0628");
+    ASSERT_EQ(3u, v.size());
+    ASSERT_TRUE(v[0] == U'\uFE90' && v[1] == U'\uFE91' && v[2] == U'\u064E');
+}
+
+UTEST(libstb_shaping_tests, test_bidirectional_order_of_mixed_text) {
+    // Arabic paragraph: "ab" stays in order inside it, whole line is mirrored around it.
+    // logical: seen space a b space seen   -> visual: seen(iso) space a b space seen(iso)  (seen,space,ab,space,seen palindromic)
+    ASSERT_TRUE(shaped(U"\u0633 ab \u0633") == U"\uFEB1 ab \uFEB1");
+    // logical: alef ba then Latin "xy": RTL paragraph, Latin run goes to the left of the Arabic word.
+    // alef joins only to its right, so ba after it is isolated (FE8F) and alef is isolated (FE8D).
+    ASSERT_TRUE(shaped(U"\u0627\u0628 xy") == U"xy \uFE8F\uFE8D");
+    // Latin paragraph with an Arabic word inside: the word is reversed in place
+    ASSERT_TRUE(shaped(U"go \u0627\u0628 go") == U"go \uFE8F\uFE8D go");
+    // digits keep their order inside right-to-left text
+    ASSERT_TRUE(shaped(U"\u0627 123 \u0627") == U"\uFE8D 123 \uFE8D");
+    ASSERT_TRUE(shaped(U"\u0627\u06F1\u06F2\u06F3") == U"\u06F1\u06F2\u06F3\uFE8D");
+    // brackets are mirrored in right-to-left text
+    ASSERT_TRUE(shaped(U"(\u0627)") == U"(\uFE8D)");
+}
+
+UTEST(libstb_shaping_tests, test_lines_are_independent_and_trailing_space_stays_put) {
+    ASSERT_TRUE(shaped(U"\u0633\n\u0633") == U"\uFEB1\n\uFEB1");
+    ASSERT_TRUE(shaped(U"abc\n\u0627\u0628") == U"abc\n\uFE8F\uFE8D");
+    // trailing whitespace stays at the end of the line, which is the visual left in a right-to-left paragraph
+    const std::u32string t = shaped(U"\u0627\u0628 ");
+    ASSERT_TRUE(t == U" \uFE8F\uFE8D");
+    ASSERT_TRUE(shaped(U"a\r\n\u0627") == U"a\r\n\uFE8D");  // CR only matters in lines that are shaped
+}
+
+UTEST(libstb_shaping_tests, test_a_missing_form_falls_back_to_the_plain_letter) {
+    auto only_plain = [](char32_t cp) { return cp < 0xFB00; };  // a font with no presentation forms
+    ASSERT_TRUE(stb::shape_for_display(U"\u0633\u0644\u0627\u0645", only_plain) == U"\u0645\u0627\u0644\u0633");
+    auto no_ligature = [](char32_t cp) { return cp != 0xFEFB && cp != 0xFEFC; };
+    // without the lam-alef glyph the letters are shaped one by one: lam initial, alef final
+    ASSERT_TRUE(stb::shape_for_display(U"\u0644\u0627", no_ligature) == U"\uFE8E\uFEDF");
+}
+
+UTEST(libstb_shaping_tests, test_lam_alef_forms) {
+    ASSERT_TRUE(shaped(U"\u0644\u0627") == U"\uFEFB");                       // isolated ligature
+    ASSERT_TRUE(shaped(U"\u0628\u0644\u0627") == U"\uFEFC\uFE91");           // after a joining letter: final ligature
+    ASSERT_TRUE(shaped(U"\u0644\u0623") == U"\uFEF7");                       // lam + alef with hamza above
+}
+
+// ---- right-to-left text drawn with a real font (Vazirmatn subset, SIL OFL 1.1: tests/data/make_persian_font.py) ----
+
+// test_persian_canvas_matches_the_cpp_golden_hash in tests/python/test_font.py builds the same scene and must reach
+// the same value. Whether the shaped result is also right was checked by eye and against Pillow with raqm (the
+// ink of every line overlaps it as much as plain Latin text does), not by this hash: the hash only pins the pixels.
+UTEST(libstb_shaping_tests, test_persian_canvas_matches_the_cpp_golden_hash) {
+    const stb::font f = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-fa-test.ttf");
+    stb::canvas c(filled(320, 200, 3, 255));
+    c.set_font(f, 32).set_color("black");
+    c.add_text("\u0633\u0644\u0627\u0645 \u062F\u0646\u06CC\u0627", 10, 5);
+    c.add_text("\u0633\u0644\u0627\u0645 hello \u06F1\u06F2\u06F3", 10, 45);
+    c.add_text("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 (\u0644\u0627)", 310, 85).align(stb::text_align::right);
+    c.add_text("\u067E\u0698\u0648\u0647\u0634 \u06AF\u0686\n\u062E\u0637 \u062F\u0648\u0645", 160, 120)
+        .align(stb::text_align::center)
+        .color("#224488");
+    const stb::image out = c.finish();
+    std::uint64_t h = 0xCBF29CE484222325ull;
+    for (int row = 0; row < out.height(); ++row) {
+        const std::uint8_t* p = out.data() + std::size_t(row) * out.stride();
+        for (int i = 0; i < out.width() * out.channels(); ++i) h = (h ^ p[i]) * 0x100000001B3ull;
+    }
+    ASSERT_TRUE(h == 0x6defa776040b3afcull);
+}
+
+// ---- marks (harakat) are placed over or under their letter without a GPOS table ----
+
+namespace {
+struct ink_rows {
+    int top, bottom;  // relative to the top of the line box, y grows downward
+};
+ink_rows ink_of(const stb::font& f, const char* utf8) {
+    const stb::text_bitmap r = f.render(utf8, 40.0f);
+    int top = 1 << 20, bottom = -(1 << 20);
+    for (int y = 0; y < r.bitmap.height(); ++y) {
+        const std::uint8_t* row = r.bitmap.data() + std::size_t(y) * r.bitmap.stride();
+        for (int x = 0; x < r.bitmap.width(); ++x)
+            if (row[x]) {
+                top = std::min(top, y - r.origin_y);
+                bottom = std::max(bottom, y - r.origin_y);
+                break;
+            }
+    }
+    return {top, bottom};
+}
+}  // namespace
+
+UTEST(libstb_shaping_tests, test_marks_take_no_room_and_sit_over_or_under_the_letter) {
+    const stb::font f = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-fa-test.ttf");
+    const char* ba = "\u0628";
+    const char* ba_fatha = "\u0628\u064E";
+    const char* ba_kasra = "\u0628\u0650";
+    const char* ba_shadda_fatha = "\u0628\u0651\u064E";
+    // a mark adds no width
+    ASSERT_TRUE(f.measure(ba_fatha, 40.0f).width == f.measure(ba, 40.0f).width);
+    ASSERT_TRUE(f.measure(ba_shadda_fatha, 40.0f).width == f.measure(ba, 40.0f).width);
+    const ink_rows plain = ink_of(f, ba);
+    // fatha is above the letter, kasra below it, and the letter itself does not move
+    const ink_rows above = ink_of(f, ba_fatha);
+    ASSERT_TRUE(above.top < plain.top);
+    ASSERT_TRUE(above.bottom == plain.bottom);
+    const ink_rows below = ink_of(f, ba_kasra);
+    ASSERT_TRUE(below.bottom > plain.bottom);
+    ASSERT_TRUE(below.top == plain.top);
+    // shadda and fatha stack: higher than the fatha alone, in either typing order
+    const ink_rows stacked = ink_of(f, ba_shadda_fatha);
+    ASSERT_TRUE(stacked.top < above.top);
+    ASSERT_TRUE(ink_of(f, "\u0628\u064E\u0651").top == stacked.top);
+}
+
+// ---- font-driven shaping (GSUB), checked against HarfBuzz ----
+
+// The glyph ids below are what HarfBuzz (uharfbuzz 0.x, script Arab, direction rtl, kern/mark/mkmk/curs
+// off) returns for the same strings with tests/data/libstb-fa-gsub-test.ttf; tests/python/test_font.py
+// compares against HarfBuzz itself on thousands of random strings when it is installed. This font has no
+// presentation forms in its cmap, so every letter shape here comes from the font's GSUB table.
+UTEST(libstb_shaping_tests, test_gsub_font_shapes_like_harfbuzz) {
+    const stb::font f = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-fa-gsub-test.ttf");
+    using G = std::vector<std::uint32_t>;
+    ASSERT_TRUE(f.shape_glyphs("\u0633\u0644\u0627\u0645") == (G{138, 362, 295}));  // init, lam-alef (rlig), isolated
+    ASSERT_TRUE(f.shape_glyphs("\u0627\u0644\u0644\u0647") == (G{240}));            // the one Allah glyph (liga)
+    ASSERT_TRUE(f.shape_glyphs("\u0644\u0627") == (G{361}));
+    ASSERT_TRUE(f.shape_glyphs("\u0628\u0633\u0645 \u0627\u0644\u0644\u0647") == (G{240, 98, 330, 296, 264}));
+    ASSERT_TRUE(f.shape_glyphs("\u067E\u0698\u0648\u0647\u0634 \u06AF\u0686") == (G{215, 223, 98, 297, 339, 141, 218, 206}));
+    ASSERT_TRUE(f.shape_glyphs("\u0628") == (G{114}));
+    ASSERT_TRUE(f.shape_glyphs("\u0626") == (G{112}));
+    // text without right-to-left letters is one glyph per character, a new line is a 0
+    ASSERT_TRUE(f.shape_glyphs("a\nb").size() == 3);
+    ASSERT_TRUE(f.shape_glyphs("a\nb")[1] == 0);
+}
+
+UTEST(libstb_shaping_tests, test_gsub_font_and_presentation_form_font_make_the_same_choices) {
+    // The same text gives the same number of glyphs with the GSUB font and with the presentation-form
+    // font: both join the letters and form the lam-alef ligature (their outlines and advances differ a
+    // little, so the widths are not compared).
+    const stb::font g = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-fa-gsub-test.ttf");
+    const stb::font p = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-fa-test.ttf");
+    for (const char* text : {"\u0633\u0644\u0627\u0645 \u062F\u0646\u06CC\u0627", "\u067E\u0698\u0648\u0647\u0634 \u06AF\u0686",
+                             "\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645", "\u0644\u0627 \u0644\u0644\u0647"}) {
+        ASSERT_TRUE(g.shape_glyphs(text).size() == p.shape_glyphs(text).size());
+    }
+}

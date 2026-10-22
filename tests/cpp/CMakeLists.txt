@@ -13,6 +13,9 @@ libstb_apply_core_build_settings(test_stb_cpp)
 # Tests use the public API only: the vendored stb headers are on the include path just because
 # the core sources are compiled in here, and no test includes them.
 target_include_directories(test_stb_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include ${LIBSTB_TEST_SOURCE_DIR})
+# One exception to "public API only": test_gsub.cpp tests the GSUB engine itself with hand-made
+# tables, so it includes the internal headers of src/core.
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/test_gsub.cpp PROPERTIES INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/src/core)
 # Synthetic font with solid-rectangle glyphs (tests/data/make_test_font.py).
 target_compile_definitions(test_stb_cpp PRIVATE
     LIBSTB_TEST_DATA_DIR="${LIBSTB_TEST_SOURCE_DIR}/data")

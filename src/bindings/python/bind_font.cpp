@@ -129,6 +129,8 @@ void bind_font(nb::module_& m) {
                  return std::make_tuple(bitmap, g.x_offset, g.y_offset, g.advance);
              },
              "char"_a, "pixel_height"_a)
+        .def("shape_glyphs",
+             [](const font& f, const std::string& text) { return f.shape_glyphs(text); }, "text"_a)
         .def("measure",
              [](const font& f, const std::string& text, float px) {
                  const auto s = f.measure(text, px);

@@ -47,6 +47,17 @@ operation returns a new image. Runtime failures derive from `stb::error`
 (`decode_error`, `encode_error`, `limit_error`, `io_error`); programmer errors
 throw `std::invalid_argument`.
 
+## Right-to-left text
+
+`stb::font` (`draw_text`, `measure`, `render`) and `stb::canvas` shape and reorder Persian, Arabic, Urdu and
+Hebrew text: pass it in typing order. Letter shapes, lam-alef and other ligatures (`ccmp`, `isol/init/medi/fina`,
+`rlig`, `calt`, `liga`) come from the font's GSUB table (lookup types 1 to 7); a font without GSUB but with the
+Arabic Presentation Forms in its cmap is shaped through those. ZWNJ and ZWJ are honoured and each line is
+ordered with UAX #9. There is no GPOS: kerning is the `kern` table only, and marks (harakat) are placed by a
+rule (centred on the letter, stacked above or below its ink). `font::shape_glyphs` returns the glyph ids
+that were chosen. The code-point-level steps are public in `<stb/shaping.hpp>` (`stb::shape_for_display`,
+`stb::has_rtl`).
+
 ## SIMD backends
 
 The pixel kernels pick a backend at run time (`stb::simd_name()`,

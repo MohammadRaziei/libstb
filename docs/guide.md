@@ -33,7 +33,7 @@ stb.Resizer("cubic")                                # same name works on Resizer
 stb.Resizer(stb.Resizer.Filter.MITCHELL, stb.Resizer.Edge.WRAP, srgb=False)
 img.resize(320, 240, stb.Resizer("linear", srgb=False))  # name + other options
 
-font = stb.Font.open("font.ttf")                    # trusted fonts only, see below
+font = stb.Font.open("font.ttf")                    # trusted fonts only, see below (right-to-left text is shaped for you)
 text = font.render("Hello\nworld", 32)              # RenderedText(bitmap: Image (1 channel), origin_x, origin_y)
 text.bitmap.write("hello.png")
 # several texts and shapes on one copy of the image (draw_text copies it every call, a canvas once); each item can override the defaults:
@@ -200,6 +200,36 @@ An unknown name raises `ValueError` listing the valid ones. There is no
 author writes "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT
 FILES". Load your own or vetted system fonts, never user uploads. (Images are
 different: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
+
+**Right-to-left text (Persian, Arabic, Urdu, Hebrew).** `draw_text`, `measure`, `render` and the
+canvas shape and reorder it for you: pass the text in the order you type it, no pre-processing with
+`arabic-reshaper` or `python-bidi`. The line is ordered with the Unicode bidirectional algorithm
+(UAX #9: the paragraph direction is that of the first strong letter, Latin words and numbers inside
+Persian text keep their order, brackets are mirrored), ZWNJ and ZWJ are honoured, each `\n` line is
+shaped on its own, and text with no right-to-left letter is drawn exactly as before.
+
+Letter shapes come from the font. If it has a GSUB table for Arabic script (every modern Persian
+and Arabic font does), libstb runs it the way an OpenType shaper does: the `isol`, `init`, `medi`,
+`fina` shapes, `ccmp`, `rlig` (lam-alef), `calt` and `liga` (so "الله" is the one glyph the font
+draws for it). Lookup types 1 to 7 are read (single, multiple, alternate, ligature, context,
+chaining context, extension), with lookup flags and GDEF. A font without GSUB but with the Arabic
+Presentation Forms in its `cmap` is shaped through those, and a form the font lacks falls back to the
+plain letter. On Vazirmatn, Noto Naskh Arabic and Noto Sans Arabic the glyphs are identical to
+HarfBuzz's on 18,000 random strings (`Font.shape_glyphs` returns them, for diagnostics). Speed is
+about 0.2 microseconds per character, and the GSUB table is parsed the first time right-to-left text
+is drawn with a font (about 0.1 ms), not when the font is opened.
+
+What is not done: GPOS. Kerning comes from the `kern` table only, and marks (harakat) are placed by a
+simple rule rather than the font's anchors: centred on the ink of their letter and stacked above it
+(below for kasra and similar signs, shadda first), with no room of their own. That looks like the
+real thing on ordinary vowelled text but not pixel for pixel, and text set in a font that depends on
+GPOS for its shapes (some Nastaliq fonts) will look wrong. GSUB lookups of type 8 (reverse chaining)
+are skipped, only the default language system of the script is used (no `locl` per language), and
+`font.advance` and `font.kerning` work on one code point and do no shaping. Not checked: Hebrew,
+Urdu-specific letters, text with explicit bidi controls (embeddings and isolates are ignored). A font
+is untrusted input: damaged GSUB data cannot read outside the file, and the work and the growth of
+the glyph run are limited in proportion to the text (50,000 damaged fonts were shaped under
+AddressSanitizer without a crash).
 
 Errors mirror the C++ hierarchy: `stb.Error` (a `RuntimeError`) with
 `DecodeError`, `EncodeError`, `LimitError` below it, so a single

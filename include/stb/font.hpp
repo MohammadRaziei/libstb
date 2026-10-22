@@ -110,6 +110,11 @@ public:
 
     // Throws invalid_argument on malformed UTF-8.
     text_size measure(std::string_view utf8, float pixel_height) const;
+
+    // The glyph indices of the font that `utf8` is drawn with, in visual order ('\n' is 0 and
+    // starts a new line). This is what shaping decides: joined letter shapes, ligatures, mirrored
+    // brackets and the right-to-left order. For diagnostics and tests; marks follow their letter.
+    std::vector<std::uint32_t> shape_glyphs(std::string_view utf8) const;
     // Single 1-channel coverage image of the whole text. Throws
     // invalid_argument (malformed UTF-8, or empty text), limit_error
     // (result would exceed max_bytes).

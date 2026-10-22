@@ -35,6 +35,48 @@
       پیکسل اندازه‌گیری شد)، بین محورها اندازه‌گیری نشده.
       دو golden hash (متن، و شکل+متن) بین تست C++ و Python مشترکن؛ ثابت‌هاشون روی ویندوز/macOS هنوز
       تأیید نشده (متن با stb_truetype و کامپایلرهای دیگه ممکنه آخرین بیت رو عوض کنه).
+- [x] **متن راست‌به‌چپ (فارسی/عربی/اردو/عبری)** توی `draw_text`/`measure`/`render` و `canvas`، بدون
+      وابستگی. پایپ‌لاین واحد در دامنه‌ی glyph-id: `src/core/text_shaper.*` (جوینینگ → glyph → GSUB → bidi
+      → آینه‌ای‌کردن)، روی چهار هسته‌ی مستقل: `arabic.*` (جدول‌های حروف، تولیدشده با
+      `tools/gen_arabic_shaping.py` از `unicodedata`، Unicode 15.0.0)، `bidi.*` (UAX #9 بدون
+      embedding/isolate)، `otl.*` (خواندن امن جدول‌ها: coverage، class def، GDEF) و `gsub.*` (lookupها
+      به‌صورت کلاس‌های polymorphic).
+      **GSUB:** نوع‌های ۱ تا ۷ (single، multiple، alternate، ligature، context و chaining context در هر سه
+      قالب، extension)، lookup flag (ignore marks/base/ligatures، mark attachment، mark filtering set) با
+      GDEF، stageها به ترتیب مدل عربی (`ccmp/locl` → `isol` → `fina` → `medi` → `init` → `rlig` → `calt`
+      → `liga/clig/rclt`) با mask هر شکل. فونتِ بدون GSUB ولی با Presentation Forms در `cmap` از همان
+      مسیر قدیمی کار می‌کنه. `API`ی `shape_for_display` رشته‌ایه و با یک منبع هویتی روی همین هسته اجرا می‌شه.
+      پارس GSUB تنبل و یک‌بار (حدود ۰٫۱ms) در اولین متن RTL هر فونت؛ باز کردن فونت کندتر نشد.
+      **راستی‌آزمایی:** glyph idها با HarfBuzz (uharfbuzz) روی ۳۰۰۰×۲ رشته‌ی تصادفی برای هر کدوم از
+      Vazirmatn و Noto Naskh Arabic و Noto Sans Arabic یکی‌ان (۰ تفاوت؛ اعراب به‌صورت مجموعه چون ترتیب
+      ما «بعد از حرف» ه). همین مقایسه چند باگ واقعی گرفت که تست‌های واحد نگرفته بودن: همزه (U+0621) حرف
+      غیرچسبنده‌ست نه راست‌چسب، شکل منفرد باید glyph اسمی بمونه نه Presentation Form، glyphِ بی‌کلاس GDEF
+      علامت حساب نمی‌شه، و آفست coverage در context قالب ۳ (که فیلتر سرعت رو خراب کرده بود).
+      **سرعت:** حدود ۲۲۰ns برای هر نویسه (۴۳۸ نویسه = ۹۷µs)، حدود ۲٫۴ برابر سریع‌تر از Pillow+raqm.
+      فیلتر bitmap برای هر lookup (glyphهایی که می‌تونه از اون‌ها شروع کنه) سرعت رو ۲٫۸ برابر کرد.
+      **امنیت:** فونت ورودیِ نامطمئنه. همه‌ی خواندن‌ها range-check هستن، سقف رشد glyph (۱۶ برابر متن + ۶۴) و
+      بودجه‌ی عملیات (بر حسب glyph × lookup) داریم. fuzz با AddressSanitizer+UBSan روی ۵۰٬۰۰۰ فونت
+      خراب، بدون crash؛ این fuzz یک فونت پیدا کرد که ۵۰ نویسه رو به ۳۰۰٬۰۰۰ glyph می‌رسوند (قبل از سقف‌ها).
+      تست‌ها: `tests/cpp/test_gsub.cpp` (۱۳ تست با جدول‌های دست‌ساز، هر نوع lookup و قالب، بعلاوه‌ی جهش
+      ۸۰۰ فونت خراب)، golden مرجع HarfBuzz در C++ و Python، و مقایسه‌ی زنده با HarfBuzz در Python (اگر
+      `uharfbuzz` نصب باشه). دو فونت subset از Vazirmatn (OFL): `libstb-fa-test.ttf` (بدون GSUB) و
+      `libstb-fa-gsub-test.ttf` (GSUB ولی بدون Presentation Forms)، ساخته‌شده با
+      `tests/data/make_persian_font.py`.
+      اعراب (harakat) با قاعده‌ی ساده جا می‌گیرن، نه با GPOS: وسط‌چین روی ink حرف قبلی، بالا یا پایینِ
+      bbox اون (کسره و هم‌خانواده‌هاش پایین)، شدّه اول، و بدون عرض. تست:
+      `test_marks_take_no_room_and_sit_over_or_under_the_letter`.
+      `Font.shape_glyphs` (C++: `font::shape_glyphs`) glyph idهای انتخاب‌شده رو برمی‌گردونه (تشخیص/تست).
+      **محدودیت‌ها (صادقانه):**
+      - GPOS نداریم: kerning فقط از جدول `kern`، و اعراب با قاعده‌ی ساده (نه نقطه‌ی anchor فونت). روی
+        متن اعرابی معمولی چشمی شبیه raqm ه ولی پیکسل‌به‌پیکسل نه. فونت‌هایی که شکلشون به GPOS وابسته‌ست
+        (بعضی نستعلیق‌ها) خراب دیده می‌شن. مثلاً عرض خط معمولی با raqm چند پیکسل فرق داره چون kerning
+        GPOS رو نداریم.
+      - lookup نوع ۸ (reverse chaining) خونده نمی‌شه؛ فقط langsys پیش‌فرض اسکریپت `arab` (یا `DFLT`)،
+        یعنی `locl` بر اساس زبان نیست؛ `fin2/fin3/med2` (سریانی) و `rtlm` نه.
+      - ZWNJ حذف می‌شه (HarfBuzz یک glyph با عرض صفر نگه می‌داره؛ تصویر یکیه).
+      - `font::advance`/`kerning`/`render_glyph` روی یک code point هستن و shaping ندارن.
+      - تست‌نشده: عبری و حروف مخصوص اردو، فونت‌های دیگه جز سه‌تای بالا، متن با کنترل‌های صریح bidi
+        (embedding/isolate نادیده گرفته می‌شن)، فونت OpenType-CFF (.otf)، و B Nazanin.
 - [x] **`text_align` (left, center, right)** برای `draw_text` و `canvas` (`align=` توی Python). با center/right،
       x مرکز یا لبه‌ی راستِ هر خط می‌شه. `measure` از قبل وجود داشت (`font::measure`, `Font.measure`).
 - [x] README (خط ۳) و توضیح PyPI (`pyproject.toml`) حالا zlib و نوشتن متن رو هم می‌گن.
@@ -42,7 +84,7 @@
       رنگ prompt (`>>>`) توی بلوک doctest دارک اسفینکس خوانا شد.
 - [x] README، `docs/guide.md`، `docs/cpp/mainpage.md`، `docs/python/source/font.rst` و
       `examples/python/05_font_render.py` آپدیت شدن.
-- [x] تست: ۱۸۰ تست C++ پاس. Python: ۱۱۷۶ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
+- [x] تست: ۲۲۱ تست C++ پاس. Python: ۱۱۹۴ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
 - [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
       اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
 
@@ -85,7 +127,8 @@
       اجرا بشه. بنچمارک روی دستگاه واقعی (داده‌ی فعلی از سندباکس ۱ هسته‌ای، ۲۰۲۶-۱۰-۱۵).
 - [ ] بنچمارک zlib توی `benchmarks/` (طبق اندازه‌گیری قبلی: compress سریع‌تر، inflate نه). بدون
       اندازه‌گیری توی صفحه ننویس.
-- [ ] نسخه‌ی بعدی (پیشنهاد: 0.8.0) و ورودی `CHANGELOG.md` برای `draw_text`، `color` و `canvas`.
+- [x] ورودی `CHANGELOG.md` برای 0.8.0 نوشته شد (`draw_text`، `color`، `canvas`، RTL/GSUB).
+- [ ] هنوز مونده: `LIBSTB_VERSION_MINOR` توی `include/stb.h` (الان 7)، تگ `v0.8.0` و انتشار. با `python version.py` انجام می‌شه.
 - [ ] اگه خواستی، اسم‌های داخلی `LIBSTB_*` یکدست بشن (فقط تغییر اسمه).
 
 ## دام‌ها

@@ -3,7 +3,66 @@
 All notable changes to libstb are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Dates are commit dates.
 
-This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.7.0`).
+This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.7.0`); 0.8.0 was written by hand from the 26 commits after `v0.7.0`.
+
+## [0.8.0] - 2026-10-22
+
+### Added
+- Drawing text (`4ab53e3`, `15ad30c`): `stb::font::draw_text` and `Image.draw_text` write multi-line
+  UTF-8 text onto a 1 to 4 channel image with alpha blending. `text_align` (`left`, `center`,
+  `right`) aligns every line to the x you give.
+- `stb::color` (`<stb/color.hpp>`, `ededbef`): colours from names, `#hex`, `{r, g, b[, a]}` and
+  string literals, and `color::from_value(0xRRGGBB)`. Used by `draw_text` and the canvas.
+- Canvas (`stb::canvas`, `Image.canvas`, `1fc491a`, `4201852`, `bcc2e39`): collect texts and
+  shapes, drawn together by `finish()`. `add_text` returns an item with its own `.font()`,
+  `.size()`, `.color()`, `.align()`, `.bg_color()` and `.padding()`. `add_rect` (with `.radius()`),
+  `add_ellipse` and `add_line` return a shape with `.fill()`, `.no_fill()` and `.stroke()`, with
+  smooth edges (`6243481`). The API is the same in C++ and Python, and golden-hash tests keep
+  their output byte-identical.
+- Right-to-left text (Persian, Arabic, Urdu, Hebrew) in `draw_text`, `measure`, `render` and the
+  canvas: pass the text as typed, with no `arabic-reshaper` or `python-bidi`. The line is
+  ordered with the Unicode bidirectional algorithm (UAX #9, without explicit embeddings and
+  isolates), ZWNJ and ZWJ are honoured and brackets are mirrored.
+  - Letter shapes and ligatures come from the font's GSUB table for Arabic script: `isol`,
+    `init`, `medi`, `fina`, `ccmp`, `rlig` (lam-alef), `calt` and `liga` (so "الله" is the one
+    glyph the font draws for it). Lookup types 1 to 7 are read (single, multiple, alternate,
+    ligature, context, chaining context in all three formats, extension), with lookup flags and
+    GDEF. A font without GSUB but with the Arabic Presentation Forms in its `cmap` is shaped
+    through those, and a form it lacks falls back to the plain letter (`cea22ba`, `79fce16`).
+  - Marks (harakat) sit over or under their letter by a simple rule, with no room of their own
+    (`7c301be`).
+  - Checked against HarfBuzz: identical glyph ids on 3,000 random strings, with and without
+    marks, on each of Vazirmatn, Noto Naskh Arabic and Noto Sans Arabic. About 0.2 microseconds
+    per character, 2.4 times faster than Pillow with raqm for the layout of a 438-character
+    paragraph. The GSUB table is parsed the first time right-to-left text is drawn with a font
+    (about 0.1 ms); opening a font is as fast as before.
+  - The font is untrusted input. Every read is range-checked, the growth of the glyph run and
+    the work of the lookups are limited in proportion to the text, and 50,000 damaged fonts
+    shaped under AddressSanitizer and UBSan without a crash.
+  - Not done: GPOS (kerning is the `kern` table only, marks are not placed by the font's
+    anchors, so fonts that depend on GPOS for their shapes, some Nastaliq fonts, look wrong),
+    GSUB lookup type 8, `locl` per language, and the Syriac features. Not checked: Hebrew,
+    Urdu-specific letters, OpenType-CFF (`.otf`) fonts and B Nazanin.
+- `stb::font::shape_glyphs` / `Font.shape_glyphs(text)`: the glyph indices shaping chose, in
+  visual order, for diagnostics and tests.
+- `<stb/shaping.hpp>`: `stb::shape_for_display`, `stb::has_rtl`, `stb::is_arabic_mark` and
+  `stb::is_arabic_mark_below`, the code-point level steps behind the above.
+- Tests: white-box tests of the GSUB engine with hand-made tables (every lookup type and
+  format, a stage mask, truncated and damaged tables), HarfBuzz reference glyph ids in C++ and
+  Python, a live HarfBuzz comparison in Python when `uharfbuzz` is installed (now in the `test`
+  extra), a Persian golden hash shared by C++ and Python, and two Vazirmatn subsets under the
+  SIL OFL 1.1 in `tests/data` (`make_persian_font.py` rebuilds them).
+
+### Changed
+- `Image.canvas` and `Image.draw_text` are nanobind methods, and a font argument of the wrong
+  type raises `TypeError` (`fc3aaff`, `402153d`).
+- `stb::color` converts implicitly from string literals and brace lists.
+- Benchmark report and docs: Chart.js and KaTeX load from cdnjs, brand colours, download buttons
+  for the benchmark data, and zero Doxygen and Sphinx warnings (`641561c`, `054ea1f`, `ee3af4f`).
+
+### Fixed
+- Windows: a test variable named `small` collided with an `rpcndr.h` macro, and the canvas box
+  arithmetic is 64-bit with parenthesized `min`/`max` (`3145a8a`).
 
 ## [0.7.0] - 2026-10-17
 

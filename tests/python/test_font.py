@@ -552,3 +552,101 @@ def test_canvas_shape_errors():
         c.add_rect(0, 0, 5, 5)
     with pytest.raises(ValueError):
         r.fill("red")
+
+
+# The same scene is built by test_persian_canvas_matches_the_cpp_golden_hash in tests/cpp/test_font.cpp.
+# The font is a subset of Vazirmatn (SIL OFL 1.1, tests/data/make_persian_font.py). The hash pins the
+# pixels; that the shaping is right was checked by eye and against Pillow with raqm.
+GOLDEN_PERSIAN_FNV1A64 = 0x6defa776040b3afc
+
+
+def test_persian_canvas_matches_the_cpp_golden_hash():
+    fa = Font.open(FONT_PATH.with_name("libstb-fa-test.ttf"))
+    c = stb.Canvas(stb.Image(np.full((200, 320, 3), 255, np.uint8)))
+    c.set_font(fa, 32).set_color("black")
+    c.add_text("\u0633\u0644\u0627\u0645 \u062f\u0646\u06cc\u0627", 10, 5)
+    c.add_text("\u0633\u0644\u0627\u0645 hello \u06f1\u06f2\u06f3", 10, 45)
+    c.add_text("\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 (\u0644\u0627)", 310, 85).align("right")
+    c.add_text("\u067e\u0698\u0648\u0647\u0634 \u06af\u0686\n\u062e\u0637 \u062f\u0648\u0645", 160, 120).align("center").color("#224488")
+    assert _fnv1a64(c.finish().numpy().tobytes()) == GOLDEN_PERSIAN_FNV1A64
+
+
+
+def _ink_rows(font, text, px=40):
+    r = font.render(text, px)
+    a = r.bitmap.numpy().reshape(r.bitmap.height, -1)
+    ys = np.where((a > 0).any(axis=1))[0]
+    return ys.min() - r.origin_y, ys.max() - r.origin_y
+
+
+def test_marks_take_no_room_and_sit_over_or_under_the_letter():
+    fa = Font.open(FONT_PATH.with_name("libstb-fa-test.ttf"))
+    ba = "\u0628"
+    assert fa.measure(ba + "\u064e", 40).width == fa.measure(ba, 40).width
+    plain = _ink_rows(fa, ba)
+    above = _ink_rows(fa, ba + "\u064e")
+    below = _ink_rows(fa, ba + "\u0650")
+    assert above[0] < plain[0] and above[1] == plain[1]
+    assert below[1] > plain[1] and below[0] == plain[0]
+    stacked = _ink_rows(fa, ba + "\u0651\u064e")
+    assert stacked[0] < above[0]
+    assert _ink_rows(fa, ba + "\u064e\u0651")[0] == stacked[0]  # shadda goes first in either typing order
+
+
+# ---- font-driven shaping (GSUB), checked against HarfBuzz ----
+
+GSUB_FONT = FONT_PATH.with_name("libstb-fa-gsub-test.ttf")
+
+
+def test_gsub_font_glyphs_match_the_harfbuzz_reference():
+    # Reference ids from HarfBuzz on the same file; this font has no presentation forms in its
+    # cmap, so every shape comes from its GSUB table (the same values as in tests/cpp/test_font.cpp).
+    fa = Font.open(GSUB_FONT)
+    assert fa.shape_glyphs("\u0633\u0644\u0627\u0645") == [138, 362, 295]
+    assert fa.shape_glyphs("\u0627\u0644\u0644\u0647") == [240]  # one Allah glyph
+    assert fa.shape_glyphs("\u0644\u0627") == [361]
+    assert fa.shape_glyphs("\u0628\u0633\u0645 \u0627\u0644\u0644\u0647") == [240, 98, 330, 296, 264]
+    assert fa.shape_glyphs("a\nb")[1] == 0
+
+
+def test_shape_glyphs_of_text_without_rtl_is_one_glyph_per_character():
+    f = Font.open(FONT_PATH.with_name("libstb-fa-test.ttf"))
+    assert len(f.shape_glyphs("abc")) == 3
+
+
+def _hb_font():
+    hb = pytest.importorskip("uharfbuzz")
+    return hb, hb.Font(hb.Face(hb.Blob.from_file_path(str(GSUB_FONT))))
+
+
+def test_random_text_shapes_like_harfbuzz():
+    import random
+
+    hb, hbfont = _hb_font()
+    fa = Font.open(GSUB_FONT)
+    letters = "\u0621\u0622\u0623\u0624\u0625\u0626\u0627\u0628\u0629\u062a\u062b\u062c\u062d\u062e\u062f\u0630\u0631\u0632\u0633\u0634\u0635\u0636\u0637\u0638\u0639\u063a\u0641\u0642\u0643\u0644\u0645\u0646\u0647\u0648\u0649\u064a\u067e\u0686\u0698\u06a9\u06af\u06cc"
+    marks = "\u064b\u064c\u064d\u064e\u064f\u0650\u0651\u0652\u0670"
+    rng = random.Random(7)
+
+    def reference(text):
+        buf = hb.Buffer()
+        buf.add_str(text)
+        buf.guess_segment_properties()
+        buf.direction, buf.script = "rtl", "Arab"
+        hb.shape(hbfont, buf, {"kern": False, "mark": False, "mkmk": False, "curs": False})
+        return [i.codepoint for i in buf.glyph_infos]
+
+    for with_marks in (False, True):
+        for _ in range(400):
+            text = ""
+            for _ in range(rng.randint(1, 9)):
+                text += " " if rng.random() < 0.12 else rng.choice(letters)
+                if with_marks and rng.random() < 0.3:
+                    text += rng.choice(marks)
+            text = text.strip()
+            if not text:
+                continue
+            ours, theirs = fa.shape_glyphs(text), reference(text)
+            # HarfBuzz puts a mark before its letter in visual order, libstb after it: with marks
+            # compare the glyphs as a multiset, without them the order too.
+            assert (sorted(ours) == sorted(theirs)) if with_marks else (ours == theirs), text
