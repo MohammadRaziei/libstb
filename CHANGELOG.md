@@ -63,6 +63,9 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ### Fixed
 - Windows: a test variable named `small` collided with an `rpcndr.h` macro, and the canvas box
   arithmetic is 64-bit with parenthesized `min`/`max` (`3145a8a`).
+- Windows (MSVC): the C++ tests are built with `/utf-8`, so Persian and Arabic text written as
+  `"\u0633"` in a narrow string literal stays UTF-8 instead of becoming `?` in the ANSI code page,
+  and the shaping tests parenthesize `std::min`/`std::max` against the `windows.h` macros.
 
 ## [0.7.0] - 2026-10-17
 

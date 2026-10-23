@@ -16,6 +16,10 @@ target_include_directories(test_stb_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include ${
 # One exception to "public API only": test_gsub.cpp tests the GSUB engine itself with hand-made
 # tables, so it includes the internal headers of src/core.
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/test_gsub.cpp PROPERTIES INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/src/core)
+# The tests write Persian and Arabic text as "\u0633" in narrow string literals and expect UTF-8 bytes.
+# MSVC would convert them to the ANSI code page (1252: every such letter becomes '?'); /utf-8 makes it
+# keep UTF-8 (warning C4566 is this problem).
+target_compile_options(test_stb_cpp PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 # Synthetic font with solid-rectangle glyphs (tests/data/make_test_font.py).
 target_compile_definitions(test_stb_cpp PRIVATE
     LIBSTB_TEST_DATA_DIR="${LIBSTB_TEST_SOURCE_DIR}/data")

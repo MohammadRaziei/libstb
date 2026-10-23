@@ -772,8 +772,8 @@ ink_rows ink_of(const stb::font& f, const char* utf8) {
         const std::uint8_t* row = r.bitmap.data() + std::size_t(y) * r.bitmap.stride();
         for (int x = 0; x < r.bitmap.width(); ++x)
             if (row[x]) {
-                top = std::min(top, y - r.origin_y);
-                bottom = std::max(bottom, y - r.origin_y);
+                top = (std::min)(top, y - r.origin_y);  // parenthesized: windows.h defines min and max
+                bottom = (std::max)(bottom, y - r.origin_y);
                 break;
             }
     }
