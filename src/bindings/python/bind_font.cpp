@@ -336,7 +336,8 @@ void bind_font(nb::module_& m) {
                 nb::gil_scoped_release release;
                 return fo.draw_text(self, text, px, x, y, c, a);
             },
-            nb::is_method(), "text"_a, "font"_a, "pixel_height"_a, "x"_a = 0, "y"_a = 0, nb::kw_only(),
+            nb::name("draw_text"), nb::scope(nb::type<stb::image>()), nb::is_method(), "text"_a, "font"_a,
+            "pixel_height"_a, "x"_a = 0, "y"_a = 0, nb::kw_only(),
             "color"_a = 0, "align"_a = "left",
             "A copy of this Image with `text` drawn on it (multi-line, UTF-8).\n\n"
             "(x, y) is where the text's layout box starts (its top-left corner). With "

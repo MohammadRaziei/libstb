@@ -172,3 +172,27 @@ def test_open_rejects_things_that_are_neither_bytes_nor_paths():
         Image.open(12345)
     with pytest.raises(TypeError):
         Image.open(np.zeros((2, 2), np.uint8))
+
+
+def test_every_bound_member_has_a_qualname():
+    """Sphinx's napoleon calls obj.__qualname__.rpartition('.') on every class member, so a function
+    attached without nb::name/nb::scope (qualname None) crashes the docs build (Image.draw_text did)."""
+    import inspect
+
+    import libstb as stb
+    import libstb.libstb_py as native
+
+    missing = []
+    for mod in (stb, native):
+        for cname in dir(mod):
+            cls = getattr(mod, cname)
+            if not inspect.isclass(cls) or getattr(cls, "__module__", "").split(".")[0] != "libstb":
+                continue
+            for name in dir(cls):
+                try:
+                    member = getattr(cls, name)
+                except Exception:
+                    continue
+                if getattr(member, "__doc__", None) and hasattr(member, "__qualname__") and member.__qualname__ is None:
+                    missing.append(f"{cname}.{name}")
+    assert not missing, missing
