@@ -86,17 +86,17 @@ libstb uses these stb modules, vendored in `src/third_party/` (no submodules):
 | stb module | used for |
 | :--- | :--- |
 | `stb_image` | decoding (PNG, JPEG, BMP, TGA, GIF, ...) |
-| `stb_image_write` | encoding PNG, JPEG, BMP, TGA |
 | `stb_image_resize2` | resizing, all filters |
 | `stb_truetype` | font metrics, glyphs, text rendering, atlases |
 | `stb_rect_pack` | packing glyphs into an atlas |
 
 What we changed on top, for speed and for a safer, more convenient API:
 
-- **Faster encoders.** `stb_image_write.h` carries two local patches: a new PNG deflate (4-byte
-  hash chains, lazy matching, dynamic Huffman blocks: within about 1% of zlib level 6 in size at
-  roughly twice its speed) and a faster JPEG encoder (buffered bit writer, vectorisable DCT, SSE2 colour
-  conversion). The other stb headers are byte-for-byte upstream.
+- **Our own, faster encoders.** PNG, JPEG, BMP, TGA and the zlib compressor live in `src/codec/`
+  (derived from `stb_image_write`, which is no longer vendored): a PNG deflate with 4-byte hash
+  chains, lazy matching and dynamic Huffman blocks (within about 1% of zlib level 6 in size at
+  roughly twice its speed) and a faster JPEG encoder (buffered bit writer, vectorisable DCT, SSE2
+  colour conversion). The four vendored stb headers are byte-for-byte upstream.
 - **SIMD where it pays.** `convert`, `composite` and `flatten` have AVX2, baseline SIMD and
   scalar builds that give identical results; the best one is picked at run time.
 - **No hidden copies.** Decoded buffers are adopted, not copied; arrays and DLPack tensors are

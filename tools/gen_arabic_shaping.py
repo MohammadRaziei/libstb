@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Regenerates the Arabic joining tables in src/core/arabic.cpp.
+"""Regenerates the Arabic joining tables in src/font/shaper/arabic.cpp.
 
 Usage:  python tools/gen_arabic_shaping.py
 
 Reads Python's unicodedata (the Unicode Character Database: the <isolated>, <initial>,
 <medial> and <final> decompositions of the Arabic Presentation Forms blocks, and the nonspacing
 marks of the Arabic blocks) and rewrites the block between the BEGIN/END GENERATED markers.
-Only numbers are copied. The joining type of a letter follows from its forms (src/core/arabic.cpp):
+Only numbers are copied. The joining type of a letter follows from its forms (src/font/shaper/arabic.cpp):
 it joins on both sides if it has an initial or medial form, only to the previous letter if it has a
 final form and nothing else, and not at all if it has just an isolated form (hamza).
 """
@@ -14,7 +14,7 @@ import pathlib
 import unicodedata
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TARGET = ROOT / "src" / "core" / "arabic.cpp"
+TARGET = ROOT / "src" / "font" / "shaper" / "arabic.cpp"
 BEGIN = "// BEGIN GENERATED (tools/gen_arabic_shaping.py), do not edit by hand"
 END = "// END GENERATED"
 
@@ -58,21 +58,21 @@ def render():
     forms, lam_alef = collect()
     lines = [BEGIN, f"// Unicode {unicodedata.unidata_version}", ""]
     lines.append("// base letter -> isolated, final, initial, medial presentation form (0 = none)")
-    lines.append("const form_entry kForms[] = {")
+    lines.append("const form_entry joining_forms[] = {")
     for base in sorted(forms):
         iso, fin, ini, med = forms[base]
         lines.append(f"    {{0x{base:04X}, 0x{iso:04X}, 0x{fin:04X}, 0x{ini:04X}, 0x{med:04X}}},")
     lines.append("};")
     lines.append("")
     lines.append("// lam + this alef -> isolated, final ligature")
-    lines.append("const lam_alef_entry kLamAlef[] = {")
+    lines.append("const lam_alef_entry lam_alef_forms[] = {")
     for alef in sorted(lam_alef):
         iso, fin = lam_alef[alef]
         lines.append(f"    {{0x{alef:04X}, 0x{iso:04X}, 0x{fin:04X}}},")
     lines.append("};")
     lines.append("")
     lines.append("// nonspacing marks of the Arabic blocks: they do not take part in joining")
-    lines.append("const code_range kMarks[] = {")
+    lines.append("const code_range mark_ranges[] = {")
     for lo, hi in marks():
         lines.append(f"    {{0x{lo:04X}, 0x{hi:04X}}},")
     lines.append("};")

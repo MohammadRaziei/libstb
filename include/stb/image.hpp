@@ -1,8 +1,7 @@
 #pragma once
 
-// stb headers are never included here: they are compiled into src/core/*.cpp
-// only, with STB_*_STATIC, so no stbi_* symbol leaks out of stb_core (safe
-// to link next to your own copy of stb).
+// stb headers are never included here: they are compiled into src/ only, with STB_*_STATIC, so no
+// stbi_* symbol leaks out of stb_core (safe to link next to your own copy of stb).
 
 #include <array>
 #include <cstddef>
@@ -17,9 +16,6 @@
 #include "stb/error.hpp"
 
 namespace stb {
-
-class resizer;
-enum class resize_filter;  // opaque declaration; defined in resizer.hpp
 
 // Header-only facts about an encoded image (no pixel decoding).
 struct image_info {
@@ -87,6 +83,45 @@ public:
 private:
     std::size_t previous_;
 };
+
+// ---- resizing options (used by image::resize and the resizer class below)
+
+enum class resize_filter {
+    automatic,      // Catmull-Rom when enlarging, Mitchell when shrinking
+    box,
+    triangle,       // == bilinear when enlarging
+    cubic_bspline,  // smooth, slightly blurry
+    catmull_rom,    // sharp, interpolating
+    mitchell,       // good all-round compromise
+    point           // nearest neighbour
+};
+
+enum class resize_edge { clamp, reflect, wrap, zero };
+
+// Maps a scipy/PIL-style name to a filter. Case-insensitive; '-' and ' ' are
+// treated like '_'. Accepted names:
+//   "auto" "automatic" "default"        -> automatic
+//   "nearest" "point"                   -> point
+//   "linear" "bilinear" "triangle"      -> triangle
+//   "cubic" "bicubic" "catmull_rom"     -> catmull_rom   (PIL/OpenCV meaning of "cubic")
+//   "bspline" "cubic_bspline"           -> cubic_bspline (scipy's meaning of "cubic")
+//   "mitchell"                          -> mitchell
+//   "box" "area"                        -> box
+// Throws invalid_argument (listing the valid names) for anything else.
+resize_filter resize_filter_from_name(std::string_view name);
+
+struct resize_options {
+    resize_filter filter = resize_filter::automatic;
+    resize_edge edge = resize_edge::clamp;
+    // Treat 8-bit colour channels as sRGB and blend in linear light (correct
+    // for photos/UI; alpha is always linear). Turn off for data such as
+    // normal maps or masks, which are already linear.
+    bool srgb = true;
+    // Refuse to produce an output larger than this many bytes.
+    std::size_t max_bytes = std::size_t(1) << 29;  // 512 MiB
+};
+
+class resizer;  // defined after image, which only takes a pointer to one
 
 // Defaults of to_png / write_png and to_jpg / write_jpg.
 inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower
@@ -166,7 +201,7 @@ public:
     // settings. For other settings call write_* (or to_*) directly.
     void write(const std::filesystem::path& path) const;
 
-    // --- resizing (implemented in resizer.cpp; include stb/resizer.hpp to pass a resizer) ---
+    // --- resizing (src/image/resize.cpp) ---
     // A new image of the given size; this one is not modified. `r` == nullptr
     // means a default-constructed resizer. Throws invalid_argument (empty
     // image, width/height < 1), limit_error, error - see resizer::resize.
@@ -262,6 +297,30 @@ private:
     // Owner + pointer in one: the deleter (or aliased owner) is what frees, or
     // keeps alive, the memory. Null for an empty image.
     std::shared_ptr<std::uint8_t> data_;
+};
+
+// Resizes 8-bit images of 1..4 channels (2 = gray+alpha, 4 = RGBA; alpha is
+// weighted correctly, so transparent pixels do not bleed colour).
+// Immutable after construction, hence shareable between threads.
+class resizer {
+public:
+    resizer() = default;
+    explicit resizer(const resize_options& options);  // throws invalid_argument on a bad enum value
+    // Shortcuts for "default options, just this filter":
+    //   resizer(resize_filter::mitchell)   resizer("cubic")
+    // The name is parsed by resize_filter_from_name (invalid_argument if unknown).
+    explicit resizer(resize_filter filter);
+    explicit resizer(std::string_view filter_name);
+
+    const resize_options& options() const noexcept { return options_; }
+
+    // Throws invalid_argument (empty image, width/height < 1),
+    // limit_error (output larger than options().max_bytes or 2 GiB),
+    // error (allocation failure inside stb).
+    image resize(const image& src, int width, int height) const;
+
+private:
+    resize_options options_;
 };
 
 }  // namespace stb

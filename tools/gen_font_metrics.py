@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates the font-free text estimate tables in src/core/font.cpp.
+"""Regenerates the font-free text estimate tables in src/font/font.cpp.
 
 Usage:  python tools/gen_font_metrics.py [FONT_DIR]
 
@@ -14,7 +14,7 @@ import sys
 from fontTools.ttLib import TTFont
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TARGET = ROOT / "src" / "core" / "font.cpp"
+TARGET = ROOT / "src" / "font" / "font.cpp"
 BEGIN = "// BEGIN GENERATED (tools/gen_font_metrics.py), do not edit by hand"
 END = "// END GENERATED"
 
@@ -51,15 +51,15 @@ def main():
     out = [BEGIN,
            f"// All values are in 1/2048 em. Latin table: U+{LOW:04X}..U+{HIGH:04X}; extras: " +
            ", ".join(f"U+{c:04X}" for c in EXTRA) + ".",
-           "constexpr int kEstimateLow = 0x%X, kEstimateHigh = 0x%X;" % (LOW, HIGH),
-           "constexpr char32_t kEstimateExtraCp[%d] = {%s};" % (len(EXTRA), ", ".join("0x%X" % c for c in EXTRA)),
+           "constexpr int estimate_low = 0x%X, estimate_high = 0x%X;" % (LOW, HIGH),
+           "constexpr char32_t estimate_extra_cps[%d] = {%s};" % (len(EXTRA), ", ".join("0x%X" % c for c in EXTRA)),
            "struct estimate_family {",
-           "    std::uint16_t latin[kEstimateHigh - kEstimateLow + 1];",
+           "    std::uint16_t latin[estimate_high - estimate_low + 1];",
            "    std::uint16_t extra[%d];" % len(EXTRA),
            "    std::uint16_t fallback;  // any other narrow character",
            "    int ascent, descent, line_gap;",
            "};",
-           "const estimate_family kEstimate[3] = {"]
+           "const estimate_family estimate_families[3] = {"]
     for name, stem in FAMILIES:
         d = load(font_dir, stem)
         out += ["    {  // " + name + " (" + stem + ")", "    {", rows(d["table"]), "    },",

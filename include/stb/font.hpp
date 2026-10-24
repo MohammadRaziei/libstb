@@ -1,6 +1,6 @@
 #pragma once
 
-// stb_truetype / stb_rect_pack live in src/core/font.cpp only; `font` hides
+// stb_truetype / stb_rect_pack live in src/font/font.cpp only; `font` hides
 // them behind a pimpl, so no stbtt_* type appears in this header.
 //
 // !!! SECURITY: stb_truetype does no bounds checking of its own. Its author

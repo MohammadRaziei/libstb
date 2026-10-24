@@ -14,8 +14,8 @@ libstb_apply_core_build_settings(test_stb_cpp)
 # the core sources are compiled in here, and no test includes them.
 target_include_directories(test_stb_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include ${LIBSTB_TEST_SOURCE_DIR})
 # One exception to "public API only": test_gsub.cpp tests the GSUB engine itself with hand-made
-# tables, so it includes the internal headers of src/core.
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/test_gsub.cpp PROPERTIES INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/src/core)
+# tables, so it includes the internal headers under src/ ("font/shaper/gsub.hpp"); the include
+# path to src/ comes from libstb_apply_core_build_settings.
 # The tests write Persian and Arabic text as "\u0633" in narrow string literals and expect UTF-8 bytes.
 # MSVC would convert them to the ANSI code page (1252: every such letter becomes '?'); /utf-8 makes it
 # keep UTF-8 (warning C4566 is this problem).
@@ -71,7 +71,7 @@ if(LCOV_EXECUTABLE AND GENHTML_EXECUTABLE)
         COMMAND ${LCOV_EXECUTABLE}
                 --extract
                 ${LIBSTB_COVERAGE_CPP_BINARY_DIR}/coverage_temp.lcov
-                "*/src/core/*" "*/include/stb/*"
+                "*/src/util/*" "*/src/image/*" "*/src/codec/*" "*/src/zlib/*" "*/src/font/*" "*/src/draw/*" "*/include/stb/*"
                 --output-file ${LIBSTB_COVERAGE_CPP_BINARY_DIR}/coverage.lcov
         COMMAND ${CMAKE_COMMAND} -E remove ${LIBSTB_COVERAGE_CPP_BINARY_DIR}/coverage_temp.lcov
 

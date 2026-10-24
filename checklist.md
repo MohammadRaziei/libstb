@@ -29,14 +29,14 @@
       شکل‌ها: `add_rect(x,y,w,h)` (با `.radius()`)، `add_ellipse(x,y,w,h)`، `add_line(x1,y1,x2,y2)`
       با `.fill() .no_fill() .stroke(عرض[, رنگ])`. پیش‌فرض: رنگ canvas (پر برای rect/ellipse، خط با
       عرض ۱). لبه‌ها صافن (anti-aliased، SDF)، حاشیه داخل جعبه کشیده می‌شه و خط از مرکز پیکسل‌های
-      دو سرش می‌گذره (عرض فرد crisp می‌مونه، عرض زوج بین دو ردیف می‌افته). کد توی `src/core/shape.cpp`
+      دو سرش می‌گذره (عرض فرد crisp می‌مونه، عرض زوج بین دو ردیف می‌افته). کد توی `src/draw/shape.cpp`
       با `-ffp-contract=off` کامپایل می‌شه که روی ARM هم همون بیت‌ها دربیاد.
       بیضی با تخمین مرتبه‌ی اول فاصله کشیده می‌شه: روی محورها ضخامت حاشیه دقیقه (اختلاف تا ۰.۰۴
       پیکسل اندازه‌گیری شد)، بین محورها اندازه‌گیری نشده.
       دو golden hash (متن، و شکل+متن) بین تست C++ و Python مشترکن؛ ثابت‌هاشون روی ویندوز/macOS هنوز
       تأیید نشده (متن با stb_truetype و کامپایلرهای دیگه ممکنه آخرین بیت رو عوض کنه).
 - [x] **متن راست‌به‌چپ (فارسی/عربی/اردو/عبری)** توی `draw_text`/`measure`/`render` و `canvas`، بدون
-      وابستگی. پایپ‌لاین واحد در دامنه‌ی glyph-id: `src/core/text_shaper.*` (جوینینگ → glyph → GSUB → bidi
+      وابستگی. پایپ‌لاین واحد در دامنه‌ی glyph-id: `src/font/shaper/text_shaper.*` (جوینینگ → glyph → GSUB → bidi
       → آینه‌ای‌کردن)، روی چهار هسته‌ی مستقل: `arabic.*` (جدول‌های حروف، تولیدشده با
       `tools/gen_arabic_shaping.py` از `unicodedata`، Unicode 15.0.0)، `bidi.*` (UAX #9 بدون
       embedding/isolate)، `otl.*` (خواندن امن جدول‌ها: coverage، class def، GDEF) و `gsub.*` (lookupها

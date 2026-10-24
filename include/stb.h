@@ -14,16 +14,13 @@
 #define LIBSTB_VERSION_PATCH 0
 
 #ifdef __cplusplus
-#include "stb/env.hpp"
 #include "stb/error.hpp"
-#include "stb/utf8.hpp"
+#include "stb/util.hpp"
 #include "stb/color.hpp"
 #include "stb/image.hpp"
-#include "stb/resizer.hpp"
 #include "stb/font.hpp"
 #include "stb/shaping.hpp"
-#include "stb/shape.hpp"
-#include "stb/canvas.hpp"
+#include "stb/draw.hpp"
 #include "stb/zlib.hpp"
 #endif
 

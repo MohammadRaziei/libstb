@@ -172,7 +172,7 @@ is 8 in stb, 6 in Pillow, 1 in OpenCV):
 - TGA: uncompressed everywhere (libstb with `rle=False`).
 
 Matching the *setting* does not match the *output*. libstb's PNG deflate
-(patched in `stb_image_write.h`) lands within about 1% of zlib's size, but
+(libstb's own, `src/codec/deflate.cpp`) lands within about 1% of zlib's size, but
 its JPEG encoder is faster than upstream stb but still about half the speed of libjpeg-turbo, and its grayscale JPEGs carry three
 components. So each encode operation also records the output size in
 bytes, and the report shows E[size / Pillow's size] next to the speed:

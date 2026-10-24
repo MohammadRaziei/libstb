@@ -2,8 +2,7 @@
 file is EXACT (assert_array_equal). The lossy ones (JPEG, resize) are in
 test_lossy_tolerance.py and use measured tolerances instead.
 
-The PNG cases are picked to push stbi_zlib_compress (the patched deflate in
-stb_image_write.h) through every path: stored blocks (noise), fixed and dynamic Huffman
+The PNG cases are picked to push libstb's deflate (src/codec/deflate.cpp) through every path: stored blocks (noise), fixed and dynamic Huffman
 blocks (small and structured images), long runs (flat), and many 64K-token blocks (the big
 images). A decoder other than libstb's own (Pillow / zlib) must accept every stream too.
 """

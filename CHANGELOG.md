@@ -5,6 +5,31 @@ All notable changes to libstb are listed here, newest first. The format follows
 
 This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.7.0`); 0.8.0 was written by hand from the 26 commits after `v0.7.0`.
 
+## [Unreleased]
+
+### Changed
+- Source layout: `src/core/` is gone. One folder per module: `src/util`, `src/image`, `src/codec`,
+  `src/zlib`, `src/font` (with `shaper/`), `src/draw`. Internal headers are included relative to
+  `src/` (`"image/simd.hpp"`).
+- Public headers merged by cohesion: `stb/resizer.hpp` is part of `stb/image.hpp` (which removes the
+  opaque forward declaration between the two), `stb/shape.hpp` and `stb/canvas.hpp` became
+  `stb/draw.hpp`, `stb/env.hpp` and `stb/utf8.hpp` became `stb/util.hpp`. `stb.h` still includes
+  everything.
+- The encoders and the zlib compressor are libstb's own code in `src/codec/` (`png.cpp`,
+  `jpeg.cpp`, `bmp_tga.cpp`, `deflate.cpp`), written as classes with no global state (the old
+  mutex around `stb_image_write`'s globals is gone). `stb_image_write.h` is no longer vendored: the
+  four remaining stb headers are byte-for-byte upstream. Output bytes are unchanged (PNG at every
+  level, JPEG, BMP, TGA, zlib), and the JPEG encoder still writes the same bytes as upstream
+  `stb_image_write` v1.16 built with the same compiler. BMP and TGA encoding is faster.
+- `bidi::resolve` is a class with one method per UAX #9 rule, `text_shaper::shape_line` and
+  `gsub_table::make_plan` are split into steps, the three `thumbnail` overloads and the two
+  `Resizer` constructors share their code, constants are snake_case.
+
+### Added
+- Round-trip tests (`tests/python/test_roundtrip.py`, `tests/cpp/test_codec.cpp`) and two
+  development checks that are not tests: `tests/tools/snapshot.py` (byte-for-byte comparison of
+  two builds) and an updated `tests/tools/jpeg_vs_upstream.py` / `zlib_fuzz.py`.
+
 ## [0.8.0] - 2026-10-22
 
 ### Added

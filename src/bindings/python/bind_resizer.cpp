@@ -31,29 +31,25 @@ void bind_resizer(nb::module_& m) {
         .value("WRAP", resize_edge::wrap)
         .value("ZERO", resize_edge::zero);
 
+    // Both constructors build the same options; only the way the filter is given differs.
+    auto construct = [](resizer* self, resize_filter filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
+        stb::resize_options o;
+        o.filter = filter;
+        o.edge = edge;
+        o.srgb = srgb;
+        o.max_bytes = max_bytes;
+        new (self) resizer(o);
+    };
+
     cls.def(
-           "__init__",
-           [](resizer* self, resize_filter filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
-               stb::resize_options o;
-               o.filter = filter;
-               o.edge = edge;
-               o.srgb = srgb;
-               o.max_bytes = max_bytes;
-               new (self) resizer(o);
-           },
-           "filter"_a = resize_filter::automatic, "edge"_a = resize_edge::clamp, "srgb"_a = true,
-           "max_bytes"_a = stb::resize_options{}.max_bytes)
+           "__init__", construct, "filter"_a = resize_filter::automatic, "edge"_a = resize_edge::clamp,
+           "srgb"_a = true, "max_bytes"_a = stb::resize_options{}.max_bytes)
         // Resizer("cubic", ...): the filter by name (see resize_filter_from_name).
         // An unknown name raises ValueError listing the valid ones.
         .def(
             "__init__",
-            [](resizer* self, const std::string& filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
-                stb::resize_options o;
-                o.filter = stb::resize_filter_from_name(filter);
-                o.edge = edge;
-                o.srgb = srgb;
-                o.max_bytes = max_bytes;
-                new (self) resizer(o);
+            [construct](resizer* self, const std::string& filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
+                construct(self, stb::resize_filter_from_name(filter), edge, srgb, max_bytes);
             },
             "filter"_a, "edge"_a = resize_edge::clamp, "srgb"_a = true,
             "max_bytes"_a = stb::resize_options{}.max_bytes)

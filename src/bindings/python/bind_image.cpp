@@ -282,7 +282,7 @@ void bind_image(nb::module_& m) {
 
     m.attr("DEFAULT_MAX_BYTES") = stb::load_options{}.max_bytes;
 
-    // ponytail: plain tuple; the Python package wraps it in ImageInfo.
+    // plain tuple; the Python package wraps it in ImageInfo.
     m.def(
         "info_bytes",
         [](nb::bytes data) {

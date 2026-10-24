@@ -25,11 +25,18 @@ option(STB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 
 # --- libstb C++ core ---
 # stb headers are vendored (committed) under src/third_party/stb and are only
-# ever included from src/core/*.cpp, never from a public include/ header.
+# ever included from the sources under src/, never from a public include/ header.
 # STATIC (unlike httpp's SHARED core): stb is header-only, so there is nothing
 # to gain from a DLL, and each stb header is compiled with STB_*_STATIC so no
 # stbi_* symbol leaks out to consumers.
-file(GLOB LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/core/*.cpp)
+# One folder per module (util, image, codec, zlib, font, draw); the bindings live elsewhere.
+file(GLOB_RECURSE LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS
+    ${PROJECT_SOURCE_DIR}/src/util/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/image/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/codec/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/zlib/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/font/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/draw/*.cpp)
 
 add_library(stb_core STATIC ${LIBSTB_CORE_SOURCES})
 add_library(libstb::core ALIAS stb_core)
@@ -67,6 +74,8 @@ function(libstb_apply_core_build_settings target)
     # SYSTEM: vendored headers we don't control - their internal warnings are not
     # ours to fix under our own -Wall/-Wextra/-W4.
     target_include_directories(${target} SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/src/third_party/stb)
+    # Internal headers are included relative to src/ ("image/simd.hpp", "font/shaper/gsub.hpp").
+    target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
     target_compile_options(${target} PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4 /EHsc>
@@ -84,20 +93,20 @@ function(libstb_apply_core_build_settings target)
     # (the C++ and Python canvas tests compare against one fixed hash), so no fused multiply-add
     # contraction: GCC and Clang would otherwise use FMA on ARM and give last-bit differences.
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/shape.cpp
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/draw/shape.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
     endif()
 
-    # image_kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
+    # kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
     # compiler's auto-vectoriser off. (MSVC has no such switch: there it may still vectorise,
     # with identical results.) TARGET_DIRECTORY: source file properties are per directory scope.
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/image/kernels_scalar.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-fno-tree-slp-vectorize")
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/core/image_kernels_scalar.cpp
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/image/kernels_scalar.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-fno-vectorize;-fno-slp-vectorize")
     endif()

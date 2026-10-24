@@ -1,4 +1,4 @@
-// White-box tests of the GSUB engine (src/core/gsub.*) with hand-made tables, plus a robustness
+// White-box tests of the GSUB engine (src/font/shaper/gsub.*) with hand-made tables, plus a robustness
 // test that damages a real font's GSUB table. Includes internal headers on purpose.
 #include <cstdint>
 #include <fstream>
@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "test_common.hpp"
-#include "gsub.hpp"
-#include "text_shaper.hpp"
+#include "font/shaper/gsub.hpp"
+#include "font/shaper/text_shaper.hpp"
 
 namespace {
 

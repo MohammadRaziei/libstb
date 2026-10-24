@@ -4,7 +4,7 @@
 #include <thread>
 
 #include "test_common.hpp"
-#include "stb/canvas.hpp"
+#include "stb/draw.hpp"
 
 // The test font (tests/data/make_test_font.py) has solid-rectangle glyphs and
 // unitsPerEm=1000, ascent=800, descent=-200, so at pixel_height=100 one font

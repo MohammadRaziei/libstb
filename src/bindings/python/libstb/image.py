@@ -15,7 +15,7 @@ Source = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 def _read(source: Source) -> bytes:
     """bytes-like -> the data itself; str / os.PathLike -> file contents.
 
-    ponytail: used by ImageInfo and Font, which decode from memory. (Image
+    used by ImageInfo and Font, which decode from memory. (Image
     opens paths natively; a missing file is a FileNotFoundError either way.)
     """
     if isinstance(source, bytes):

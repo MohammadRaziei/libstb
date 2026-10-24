@@ -319,7 +319,7 @@ stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-saf
 stb::text_bitmap t = f.render("h\xC3\xA9llo", 32);      // UTF-8 in, 1-channel image out
 stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, {255, 255, 255});  // text onto a copy; colours: {r, g, b[, a]}, "red", "#ff8800", "red"_c, 0xff8800_rgb
 stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
-stb::canvas c(img);                                      // <stb/canvas.hpp>: one copy, many texts
+stb::canvas c(img);                                      // <stb/draw.hpp>: one copy, many texts
 c.set_font(f, 48).set_color("white");                    // defaults for the texts added next
 c.add_rect(10, 10, 220, 60).fill("#222").radius(12).stroke(2, "white");   // shapes: add_rect, add_ellipse, add_line
 c.add_text("Title", 20, 20);
@@ -340,12 +340,13 @@ stb's decode buffer (adopted, not copied) or memory somebody else owns
 (`image::wrap`, which is how a numpy array becomes an image without a copy).
 A copy is always spelled `copy()`. The four output formats are a closed set, so there
 is no encoder class hierarchy: each format is a `to_*` / `write_*` pair on
-`image` with its own defaulted settings, next to decoding in `src/core/image.cpp`.
-The editing operations are plain loops over the pixel buffer in `src/core/image_ops.cpp`
-(no stb involved; the arithmetic-heavy kernels are `src/core/image_kernels.hpp`, instantiated
-three times - AVX2, baseline SIMD, and `image_kernels_scalar.cpp` with auto-vectorisation off -
-and the backend is chosen in `src/core/simd.cpp`; build with `-DSTB_NO_SIMD_DISPATCH` to leave
-the AVX2 ones out) and the EXIF reader is `src/core/exif.cpp`: it looks only at the
+`image` with its own defaulted settings; the format code itself is in `src/codec/` and knows nothing
+about `image`.
+The editing operations are plain loops over the pixel buffer in `src/image/ops.cpp`
+(no stb involved; the arithmetic-heavy kernels are `src/image/kernels.hpp`, instantiated
+three times - AVX2, baseline SIMD, and `kernels_scalar.cpp` with auto-vectorisation off -
+and the backend is chosen in `src/image/simd.cpp`; build with `-DSTB_NO_SIMD_DISPATCH` to leave
+the AVX2 ones out) and the EXIF reader is `src/image/exif.cpp`: it looks only at the
 Orientation tag and checks every offset against the buffer.
 Runtime failures derive from
 `stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
@@ -357,12 +358,18 @@ Or `cmake --install build` and `find_package(libstb)` as usual.
 
 ```
 include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/stb/*.hpp           public API (error, image, resizer, font, utf8); never includes stb
-src/core/*.cpp              implementation; the only place stb headers are compiled
-src/third_party/stb/        vendored stb headers (committed, no submodules)
+include/stb/*.hpp           public API (error, util, color, image, font, shaping, draw, zlib); never includes stb
+src/util/                   file I/O helpers, UTF-8
+src/image/                  image, editing ops, resize, EXIF, SIMD kernels and their dispatch
+src/codec/                  every format: decode (stb_image), PNG / JPEG / BMP / TGA encoders, deflate
+src/zlib/                   the public zlib API (on top of src/codec)
+src/font/                   fonts, text rendering and the shaping pipeline (shaper/: arabic, bidi, gsub, otl)
+src/draw/                   shapes and colours
+src/third_party/stb/        four vendored stb headers, byte-for-byte upstream (no submodules)
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package
 cmake/                      DynamicVersion, Startup, Optimize, package config
 tests/{cpp,python,cmake}    unit tests + find_package consumer test, all run by ctest
+tests/tools/                dev checks that are not tests (snapshot.py, jpeg_vs_upstream.py, zlib_fuzz.py)
 tests/data/                 synthetic test font (solid-rectangle glyphs) + the script that makes it
 ```
 
