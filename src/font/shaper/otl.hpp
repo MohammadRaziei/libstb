@@ -31,6 +31,9 @@ public:
 
     bool has(std::size_t off, std::size_t len) const noexcept { return off <= n_ && len <= n_ - off; }
 
+    const std::uint8_t* data() const noexcept { return p_; }
+    std::uint8_t u8(std::size_t off) const noexcept { return has(off, 1) ? p_[off] : std::uint8_t(0); }
+
     std::uint16_t u16(std::size_t off) const noexcept {
         return has(off, 2) ? static_cast<std::uint16_t>((p_[off] << 8) | p_[off + 1]) : 0;
     }

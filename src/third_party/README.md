@@ -1,14 +1,12 @@
 # third_party
 
 Vendored dependencies: committed single-header files, never a system package
-or a submodule. All four are byte-for-byte upstream, so updating one is "overwrite the file".
+or a submodule. Both are byte-for-byte upstream, so updating one is "overwrite the file".
 
 | path | upstream | version | license |
 | :--- | :--- | :--- | :--- |
 | stb/stb_image.h | github.com/nothings/stb | v2.30 | MIT / public domain |
 | stb/stb_image_resize2.h | github.com/nothings/stb | v2.18 | MIT / public domain |
-| stb/stb_truetype.h | github.com/nothings/stb | v1.26 | MIT / public domain |
-| stb/stb_rect_pack.h | github.com/nothings/stb | v1.01 | MIT / public domain |
 
 Each header is included ONLY from one source file (with its STB_*_IMPLEMENTATION defined there,
 and STB_*_STATIC so no symbol leaks out of the library), never from a public include/stb/*.hpp
@@ -18,7 +16,11 @@ header:
 | :--- | :--- |
 | stb_image.h | src/codec/decode.cpp |
 | stb_image_resize2.h | src/image/resize.cpp |
-| stb_truetype.h, stb_rect_pack.h | src/font/font.cpp |
+
+Two more stb headers were vendored until the font reader was rewritten as libstb's own code,
+with identical output (checked on 150 real fonts, TrueType and CFF, against the stb build):
+`stb_truetype.h` became src/font/truetype/ (face.cpp, cff.cpp, raster.cpp, atlas.cpp) and
+`stb_rect_pack.h` its skyline packer (atlas.cpp).
 
 stb_image_write.h is NOT vendored any more: its encoders were rewritten as libstb's own code in
 src/codec/ (png.cpp, jpeg.cpp, bmp_tga.cpp and the zlib compressor deflate.cpp), with the same

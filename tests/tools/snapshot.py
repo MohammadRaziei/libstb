@@ -201,6 +201,29 @@ def run(stb) -> dict:
 
     put("canvas/scene", canvas)
 
+    # ---- real fonts, when the machine has any: TrueType and CFF outlines, collections, GPOS kerning
+    import glob
+    import os
+
+    real = sorted({f for pat in ("/usr/share/fonts/**/*.ttf", "/usr/share/fonts/**/*.otf", "/usr/share/fonts/**/*.ttc")
+                   for f in glob.glob(pat, recursive=True) if os.path.isfile(f) and not os.path.islink(f)})
+    sample = [chr(c) for c in list(range(33, 127)) + [0xE9, 0xFC, 0x20AC, 0x0627, 0x0645, 0x0651, 0x4E2D, 0x3042]]
+    for path in real:
+        def real_font(path=path):
+            f = stb.Font.open(path)
+            acc = []
+            for px in (8.5, 24, 57.3):
+                acc.append(f.metrics(px))
+                for ch in sample:
+                    g = f.render_glyph(ch, px)
+                    acc.append((ch, g.x_offset, g.y_offset, g.advance, g.bitmap.tobytes() if g.bitmap is not None else None))
+                acc.append([f.kerning(a, b, px) for a in "AVTo" for b in "AVyo."])
+            atlas = f.make_atlas("".join(sample[:60]), 20, 256, 256, 2)
+            acc.append((atlas.image.tobytes(), sorted(atlas.glyphs.items())))
+            return acc
+
+        put("realfont/" + path, real_font)
+
     # ---- errors are behaviour too
     put("err/empty", lambda: stb.Image.open(b""))
     put("err/garbage", lambda: stb.Image.open(b"not an image at all"))

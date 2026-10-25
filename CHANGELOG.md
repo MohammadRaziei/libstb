@@ -25,6 +25,12 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   `gsub_table::make_plan` are split into steps, the three `thumbnail` overloads and the two
   `Resizer` constructors share their code, constants are snake_case.
 
+- The font stack is libstb's own code too: `src/font/truetype/` replaces `stb_truetype.h` and
+  `stb_rect_pack.h` (font file, cmap, GPOS / kern kerning, TrueType and CFF outlines, the
+  anti-aliasing rasterizer and the atlas packer). Every read is bounds-checked and composite glyphs
+  have a recursion limit. Glyph bitmaps, metrics, kerning and atlases are byte-for-byte what stb
+  produced on 150 real fonts (TrueType, CFF, collections).
+
 ### Added
 - Round-trip tests (`tests/python/test_roundtrip.py`, `tests/cpp/test_codec.cpp`) and two
   development checks that are not tests: `tests/tools/snapshot.py` (byte-for-byte comparison of

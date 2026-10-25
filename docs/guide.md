@@ -196,10 +196,10 @@ other option (`edge`, `srgb`, `max_bytes`) is a keyword of `Resizer(...)`.
 An unknown name raises `ValueError` listing the valid ones. There is no
 `lanczos`: stb_image_resize2 does not have it.
 
-**Fonts: trusted files only.** stb_truetype does no bounds checking; its
-author writes "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT
-FILES". Load your own or vetted system fonts, never user uploads. (Images are
-different: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
+**Fonts: prefer trusted files.** libstb's font reader (`src/font/truetype/`) checks every read against
+the file's bounds and caps composite-glyph recursion, so a damaged font gives wrong glyphs rather than
+out-of-range reads, but unlike `stb_image` it has not been fuzzed. Load your own or vetted system fonts
+rather than user uploads. (Images: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
 
 **Right-to-left text (Persian, Arabic, Urdu, Hebrew).** `draw_text`, `measure`, `render` and the
 canvas shape and reorder it for you: pass the text in the order you type it, no pre-processing with
@@ -363,9 +363,10 @@ src/util/                   file I/O helpers, UTF-8
 src/image/                  image, editing ops, resize, EXIF, SIMD kernels and their dispatch
 src/codec/                  every format: decode (stb_image), PNG / JPEG / BMP / TGA encoders, deflate
 src/zlib/                   the public zlib API (on top of src/codec)
-src/font/                   fonts, text rendering and the shaping pipeline (shaper/: arabic, bidi, gsub, otl)
+src/font/                   fonts, text rendering, atlases; truetype/ (font file, CFF, rasterizer, packer) and
+                            shaper/ (arabic, bidi, gsub, otl)
 src/draw/                   shapes and colours
-src/third_party/stb/        four vendored stb headers, byte-for-byte upstream (no submodules)
+src/third_party/stb/        two vendored stb headers (stb_image, stb_image_resize2), byte-for-byte upstream
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package
 cmake/                      DynamicVersion, Startup, Optimize, package config
 tests/{cpp,python,cmake}    unit tests + find_package consumer test, all run by ctest

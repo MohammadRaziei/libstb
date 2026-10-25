@@ -81,14 +81,14 @@ next to your own copy of stb.
 
 ## What is from stb, and what is not
 
-libstb uses these stb modules, vendored in `src/third_party/` (no submodules):
+libstb still uses these stb modules, vendored in `src/third_party/` (no submodules). Everything else is
+libstb's own code: the encoders and zlib compressor (`src/codec/`), and the font reader, glyph rasterizer
+and atlas packer (`src/font/truetype/`, ported from `stb_truetype` and `stb_rect_pack` with identical output):
 
 | stb module | used for |
 | :--- | :--- |
 | `stb_image` | decoding (PNG, JPEG, BMP, TGA, GIF, ...) |
 | `stb_image_resize2` | resizing, all filters |
-| `stb_truetype` | font metrics, glyphs, text rendering, atlases |
-| `stb_rect_pack` | packing glyphs into an atlas |
 
 What we changed on top, for speed and for a safer, more convenient API:
 
@@ -96,7 +96,7 @@ What we changed on top, for speed and for a safer, more convenient API:
   (derived from `stb_image_write`, which is no longer vendored): a PNG deflate with 4-byte hash
   chains, lazy matching and dynamic Huffman blocks (within about 1% of zlib level 6 in size at
   roughly twice its speed) and a faster JPEG encoder (buffered bit writer, vectorisable DCT, SSE2
-  colour conversion). The four vendored stb headers are byte-for-byte upstream.
+  colour conversion). The two vendored stb headers are byte-for-byte upstream.
 - **SIMD where it pays.** `convert`, `composite` and `flatten` have AVX2, baseline SIMD and
   scalar builds that give identical results; the best one is picked at run time.
 - **No hidden copies.** Decoded buffers are adopted, not copied; arrays and DLPack tensors are
@@ -112,8 +112,8 @@ What we changed on top, for speed and for a safer, more convenient API:
   estimate.
 - **Safety.** Size limits are checked from the header before any pixel memory is allocated,
   errors are typed (`stb.Error` with `DecodeError`, `EncodeError`, `LimitError`), and EXIF
-  parsing checks every offset. stb_truetype is still not safe on untrusted fonts: load only
-  fonts you trust.
+  parsing checks every offset. The font reader bounds-checks every read (stb_truetype did not), but it
+  has not been fuzzed: prefer fonts you trust.
 
 Performance numbers against Pillow and OpenCV, including where libstb is slower (JPEG
 encoding is one), are in [`benchmarks/`](benchmarks/README.md). They depend on the machine, so

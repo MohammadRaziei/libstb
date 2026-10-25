@@ -24,22 +24,14 @@
 #include "font/shaper/text_shaper.hpp"
 #include "stb/util.hpp"
 
-// STATIC: internal linkage for every stbtt_* / stbrp_* function (see image.cpp).
-// stb_rect_pack must be compiled first: stb_truetype detects it and uses it
-// for the packing API instead of its built-in placeholder types.
-#define STBRP_STATIC
-#define STB_RECT_PACK_IMPLEMENTATION
-#include "stb_rect_pack.h"
-#define STBTT_STATIC
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+#include "font/truetype/truetype.hpp"
 
 namespace stb {
 
 // ------------------------------------------------------------------ pimpl
 
 // The font file's bytes: either owned memory or a read-only mapping of the file.
-// stbtt_fontinfo points into this, so it is never moved after init.
+// The face points into this, so it is never moved after init.
 struct font_bytes {
     std::vector<std::uint8_t> owned;
     const std::uint8_t* ptr = nullptr;
@@ -86,15 +78,15 @@ struct font_bytes {
 
 struct font::impl {
     font_bytes data;
-    stbtt_fontinfo info{};
+    truetype::face face;
     int index = 0;
 
-    float scale(float pixel_height) const { return stbtt_ScaleForPixelHeight(&info, pixel_height); }
+    float scale(float pixel_height) const { return face.scale_for_pixel_height(pixel_height); }
 
     // The font's GSUB data for Arabic script, parsed the first time right-to-left text is shaped.
     const arabic_layout& arabic() const {
         std::call_once(arabic_once_, [this] {
-            arabic_ = arabic_layout::build(otl::byte_view(data.ptr, data.len), std::uint32_t(info.fontstart));
+            arabic_ = arabic_layout::build(otl::byte_view(data.ptr, data.len), std::uint32_t(face.font_start()));
         });
         return arabic_;
     }
@@ -117,10 +109,6 @@ int check_cp(char32_t cp) {
     return static_cast<int>(cp);
 }
 
-struct bitmap_free {
-    void operator()(unsigned char* p) const { stbtt_FreeBitmap(p, nullptr); }
-};
-
 // One pass over the text: where every glyph's pen and baseline are.
 struct layout {
     struct item {
@@ -139,7 +127,7 @@ class font_glyphs final : public glyph_source {
 public:
     explicit font_glyphs(const font::impl& f) : f_(f) {}
     std::uint32_t glyph(char32_t cp) const override {
-        return cp > 0x10FFFF ? 0 : std::uint32_t(stbtt_FindGlyphIndex(&f_.info, int(cp)));
+        return cp > 0x10FFFF ? 0 : std::uint32_t(f_.face.glyph_index(int(cp)));
     }
     const arabic_layout* arabic() const override { return &f_.arabic(); }
 
@@ -153,7 +141,7 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
     const std::vector<shaped_glyph> glyphs = text_shaper(font_glyphs(f)).shape(logical);
     const float s = f.scale(px);
     int asc = 0, desc = 0, gap = 0;
-    stbtt_GetFontVMetrics(&f.info, &asc, &desc, &gap);
+    f.face.v_metrics(asc, desc, gap);
     const float ascent = asc * s;
     const float line_h = (asc - desc + gap) * s;
 
@@ -179,8 +167,8 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
         if (sg.cp == U'\r') continue;
         const int gid = int(sg.gid);
         const float baseline = ascent + line * line_h;
-        int bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
-        stbtt_GetGlyphBitmapBox(&f.info, gid, s, s, &bx0, &by0, &bx1, &by1);
+        const truetype::box ink = f.face.bitmap_box(gid, s, s);
+        const int bx0 = ink.x0, by0 = ink.y0, bx1 = ink.x1, by1 = ink.y1;
         const bool has_ink = bx1 > bx0 && by1 > by0;
         if (base.valid && has_ink && is_arabic_mark(sg.cp)) {
             float dy;
@@ -194,9 +182,9 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
             lay.items.push_back({gid, base.cx - 0.5f * float(bx0 + bx1), baseline + dy});
             continue;  // a mark takes no room and does not break kerning
         }
-        if (has_prev) x += stbtt_GetGlyphKernAdvance(&f.info, prev, gid) * s;
+        if (has_prev) x += f.face.kern_advance(prev, gid) * s;
         int adv = 0, lsb = 0;
-        stbtt_GetGlyphHMetrics(&f.info, gid, &adv, &lsb);
+        f.face.h_metrics(gid, adv, lsb);
         lay.items.push_back({gid, x, baseline});
         base = has_ink ? ink_box{true, x + 0.5f * float(bx0 + bx1), float(by0), float(by1)} : ink_box{};
         x += adv * s;
@@ -228,12 +216,13 @@ const atlas_glyph* atlas::find(char32_t codepoint) const noexcept {
 namespace {
 
 void init_font(font::impl* p, int index) {
-    const int offset = stbtt_GetFontOffsetForIndex(p->data.ptr, index);
+    const otl::byte_view file(p->data.ptr, p->data.len);
+    const int offset = truetype::face::offset_for_index(file, index);
     if (offset < 0) throw decode_error("no font at this index (not a TrueType/OpenType file?)");
-    if (!stbtt_InitFont(&p->info, p->data.ptr, offset))
+    if (!p->face.init(file, offset))
         throw decode_error("not a valid TrueType/OpenType font");
     int asc = 0, desc = 0, gap = 0;
-    stbtt_GetFontVMetrics(&p->info, &asc, &desc, &gap);
+    p->face.v_metrics(asc, desc, gap);
     if (asc - desc <= 0) throw decode_error("font has no usable vertical metrics");
 }
 
@@ -269,22 +258,23 @@ font_metrics font::metrics(float px) const {
     check_px(px);
     const float s = impl_->scale(px);
     int asc = 0, desc = 0, gap = 0;
-    stbtt_GetFontVMetrics(&impl_->info, &asc, &desc, &gap);
+    impl_->face.v_metrics(asc, desc, gap);
     return {asc * s, desc * s, gap * s};
 }
 
-bool font::has_glyph(char32_t cp) const { return stbtt_FindGlyphIndex(&impl_->info, check_cp(cp)) != 0; }
+bool font::has_glyph(char32_t cp) const { return impl_->face.glyph_index(check_cp(cp)) != 0; }
 
 float font::advance(char32_t cp, float px) const {
     check_px(px);
     int adv = 0, lsb = 0;
-    stbtt_GetCodepointHMetrics(&impl_->info, check_cp(cp), &adv, &lsb);
+    impl_->face.h_metrics(impl_->face.glyph_index(check_cp(cp)), adv, lsb);
     return adv * impl_->scale(px);
 }
 
 float font::kerning(char32_t left, char32_t right, float px) const {
     check_px(px);
-    return stbtt_GetCodepointKernAdvance(&impl_->info, check_cp(left), check_cp(right)) * impl_->scale(px);
+    const truetype::face& face = impl_->face;
+    return face.kern_advance(face.glyph_index(check_cp(left)), face.glyph_index(check_cp(right))) * impl_->scale(px);
 }
 
 namespace {
@@ -292,17 +282,15 @@ namespace {
 // Rasterises one glyph of the font by glyph index.
 glyph render_glyph_index(const font::impl& f, int gid, float px) {
     const float s = f.scale(px);
-    int w = 0, h = 0, xo = 0, yo = 0;
-    std::unique_ptr<unsigned char, bitmap_free> bmp(stbtt_GetGlyphBitmap(&f.info, s, s, gid, &w, &h, &xo, &yo));
+    const truetype::bitmap bmp = f.face.render(gid, s, s);
 
     glyph g;
-    g.x_offset = xo;
-    g.y_offset = yo;
+    g.x_offset = bmp.x_offset;
+    g.y_offset = bmp.y_offset;
     int adv = 0, lsb = 0;
-    stbtt_GetGlyphHMetrics(&f.info, gid, &adv, &lsb);
+    f.face.h_metrics(gid, adv, lsb);
     g.advance = adv * s;
-    if (bmp && w > 0 && h > 0)
-        g.bitmap = image(w, h, 1, std::vector<std::uint8_t>(bmp.get(), bmp.get() + std::size_t(w) * std::size_t(h)));
+    if (bmp.width > 0 && bmp.height > 0) g.bitmap = image(bmp.width, bmp.height, 1, bmp.pixels);
     return g;
 }
 
@@ -310,7 +298,7 @@ glyph render_glyph_index(const font::impl& f, int gid, float px) {
 
 glyph font::render_glyph(char32_t cp, float px) const {
     check_px(px);
-    return render_glyph_index(*impl_, stbtt_FindGlyphIndex(&impl_->info, check_cp(cp)), px);
+    return render_glyph_index(*impl_, impl_->face.glyph_index(check_cp(cp)), px);
 }
 
 std::vector<std::uint32_t> font::shape_glyphs(std::string_view utf8) const {
@@ -434,25 +422,17 @@ atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int 
     if (ids.empty()) throw std::invalid_argument("no code points given");
 
     std::vector<std::uint8_t> pixels(std::size_t(width) * std::size_t(height), 0);
-    std::vector<stbtt_packedchar> packed(ids.size());
+    if (width - padding < 1 || height - padding < 1) throw limit_error("atlas too small for the requested glyphs");
 
-    stbtt_pack_context spc;
-    if (!stbtt_PackBegin(&spc, pixels.data(), width, height, 0, padding, nullptr))
-        throw error("cannot initialise the atlas packer (out of memory?)");
-    stbtt_pack_range range{};
-    range.font_size = px;  // positive = pixel height
-    range.array_of_unicode_codepoints = ids.data();
-    range.num_chars = int(ids.size());
-    range.chardata_for_range = packed.data();
-    const int ok = stbtt_PackFontRanges(&spc, impl_->data.ptr, impl_->index, &range, 1);
-    stbtt_PackEnd(&spc);
-    if (!ok) throw limit_error("atlas too small for the requested glyphs");
+    std::vector<truetype::packed_glyph> packed;
+    if (!truetype::pack_glyphs(impl_->face, pixels.data(), width, height, padding, px, ids, packed))
+        throw limit_error("atlas too small for the requested glyphs");
 
     std::vector<atlas_glyph> glyphs;
     glyphs.reserve(ids.size());
     for (std::size_t i = 0; i < ids.size(); ++i) {
-        const stbtt_packedchar& c = packed[i];
-        glyphs.push_back({char32_t(ids[i]), c.x0, c.y0, c.x1, c.y1, c.xoff, c.yoff, c.xoff2, c.yoff2, c.xadvance});
+        const truetype::packed_glyph& c = packed[i];
+        glyphs.push_back({char32_t(ids[i]), c.x0, c.y0, c.x1, c.y1, c.x_offset, c.y_offset, c.x_offset2, c.y_offset2, c.x_advance});
     }
     return atlas(image(width, height, 1, std::move(pixels)), std::move(glyphs));
 }
@@ -573,7 +553,7 @@ float estimate_units(const estimate_family& fam, char32_t c) {
     return fam.fallback;
 }
 
-// The same scale stbtt_ScaleForPixelHeight uses: pixel_height / (ascent - descent).
+// The same scale face::scale_for_pixel_height uses: pixel_height / (ascent - descent).
 float estimate_scale(const estimate_family& f, float px) {
     check_px(px);
     return px / (f.ascent - f.descent);
