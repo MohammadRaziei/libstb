@@ -14,11 +14,11 @@ namespace stb::codec::detail {
 //    performance
 //      - uses stb_zlib, a PD zlib implementation with fast huffman decoding
 
-typedef struct
+struct png_chunk
 {
    std::uint32_t length;
    std::uint32_t type;
-} png_chunk;
+};
 
 static png_chunk get_chunk_header(stream *s)
 {
@@ -116,7 +116,6 @@ static void create_png_alpha_expand8(byte *dest, byte *src, std::uint32_t x, int
 int png_decoder::create_png_image_raw(byte *raw, std::uint32_t raw_len, int out_n, std::uint32_t x, std::uint32_t y, int depth, int color)
 {
    int bytes = (depth == 16 ? 2 : 1);
-   stream *s = this->s;
    std::uint32_t i,j,stride = x*out_n*bytes;
    std::uint32_t img_len, img_width_bytes;
    byte *filter_buf;
@@ -129,10 +128,10 @@ int png_decoder::create_png_image_raw(byte *raw, std::uint32_t raw_len, int out_
    int width = x;
 
    assert(out_n == s->img_n || out_n == s->img_n+1);
-   this->out = (byte *) alloc_mad3(x, y, output_bytes, 0); // extra bytes to write off the end into
-   if (!this->out) return fail("outofmem", "Out of memory");
+   out = (byte *) alloc_mad3(x, y, output_bytes, 0); // extra bytes to write off the end into
+   if (!out) return fail("outofmem", "Out of memory");
 
-   // note: error exits here don't need to clean up this->out individually,
+   // note: error exits here don't need to clean up out individually,
    // do_png always does on error.
    if (!mad3sizes_valid(img_n, x, depth, 7)) return fail("too large", "Corrupt PNG");
    img_width_bytes = (((img_n * x * depth) + 7) >> 3);
@@ -158,7 +157,7 @@ int png_decoder::create_png_image_raw(byte *raw, std::uint32_t raw_len, int out_
       // cur/prior filter buffers alternate
       byte *cur = filter_buf + (j & 1)*img_width_bytes;
       byte *prior = filter_buf + (~j & 1)*img_width_bytes;
-      byte *dest = this->out + stride*j;
+      byte *dest = out + stride*j;
       int nk = width * filter_bytes;
       int filter = *raw++;
 
@@ -325,7 +324,6 @@ int png_decoder::create_png_image(byte *image_data, std::uint32_t image_data_len
 
 int png_decoder::compute_transparency(byte tc[3], int out_n)
 {
-   stream *s = this->s;
    std::uint32_t i, pixel_count = s->img_x * s->img_y;
    byte *p = out;
 
@@ -350,7 +348,6 @@ int png_decoder::compute_transparency(byte tc[3], int out_n)
 
 int png_decoder::compute_transparency16(std::uint16_t tc[3], int out_n)
 {
-   stream *s = this->s;
    std::uint32_t i, pixel_count = s->img_x * s->img_y;
    std::uint16_t *p = (std::uint16_t*) out;
 
@@ -410,7 +407,7 @@ int png_decoder::expand_png_palette(byte *palette, int len, int pal_img_n)
    return 1;
 }
 
-#define PNG_TYPE(a,b,c,d)  (((unsigned) (a) << 24) + ((unsigned) (b) << 16) + ((unsigned) (c) << 8) + (unsigned) (d))
+constexpr unsigned png_type(unsigned a, unsigned b, unsigned c, unsigned d) { return (a << 24) + (b << 16) + (c << 8) + d; }
 
 int png_decoder::parse_png_file(int scan, int req_comp)
 {
@@ -419,7 +416,6 @@ int png_decoder::parse_png_file(int scan, int req_comp)
    std::uint16_t tc16[3];
    std::uint32_t ioff=0, idata_limit=0, i, pal_len=0;
    int first=1,k,interlace=0, color=0, is_iphone=0;
-   stream *s = this->s;
 
    expanded = NULL;
    idata = NULL;
@@ -432,11 +428,11 @@ int png_decoder::parse_png_file(int scan, int req_comp)
    for (;;) {
       png_chunk c = get_chunk_header(s);
       switch (c.type) {
-         case PNG_TYPE('C','g','B','I'):
+         case png_type('C','g','B','I'):
             is_iphone = 1;
             s->skip(c.length);
             break;
-         case PNG_TYPE('I','H','D','R'): {
+         case png_type('I','H','D','R'): {
             int comp,filter;
             if (!first) return fail("multiple IHDR","Corrupt PNG");
             first = 0;
@@ -466,7 +462,7 @@ int png_decoder::parse_png_file(int scan, int req_comp)
             break;
          }
 
-         case PNG_TYPE('P','L','T','E'):  {
+         case png_type('P','L','T','E'):  {
             if (first) return fail("first not IHDR", "Corrupt PNG");
             if (c.length > 256*3) return fail("invalid PLTE","Corrupt PNG");
             pal_len = c.length / 3;
@@ -480,7 +476,7 @@ int png_decoder::parse_png_file(int scan, int req_comp)
             break;
          }
 
-         case PNG_TYPE('t','R','N','S'): {
+         case png_type('t','R','N','S'): {
             if (first) return fail("first not IHDR", "Corrupt PNG");
             if (idata) return fail("tRNS after IDAT","Corrupt PNG");
             if (pal_img_n) {
@@ -507,7 +503,7 @@ int png_decoder::parse_png_file(int scan, int req_comp)
             break;
          }
 
-         case PNG_TYPE('I','D','A','T'): {
+         case png_type('I','D','A','T'): {
             if (first) return fail("first not IHDR", "Corrupt PNG");
             if (pal_img_n && !pal_len) return fail("no PLTE","Corrupt PNG");
             if (scan == scan_header) {
@@ -533,7 +529,7 @@ int png_decoder::parse_png_file(int scan, int req_comp)
             break;
          }
 
-         case PNG_TYPE('I','E','N','D'): {
+         case png_type('I','E','N','D'): {
             std::uint32_t raw_len, bpl;
             if (first) return fail("first not IHDR", "Corrupt PNG");
             if (scan != scan_load) return 1;

@@ -36,10 +36,10 @@ static int pic_test_core(stream *s)
    return 1;
 }
 
-typedef struct
+struct pic_packet
 {
    byte size,type,channel;
-} pic_packet;
+};
 
 static byte *readval(stream *s, int channel, byte *dest)
 {

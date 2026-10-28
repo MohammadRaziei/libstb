@@ -74,12 +74,12 @@ static int shiftsigned(unsigned int v, int shift, int bits)
    return (int) ((unsigned) v * mul_table[bits]) >> shift_table[bits];
 }
 
-typedef struct
+struct bmp_header
 {
    int bpp, offset, hsz;
    unsigned int mr,mg,mb,ma, all_a;
    int extra_read;
-} bmp_header;
+};
 
 static int bmp_set_mask_defaults(bmp_header *info, int compress)
 {

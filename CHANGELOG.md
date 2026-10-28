@@ -8,6 +8,19 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Changed
+- `include/stb/color.hpp` went from 1051 to 240 lines: string parsing (`from_string`, `from_hash`,
+  `from_name`), `to_string`, `blend` and the stream operators moved to `src/draw/color.cpp`, and
+  `from_name` looks names up in one table (values still come from the named factories, so each color
+  is defined once). Behavior is unchanged: 40,000 parse, error-message and blend outputs match the
+  previous header byte for byte.
+- Decoder cleanup: redundant `this->` and local `stream *s` aliases are gone from the JPEG and PNG
+  decoders, local macros became `constexpr` values and inline functions (`zfast_bits`, `fast_bits`,
+  `marker_none`, `is_restart`, `is_sof`, `png_type`, `div4`, `float2fixed`, `hdr_buflen`, ...), and
+  `typedef` became `using` or a plain `struct`. Decoded output is unchanged (23,680 decoder cases).
+- resize: declarations of functions that no longer exist (`stbir_set_pixel_callbacks`,
+  `stbir_set_user_data`, `stbir_set_pixel_layouts`, the subrect setters), the unused
+  `stbir_quick_resize_helper` and the documentation of the removed setters are deleted, which also
+  silences the matching `-Wunused-function` warnings.
 - Source layout: `src/core/` is gone. One folder per module: `src/util`, `src/image`, `src/codec`,
   `src/zlib`, `src/font` (with `shaper/`), `src/draw`. Internal headers are included relative to
   `src/` (`"image/simd.hpp"`).

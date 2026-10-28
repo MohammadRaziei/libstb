@@ -129,7 +129,7 @@ void idct_simd(byte *out, int out_stride, short data[64]);
 #endif
 
 // ---- upsample.cpp: one output row from the rows above and below it, for each expansion factor
-typedef byte *(*resample_row_func)(byte *out, byte *in0, byte *in1, int w, int hs);
+using resample_row_func = byte *(*)(byte *out, byte *in0, byte *in1, int w, int hs);
 
 byte *resample_row_1(byte *out, byte *in_near, byte *in_far, int w, int hs);
 byte *resample_row_v_2(byte *out, byte *in_near, byte *in_far, int w, int hs);

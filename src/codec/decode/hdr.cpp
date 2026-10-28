@@ -8,7 +8,6 @@ static float h2l_gamma_i=1.0f/2.2f, h2l_scale_i=1.0f;
 
 
 
-#define float2int(x)   ((int) (x))
 byte *hdr_to_ldr(float   *data, int x, int y, int comp)
 {
    int i,k,n;
@@ -23,13 +22,13 @@ byte *hdr_to_ldr(float   *data, int x, int y, int comp)
          float z = (float) pow(data[i*comp+k]*h2l_scale_i, h2l_gamma_i) * 255 + 0.5f;
          if (z < 0) z = 0;
          if (z > 255) z = 255;
-         output[i*comp + k] = (byte) float2int(z);
+         output[i*comp + k] = (byte) static_cast<int>(z);
       }
       if (k < comp) {
          float z = data[i*comp+k] * 255 + 0.5f;
          if (z < 0) z = 0;
          if (z > 255) z = 255;
-         output[i*comp + k] = (byte) float2int(z);
+         output[i*comp + k] = (byte) static_cast<int>(z);
       }
    }
    std::free(data);
@@ -60,7 +59,7 @@ int hdr::test(stream* s)
    return r;
 }
 
-#define HDR_BUFLEN  1024
+constexpr int hdr_buflen = 1024;
 static char *hdr_gettoken(stream *z, char *buffer)
 {
    int len=0;
@@ -70,7 +69,7 @@ static char *hdr_gettoken(stream *z, char *buffer)
 
    while (!z->at_eof() && c != '\n') {
       buffer[len++] = c;
-      if (len == HDR_BUFLEN-1) {
+      if (len == hdr_buflen-1) {
          // flush to end of line
          while (!z->at_eof() && z->get8() != '\n')
             ;
@@ -112,7 +111,7 @@ static void hdr_convert(float *output, byte *input, int req_comp)
 
 float * hdr::load(stream *s, int *x, int *y, int *comp, int req_comp, result_info *ri)
 {
-   char buffer[HDR_BUFLEN];
+   char buffer[hdr_buflen];
    char *token;
    int valid = 0;
    int width, height;
@@ -243,7 +242,7 @@ float * hdr::load(stream *s, int *x, int *y, int *comp, int req_comp, result_inf
 
 int hdr::info(stream *s, int *x, int *y, int *comp)
 {
-   char buffer[HDR_BUFLEN];
+   char buffer[hdr_buflen];
    char *token;
    int valid = 0;
    int dummy;

@@ -6,12 +6,12 @@ namespace stb::codec::detail {
 // *************************************************************************************************
 // GIF loader -- public domain by Jean-Marc Lienher -- simplified/shrunk by stb
 
-typedef struct
+struct gif_lzw
 {
    std::int16_t prefix;
    byte first;
    byte suffix;
-} gif_lzw;
+};
 
 class gif_decoder {
 public:

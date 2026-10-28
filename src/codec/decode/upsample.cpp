@@ -7,7 +7,7 @@ namespace stb::codec::detail {
 // static jfif-centered resampling (across block boundaries)
 
 
-#define div4(x) ((byte) ((x) >> 2))
+inline byte div4(int x) { return static_cast<byte>(x >> 2); }
 
 byte *resample_row_1(byte *out, byte *in_near, byte *in_far, int w, int hs)
 {
@@ -56,7 +56,7 @@ byte*  resample_row_h_2(byte *out, byte *in_near, byte *in_far, int w, int hs)
    return out;
 }
 
-#define div16(x) ((byte) ((x) >> 4))
+inline byte div16(int x) { return static_cast<byte>(x >> 4); }
 
 byte *resample_row_hv_2(byte *out, byte *in_near, byte *in_far, int w, int hs)
 {
@@ -178,7 +178,7 @@ byte *resample_row_generic(byte *out, byte *in_near, byte *in_far, int w, int hs
 
 // this is a reduced-precision calculation of YCbCr-to-RGB introduced
 // to make sure the code produces the same results in both SIMD and scalar
-#define float2fixed(x)  (((int) ((x) * 4096.0f + 0.5f)) << 8)
+inline int float2fixed(float x) { return static_cast<int>(x * 4096.0f + 0.5f) << 8; }
 void YCbCr_to_RGB_row(byte *out, const byte *y, const byte *pcb, const byte *pcr, int count, int step)
 {
    int i;

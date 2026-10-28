@@ -7,20 +7,20 @@
 
 namespace stb::codec::detail {
 
-#define ZFAST_BITS  9 // accelerate all cases in default tables
-#define ZFAST_MASK  ((1 << ZFAST_BITS) - 1)
-#define ZNSYMS 288 // number of symbols in literal/length alphabet
+constexpr int zfast_bits = 9;                    // accelerate all cases in default tables
+constexpr int zfast_mask = (1 << zfast_bits) - 1;
+constexpr int znsyms = 288;                      // number of symbols in literal/length alphabet
 
 // zlib-style huffman encoding
 // (jpegs packs from left, zlib from right, so can't share code)
 class zhuffman {
 public:
-   std::uint16_t fast[1 << ZFAST_BITS];
+   std::uint16_t fast[1 << zfast_bits];
    std::uint16_t firstcode[16];
    int maxcode[17];
    std::uint16_t firstsymbol[16];
-   byte  size[ZNSYMS];
-   std::uint16_t value[ZNSYMS];
+   byte  size[znsyms];
+   std::uint16_t value[znsyms];
 
     int build(const byte *sizelist, int num);
 };

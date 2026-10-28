@@ -68,9 +68,9 @@ int zhuffman::build(const byte *sizelist, int num)
          std::uint16_t fastv = (std::uint16_t) ((s << 9) | i);
          size [c] = (byte     ) s;
          value[c] = (std::uint16_t) i;
-         if (s <= ZFAST_BITS) {
+         if (s <= zfast_bits) {
             int j = bit_reverse(next_code[s],s);
-            while (j < (1 << ZFAST_BITS)) {
+            while (j < (1 << zfast_bits)) {
                fast[j] = fastv;
                j += (1 << s);
             }
@@ -126,13 +126,13 @@ int inflater::huffman_decode_slowpath(zhuffman *z)
    // not resolved by fast table, so compute it the slow way
    // use jpeg approach, which requires MSbits at top
    k = bit_reverse(code_buffer, 16);
-   for (s=ZFAST_BITS+1; ; ++s)
+   for (s=zfast_bits+1; ; ++s)
       if (k < z->maxcode[s])
          break;
    if (s >= 16) return -1; // invalid code!
    // code size is s, so:
    b = (k >> (16-s)) - z->firstcode[s] + z->firstsymbol[s];
-   if (b >= ZNSYMS) return -1; // some data was corrupt somewhere!
+   if (b >= znsyms) return -1; // some data was corrupt somewhere!
    if (z->size[b] != s) return -1;  // was originally an assert, but report failure instead.
    code_buffer >>= s;
    num_bits -= s;
@@ -159,7 +159,7 @@ inline int inflater::huffman_decode(zhuffman *z)
          fill_bits();
       }
    }
-   b = z->fast[code_buffer & ZFAST_MASK];
+   b = z->fast[code_buffer & zfast_mask];
    if (b) {
       s = b >> 9;
       code_buffer >>= s;
@@ -348,7 +348,7 @@ int inflater::read_header()
    return 1;
 }
 
-static const byte zdefault_length[ZNSYMS] =
+static const byte zdefault_length[znsyms] =
 {
    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8, 8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8, 8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
@@ -395,7 +395,7 @@ int inflater::parse(int parse_header)
       } else {
          if (type == 1) {
             // use fixed code lengths
-            if (!z_length.build(zdefault_length  , ZNSYMS)) return 0;
+            if (!z_length.build(zdefault_length  , znsyms)) return 0;
             if (!z_distance.build(zdefault_distance,  32)) return 0;
          } else {
             if (!compute_huffman_codes()) return 0;

@@ -28,11 +28,11 @@ inline std::uint32_t rotate_left(std::uint32_t x, int y) { return (x << y) | (x 
 
 
 // huffman decoding acceleration
-#define FAST_BITS   9  // larger handles more cases; smaller stomps less cache
+constexpr int fast_bits = 9;  // larger handles more cases; smaller stomps less cache
 
 class huffman_table {
 public:
-   byte  fast[1 << FAST_BITS];
+   byte  fast[1 << fast_bits];
    // weirdly, repacking this into AoS is a 10% speed loss, instead of a win
    std::uint16_t code[256];
    byte  values[256];
@@ -50,7 +50,7 @@ public:
    huffman_table huff_dc[4];
    huffman_table huff_ac[4];
    std::uint16_t dequant[4][64];
-   std::int16_t fast_ac[4][1 << FAST_BITS];
+   std::int16_t fast_ac[4][1 << fast_bits];
 
 // sizes for components, interleaved MCUs
    int img_h_max, img_v_max;
@@ -130,11 +130,11 @@ int huffman_table::build(int *count)
    // build size list for each symbol (from JPEG spec)
    for (i=0; i < 16; ++i) {
       for (j=0; j < count[i]; ++j) {
-         this->size[k++] = (byte) (i+1);
+         size[k++] = (byte) (i+1);
          if(k >= 257) return fail("bad size list","Corrupt JPEG");
       }
    }
-   this->size[k] = 0;
+   size[k] = 0;
 
    // compute actual symbols (from jpeg spec)
    code = 0;
@@ -142,8 +142,8 @@ int huffman_table::build(int *count)
    for(j=1; j <= 16; ++j) {
       // compute delta to add to code to compute symbol id
       delta[j] = k - code;
-      if (this->size[k] == j) {
-         while (this->size[k] == j)
+      if (size[k] == j) {
+         while (size[k] == j)
             this->code[k++] = (std::uint16_t) (code++);
          if (code-1 >= (1u << j)) return fail("bad code lengths","Corrupt JPEG");
       }
@@ -154,12 +154,12 @@ int huffman_table::build(int *count)
    maxcode[j] = 0xffffffff;
 
    // build non-spec acceleration table; 255 is flag for not-accelerated
-   memset(fast, 255, 1 << FAST_BITS);
+   memset(fast, 255, 1 << fast_bits);
    for (i=0; i < k; ++i) {
-      int s = this->size[i];
-      if (s <= FAST_BITS) {
-         int c = this->code[i] << (FAST_BITS-s);
-         int m = 1 << (FAST_BITS-s);
+      int s = size[i];
+      if (s <= fast_bits) {
+         int c = this->code[i] << (fast_bits-s);
+         int m = 1 << (fast_bits-s);
          for (j=0; j < m; ++j) {
             fast[c+j] = (byte) i;
          }
@@ -173,7 +173,7 @@ int huffman_table::build(int *count)
 static void build_fast_ac(std::int16_t *fast_ac, huffman_table *h)
 {
    int i;
-   for (i=0; i < (1 << FAST_BITS); ++i) {
+   for (i=0; i < (1 << fast_bits); ++i) {
       byte fast = h->fast[i];
       fast_ac[i] = 0;
       if (fast < 255) {
@@ -182,9 +182,9 @@ static void build_fast_ac(std::int16_t *fast_ac, huffman_table *h)
          int magbits = rs & 15;
          int len = h->size[fast];
 
-         if (magbits && len + magbits <= FAST_BITS) {
+         if (magbits && len + magbits <= fast_bits) {
             // magnitude code followed by receive_extend code
-            int k = ((i << len) & ((1 << FAST_BITS) - 1)) >> (FAST_BITS - magbits);
+            int k = ((i << len) & ((1 << fast_bits) - 1)) >> (fast_bits - magbits);
             int m = 1 << (magbits - 1);
             if (k < m) k += (~0U << magbits) + 1;
             // if the result is small enough, we can fit it in fast_ac table
@@ -224,9 +224,9 @@ inline int jpeg_decoder::huff_decode(huffman_table *h)
 
    if (code_bits < 16) grow_buffer_unsafe();
 
-   // look at the top FAST_BITS and determine what symbol ID it is,
-   // if the code is <= FAST_BITS
-   c = (code_buffer >> (32 - FAST_BITS)) & ((1 << FAST_BITS)-1);
+   // look at the top fast_bits and determine what symbol ID it is,
+   // if the code is <= fast_bits
+   c = (code_buffer >> (32 - fast_bits)) & ((1 << fast_bits)-1);
    k = h->fast[c];
    if (k < 255) {
       int s = h->size[k];
@@ -244,7 +244,7 @@ inline int jpeg_decoder::huff_decode(huffman_table *h)
    // wants to be compared against something shifted to have 16;
    // that way we don't need to shift inside the loop.
    temp = code_buffer >> 16;
-   for (k=FAST_BITS+1 ; ; ++k)
+   for (k=fast_bits+1 ; ; ++k)
       if (temp < h->maxcode[k])
          break;
    if (k == 17) {
@@ -355,7 +355,7 @@ int jpeg_decoder::decode_block(short data[64], huffman_table *hdc, huffman_table
       unsigned int zig;
       int c,r,s;
       if (code_bits < 16) grow_buffer_unsafe();
-      c = (code_buffer >> (32 - FAST_BITS)) & ((1 << FAST_BITS)-1);
+      c = (code_buffer >> (32 - fast_bits)) & ((1 << fast_bits)-1);
       r = fac[c];
       if (r) { // fast-AC path
          k += (r >> 4) & 15; // run
@@ -433,7 +433,7 @@ int jpeg_decoder::decode_block_prog_ac(short data[64], huffman_table *hac, std::
          unsigned int zig;
          int c,r,s;
          if (code_bits < 16) grow_buffer_unsafe();
-         c = (code_buffer >> (32 - FAST_BITS)) & ((1 << FAST_BITS)-1);
+         c = (code_buffer >> (32 - fast_bits)) & ((1 << fast_bits)-1);
          r = fac[c];
          if (r) { // fast-AC path
             k += (r >> 4) & 15; // run
@@ -536,16 +536,16 @@ int jpeg_decoder::decode_block_prog_ac(short data[64], huffman_table *hac, std::
 }
 
 
-#define MARKER_none  0xff
+constexpr byte marker_none = 0xff;
 // if there's a pending marker from the entropy stream, return that
 // otherwise, fetch from the stream and get a marker. if there's no
 // marker, return 0xff, which is never a valid marker value
 byte jpeg_decoder::get_marker()
 {
    byte x;
-   if (marker != MARKER_none) { x = marker; marker = MARKER_none; return x; }
+   if (marker != marker_none) { x = marker; marker = marker_none; return x; }
    x = s->get8();
-   if (x != 0xff) return MARKER_none;
+   if (x != 0xff) return marker_none;
    while (x == 0xff)
       x = s->get8(); // consume repeated 0xff fill bytes
    return x;
@@ -553,7 +553,7 @@ byte jpeg_decoder::get_marker()
 
 // in each scan, we'll have scan_n components, and the order
 // of the components is specified by order[]
-#define RESTART(x)     ((x) >= 0xd0 && (x) <= 0xd7)
+constexpr bool is_restart(int x) { return x >= 0xd0 && x <= 0xd7; }
 
 // after a restart interval, jpeg_reset the entropy decoder and
 // the dc prediction
@@ -563,7 +563,7 @@ void jpeg_decoder::reset()
    code_buffer = 0;
    nomore = 0;
    img_comp[0].dc_pred = img_comp[1].dc_pred = img_comp[2].dc_pred = img_comp[3].dc_pred = 0;
-   marker = MARKER_none;
+   marker = marker_none;
    todo = restart_interval ? restart_interval : 0x7fffffff;
    eob_run = 0;
    // no more than 1<<31 MCUs if no restart_interal? that's plenty safe,
@@ -588,13 +588,13 @@ int jpeg_decoder::parse_entropy_coded_data()
             for (i=0; i < w; ++i) {
                int ha = img_comp[n].ha;
                if (!decode_block(data, huff_dc+img_comp[n].hd, huff_ac+ha, fast_ac[ha], n, dequant[img_comp[n].tq])) return 0;
-               this->idct_block_kernel(img_comp[n].data+img_comp[n].w2*j*8+i*8, img_comp[n].w2, data);
+               idct_block_kernel(img_comp[n].data+img_comp[n].w2*j*8+i*8, img_comp[n].w2, data);
                // every data block is an MCU, so countdown the restart interval
                if (--todo <= 0) {
                   if (code_bits < 24) grow_buffer_unsafe();
                   // if it's NOT a restart, then just bail, so we get corrupt data
                   // rather than no data
-                  if (!RESTART(marker)) return 1;
+                  if (!is_restart(marker)) return 1;
                   reset();
                }
             }
@@ -616,7 +616,7 @@ int jpeg_decoder::parse_entropy_coded_data()
                         int y2 = (j*img_comp[n].v + y)*8;
                         int ha = img_comp[n].ha;
                         if (!decode_block(data, huff_dc+img_comp[n].hd, huff_ac+ha, fast_ac[ha], n, dequant[img_comp[n].tq])) return 0;
-                        this->idct_block_kernel(img_comp[n].data+img_comp[n].w2*y2+x2, img_comp[n].w2, data);
+                        idct_block_kernel(img_comp[n].data+img_comp[n].w2*y2+x2, img_comp[n].w2, data);
                      }
                   }
                }
@@ -624,7 +624,7 @@ int jpeg_decoder::parse_entropy_coded_data()
                // so now count down the restart interval
                if (--todo <= 0) {
                   if (code_bits < 24) grow_buffer_unsafe();
-                  if (!RESTART(marker)) return 1;
+                  if (!is_restart(marker)) return 1;
                   reset();
                }
             }
@@ -655,7 +655,7 @@ int jpeg_decoder::parse_entropy_coded_data()
                // every data block is an MCU, so countdown the restart interval
                if (--todo <= 0) {
                   if (code_bits < 24) grow_buffer_unsafe();
-                  if (!RESTART(marker)) return 1;
+                  if (!is_restart(marker)) return 1;
                   reset();
                }
             }
@@ -684,7 +684,7 @@ int jpeg_decoder::parse_entropy_coded_data()
                // so now count down the restart interval
                if (--todo <= 0) {
                   if (code_bits < 24) grow_buffer_unsafe();
-                  if (!RESTART(marker)) return 1;
+                  if (!is_restart(marker)) return 1;
                   reset();
                }
             }
@@ -713,7 +713,7 @@ void jpeg_decoder::finish()
             for (i=0; i < w; ++i) {
                short *data = img_comp[n].coeff + 64 * (i + j * img_comp[n].coeff_w);
                jpeg_dequantize(data, dequant[img_comp[n].tq]);
-               this->idct_block_kernel(img_comp[n].data+img_comp[n].w2*j*8+i*8, img_comp[n].w2, data);
+               idct_block_kernel(img_comp[n].data+img_comp[n].w2*j*8+i*8, img_comp[n].w2, data);
             }
          }
       }
@@ -724,7 +724,7 @@ int jpeg_decoder::process_marker(int m)
 {
    int L;
    switch (m) {
-      case MARKER_none: // no marker found
+      case marker_none: // no marker found
          return fail("expected marker","Corrupt JPEG");
 
       case 0xDD: // DRI - specify restart interval
@@ -887,7 +887,6 @@ int jpeg_decoder::free_jpeg_components(int ncomp, int why)
 
 int jpeg_decoder::process_frame_header(int scan)
 {
-   stream *s = this->s;
    int Lf,p,i,q, h_max=1,v_max=1,c;
    Lf = s->get16be();         if (Lf < 11) return fail("bad SOF len","Corrupt JPEG"); // JPEG
    p  = s->get8();            if (p != 8) return fail("only 8-bit","JPEG format not supported: 8-bit only"); // JPEG baseline
@@ -978,34 +977,34 @@ int jpeg_decoder::process_frame_header(int scan)
 }
 
 // use comparisons since in some cases we handle more than one case (e.g. SOF)
-#define DNL(x)         ((x) == 0xdc)
-#define SOI(x)         ((x) == 0xd8)
-#define EOI(x)         ((x) == 0xd9)
-#define SOF(x)         ((x) == 0xc0 || (x) == 0xc1 || (x) == 0xc2)
-#define SOS(x)         ((x) == 0xda)
+constexpr bool is_dnl(int x) { return x == 0xdc; }
+constexpr bool is_soi(int x) { return x == 0xd8; }
+constexpr bool is_eoi(int x) { return x == 0xd9; }
+constexpr bool is_sof(int x) { return x == 0xc0 || x == 0xc1 || x == 0xc2; }
+constexpr bool is_sos(int x) { return x == 0xda; }
 
-#define SOF_progressive(x)   ((x) == 0xc2)
+constexpr bool is_sof_progressive(int x) { return x == 0xc2; }
 
 int jpeg_decoder::decode_jpeg_header(int scan)
 {
    int m;
    jfif = 0;
    app14_color_transform = -1; // valid values are 0,1,2
-   marker = MARKER_none; // initialize cached marker to empty
+   marker = marker_none; // initialize cached marker to empty
    m = get_marker();
-   if (!SOI(m)) return fail("no SOI","Corrupt JPEG");
+   if (!is_soi(m)) return fail("no SOI","Corrupt JPEG");
    if (scan == scan_type) return 1;
    m = get_marker();
-   while (!SOF(m)) {
+   while (!is_sof(m)) {
       if (!process_marker(m)) return 0;
       m = get_marker();
-      while (m == MARKER_none) {
+      while (m == marker_none) {
          // some files have extra padding after their blocks, so ok, we'll scan
          if (s->at_eof()) return fail("no SOF", "Corrupt JPEG");
          m = get_marker();
       }
    }
-   progressive = SOF_progressive(m);
+   progressive = is_sof_progressive(m);
    if (!process_frame_header(scan)) return 0;
    return 1;
 }
@@ -1017,7 +1016,7 @@ byte jpeg_decoder::skip_jpeg_junk_at_end()
    while (!s->at_eof()) {
       byte x = s->get8();
       while (x == 0xff) { // might be a marker
-         if (s->at_eof()) return MARKER_none;
+         if (s->at_eof()) return marker_none;
          x = s->get8();
          if (x != 0x00 && x != 0xff) {
             // not a stuffed zero or lead-in to another marker, looks
@@ -1029,7 +1028,7 @@ byte jpeg_decoder::skip_jpeg_junk_at_end()
          // repeated 0xff keeps trying to read the next byte of the marker.
       }
    }
-   return MARKER_none;
+   return marker_none;
 }
 
 // decode image to YCbCr format
@@ -1043,18 +1042,18 @@ int jpeg_decoder::decode_jpeg_image()
    restart_interval = 0;
    if (!decode_jpeg_header(scan_load)) return 0;
    m = get_marker();
-   while (!EOI(m)) {
-      if (SOS(m)) {
+   while (!is_eoi(m)) {
+      if (is_sos(m)) {
          if (!process_scan_header()) return 0;
          if (!parse_entropy_coded_data()) return 0;
-         if (this->marker == MARKER_none ) {
-         this->marker = skip_jpeg_junk_at_end();
+         if (marker == marker_none) {
+            marker = skip_jpeg_junk_at_end();
             // if we reach eof without hitting a marker, get_marker() below will fail and we'll eventually return 0
          }
          m = get_marker();
-         if (RESTART(m))
+         if (is_restart(m))
             m = get_marker();
-      } else if (DNL(m)) {
+      } else if (is_dnl(m)) {
          int Ld = s->get16be();
          std::uint32_t NL = s->get16be();
          if (Ld != 4) return fail("bad DNL len", "Corrupt JPEG");
@@ -1073,15 +1072,15 @@ int jpeg_decoder::decode_jpeg_image()
 // set up the kernels
 void jpeg_decoder::setup_jpeg()
 {
-   this->idct_block_kernel = idct_block;
-   this->YCbCr_to_RGB_kernel = YCbCr_to_RGB_row;
-   this->resample_row_hv_2_kernel = resample_row_hv_2;
+   idct_block_kernel = idct_block;
+   YCbCr_to_RGB_kernel = YCbCr_to_RGB_row;
+   resample_row_hv_2_kernel = resample_row_hv_2;
 
 #ifdef STBI_SSE2
    if (sse2_available()) {
-      this->idct_block_kernel = idct_simd;
-      this->YCbCr_to_RGB_kernel = YCbCr_to_RGB_simd;
-      this->resample_row_hv_2_kernel = resample_row_hv_2_simd;
+      idct_block_kernel = idct_simd;
+      YCbCr_to_RGB_kernel = YCbCr_to_RGB_simd;
+      resample_row_hv_2_kernel = resample_row_hv_2_simd;
    }
 #endif
 
@@ -1093,7 +1092,7 @@ void jpeg_decoder::cleanup_jpeg()
    free_jpeg_components(s->img_n, 0);
 }
 
-typedef struct
+struct resample_filter
 {
    resample_row_func resample;
    byte *line0,*line1;
@@ -1101,7 +1100,7 @@ typedef struct
    int w_lores; // horizontal pixels pre-expansion
    int ystep;   // how far through vertical expansion we are
    int ypos;    // which pre-expansion row we're on
-} resample_filter;
+};
 byte * jpeg_decoder::load_jpeg_image(int *out_x, int *out_y, int *comp, int req_comp)
 {
    int n, decode_n, is_rgb;
@@ -1154,7 +1153,7 @@ byte * jpeg_decoder::load_jpeg_image(int *out_x, int *out_y, int *comp, int req_
          if      (r->hs == 1 && r->vs == 1) r->resample = resample_row_1;
          else if (r->hs == 1 && r->vs == 2) r->resample = resample_row_v_2;
          else if (r->hs == 2 && r->vs == 1) r->resample = resample_row_h_2;
-         else if (r->hs == 2 && r->vs == 2) r->resample = this->resample_row_hv_2_kernel;
+         else if (r->hs == 2 && r->vs == 2) r->resample = resample_row_hv_2_kernel;
          else                               r->resample = resample_row_generic;
       }
 
@@ -1191,7 +1190,7 @@ byte * jpeg_decoder::load_jpeg_image(int *out_x, int *out_y, int *comp, int req_
                      out += n;
                   }
                } else {
-                  this->YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], s->img_x, n);
+                  YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], s->img_x, n);
                }
             } else if (s->img_n == 4) {
                if (app14_color_transform == 0) { // CMYK
@@ -1204,7 +1203,7 @@ byte * jpeg_decoder::load_jpeg_image(int *out_x, int *out_y, int *comp, int req_
                      out += n;
                   }
                } else if (app14_color_transform == 2) { // YCCK
-                  this->YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], s->img_x, n);
+                  YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], s->img_x, n);
                   for (i=0; i < s->img_x; ++i) {
                      byte m = coutput[3][i];
                      out[0] = blinn_8x8(255 - out[0], m);
@@ -1213,7 +1212,7 @@ byte * jpeg_decoder::load_jpeg_image(int *out_x, int *out_y, int *comp, int req_
                      out += n;
                   }
                } else { // YCbCr + alpha?  Ignore the fourth channel for now
-                  this->YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], s->img_x, n);
+                  YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], s->img_x, n);
                }
             } else
                for (i=0; i < s->img_x; ++i) {

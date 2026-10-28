@@ -186,12 +186,6 @@
          and out (STBIR_RGBA_PM, etc) much faster than both of these premultiplied
          options.
 
-      PIXEL LAYOUT CONVERSION
-         The resizer can convert from some pixel layouts to others. When using the
-         stbir_set_pixel_layouts(), you can, for example, specify STBIR_RGBA
-         on input, and STBIR_ARGB on output, and it will re-organize the channels
-         during the resize. Currently, you can only convert between two pixel
-         layouts with the same number of channels.
 
       DETERMINISM
          We commit to being deterministic (from x64 to ARM to scalar to SIMD, etc).
@@ -600,27 +594,13 @@ STBIRDEF void stbir_resize_init( STBIR_RESIZE * resize,
                                  stbir_pixel_layout pixel_layout, stbir_datatype data_type );
 
 //===============================================================
-// You can update these parameters any time after resize_init and there is no cost
-//--------------------------------
-
-STBIRDEF void stbir_set_pixel_callbacks( STBIR_RESIZE * resize, stbir_input_callback * input_cb, stbir_output_callback * output_cb );   // no callbacks by default
-STBIRDEF void stbir_set_user_data( STBIR_RESIZE * resize, void * user_data );                                               // pass back STBIR_RESIZE* by default
-
-//===============================================================
-
-
-//===============================================================
 // If you call any of these functions, you will trigger a sampler rebuild!
 //--------------------------------
 
-STBIRDEF int stbir_set_pixel_layouts( STBIR_RESIZE * resize, stbir_pixel_layout input_pixel_layout, stbir_pixel_layout output_pixel_layout );  // sets new buffer layouts
 STBIRDEF int stbir_set_edgemodes( STBIR_RESIZE * resize, stbir_edge horizontal_edge, stbir_edge vertical_edge );       // CLAMP by default
 
 STBIRDEF int stbir_set_filters( STBIR_RESIZE * resize, stbir_filter horizontal_filter, stbir_filter vertical_filter ); // STBIR_DEFAULT_FILTER_UPSAMPLE/DOWNSAMPLE by default
 
-STBIRDEF int stbir_set_pixel_subrect( STBIR_RESIZE * resize, int subx, int suby, int subw, int subh );        // sets both sub-regions (full regions by default)
-STBIRDEF int stbir_set_input_subrect( STBIR_RESIZE * resize, double s0, double t0, double s1, double t1 );    // sets input sub-region (full region by default)
-STBIRDEF int stbir_set_output_pixel_subrect( STBIR_RESIZE * resize, int subx, int suby, int subw, int subh ); // sets output sub-region (full region by default)
 
 // when inputting AND outputting non-premultiplied alpha pixels, we use a slower but higher quality technique
 //   that fills the zero alpha pixel's RGB values with something plausible.  If you don't care about areas of
