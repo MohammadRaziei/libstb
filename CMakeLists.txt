@@ -24,8 +24,8 @@ option(STB_BUILD_PYTHON "Build Python bindings" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 
 # --- libstb C++ core ---
-# stb headers are vendored (committed) under src/third_party/stb and are only
-# ever included from the sources under src/, never from a public include/ header.
+# There is no stb header in the tree any more: the decoders, encoders, font reader and resizer are
+# libstb's own code derived from stb (see NOTICE.md), and no public include/ header includes any of it.
 # STATIC (unlike httpp's SHARED core): stb is header-only, so there is nothing
 # to gain from a DLL, and each stb header is compiled with STB_*_STATIC so no
 # stbi_* symbol leaks out to consumers.
@@ -71,9 +71,6 @@ target_include_directories(stb_core
 # that compiles them itself (tests/cpp does, to attach coverage flags) gets exactly the same
 # settings as stb_core.
 function(libstb_apply_core_build_settings target)
-    # SYSTEM: vendored headers we don't control - their internal warnings are not
-    # ours to fix under our own -Wall/-Wextra/-W4.
-    target_include_directories(${target} SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/src/third_party/stb)
     # Internal headers are included relative to src/ ("image/simd.hpp", "font/shaper/gsub.hpp").
     target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
 

@@ -81,14 +81,15 @@ next to your own copy of stb.
 
 ## What is from stb, and what is not
 
-libstb still uses these stb modules, vendored in `src/third_party/` (no submodules). Everything else is
-libstb's own code: the encoders and zlib compressor (`src/codec/`), and the font reader, glyph rasterizer
-and atlas packer (`src/font/truetype/`, ported from `stb_truetype` and `stb_rect_pack` with identical output):
+No stb header is vendored any more: libstb is stb restructured into libstb's own code, with identical output (see
+`NOTICE.md` for the lineage and the license):
 
-| stb module | used for |
-| :--- | :--- |
-| `stb_image` | decoding (PNG, JPEG, BMP, TGA, GIF, ...) |
-| `stb_image_resize2` | resizing, all filters |
+| stb module | became | used for |
+| :--- | :--- | :--- |
+| `stb_image` | `src/codec/decode/` (one file per format, classes for the stateful ones) | decoding PNG, JPEG, BMP, TGA, GIF, ... |
+| `stb_image_write` | `src/codec/` (`png`, `jpeg`, `bmp_tga`, `deflate`) | encoding, the zlib compressor |
+| `stb_image_resize2` | `src/image/resize/` (split by topic) | resizing, all filters |
+| `stb_truetype`, `stb_rect_pack` | `src/font/truetype/` | font metrics, glyphs, atlases |
 
 What we changed on top, for speed and for a safer, more convenient API:
 
@@ -96,7 +97,7 @@ What we changed on top, for speed and for a safer, more convenient API:
   (derived from `stb_image_write`, which is no longer vendored): a PNG deflate with 4-byte hash
   chains, lazy matching and dynamic Huffman blocks (within about 1% of zlib level 6 in size at
   roughly twice its speed) and a faster JPEG encoder (buffered bit writer, vectorisable DCT, SSE2
-  colour conversion). The two vendored stb headers are byte-for-byte upstream.
+  colour conversion). Everything is libstb's own code now.
 - **SIMD where it pays.** `convert`, `composite` and `flatten` have AVX2, baseline SIMD and
   scalar builds that give identical results; the best one is picked at run time.
 - **No hidden copies.** Decoded buffers are adopted, not copied; arrays and DLPack tensors are
@@ -105,7 +106,7 @@ What we changed on top, for speed and for a safer, more convenient API:
   `zlib_compress` and `zlib_decompress` (any bytes-like object in, bytes out), with a bounded
   output so a zip bomb is a `LimitError`. They interoperate with python's `zlib`. Compression
   was 1.2x to 1.9x faster than zlib level 6 at 0.4% to 3.3% larger output on our samples;
-  decompression is stb_image's and is **not** faster than zlib (about 2.5x slower on very
+  decompression is the stb_image-derived inflater and is **not** faster than zlib (about 2.5x slower on very
   compressible text), so use zlib if inflate speed is what you need.
 - **Editing stb does not have.** Crop, pad, flips, rotation, thumbnail, channel conversion,
   alpha compositing, EXIF orientation, resize filters by name, and a font-free text size
@@ -140,5 +141,4 @@ Options: `STB_BUILD_TESTS`, `STB_BUILD_PYTHON`, `STB_BUILD_DOCS`. Targets: `stb_
 
 ## License
 
-MIT for libstb. The vendored stb headers are MIT / public domain (see
-`src/third_party/README.md`).
+MIT for libstb. The code derived from stb is MIT / public domain (see `NOTICE.md`).

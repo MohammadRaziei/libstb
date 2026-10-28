@@ -283,8 +283,8 @@ say so; nothing in it is hard-coded.
 
 ## What these benchmarks do not say
 
-- **Security.** stb is written for trusted input. Its own readme is
-  explicit that stb_image and stb_truetype are not hardened against
+- **Security.** stb is written for trusted input. The stb code libstb
+  derives from is explicit that stb_image and stb_truetype are not hardened against
   malicious files, while libjpeg-turbo, libpng and FreeType are
   actively fuzzed. That is a real difference between libstb and every
   competitor here that no speed number captures. If you decode

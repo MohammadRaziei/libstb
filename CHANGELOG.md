@@ -31,6 +31,16 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   have a recursion limit. Glyph bitmaps, metrics, kerning and atlases are byte-for-byte what stb
   produced on 150 real fonts (TrueType, CFF, collections).
 
+- The decoders are libstb's own code as well: `stb_image.h` is split into `src/codec/decode/`, one file per
+  format, with `stream`, `inflater`, `jpeg_decoder`, `png_decoder` and `gif_decoder` classes; the callback
+  IO, 16-bit/linear loaders and unused setters are removed. 23680 decodes (every format, damaged files too)
+  give the same pixels or the same error as the stb build.
+
+- `stb_image_resize2.h` is split by topic into `src/image/resize/` (api, config, srgb, simd, filters,
+  coefficients, coders, decode, horizontal, vertical, scanline, sampler, engine, and the three template
+  `.inl` files that upstream produced by including its own header again). `src/third_party/` is gone: no
+  stb header is vendored any more, and `NOTICE.md` records the lineage and the license.
+
 ### Added
 - Round-trip tests (`tests/python/test_roundtrip.py`, `tests/cpp/test_codec.cpp`) and two
   development checks that are not tests: `tests/tools/snapshot.py` (byte-for-byte comparison of

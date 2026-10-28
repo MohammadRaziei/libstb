@@ -6,10 +6,22 @@
 #include <stdexcept>
 #include <string>
 
-// STATIC: internal linkage for every stbir_* function (see image.cpp).
+// The resizer engine, split by topic into image/resize/ (see the README there). STATIC gives every
+// stbir_* function internal linkage, so none of them leaves the library.
 #define STB_IMAGE_RESIZE_STATIC
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "stb_image_resize2.h"
+#include "image/resize/api.hpp"
+#include "image/resize/config.hpp"
+#include "image/resize/srgb.hpp"
+#include "image/resize/simd.hpp"
+#include "image/resize/filters.hpp"
+#include "image/resize/coefficients.hpp"
+#include "image/resize/coders.hpp"
+#include "image/resize/decode.hpp"
+#include "image/resize/horizontal.hpp"
+#include "image/resize/vertical.hpp"
+#include "image/resize/scanline.hpp"
+#include "image/resize/sampler.hpp"
+#include "image/resize/engine.hpp"
 
 namespace stb {
 namespace {

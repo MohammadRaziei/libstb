@@ -9,7 +9,7 @@ namespace stb {
 // zlib streams (RFC 1950: a 2-byte header, deflate data, an Adler-32 trailer): what PNG, HTTP
 // "deflate", many file formats and python's zlib module speak. Compression is the compressor
 // libstb uses for PNG output (a rewrite of stb's: hash-chain LZ77 with lazy matching, dynamic
-// Huffman blocks); decompression is stb_image's inflate. Both sit behind a bounded,
+// Huffman blocks); decompression is the inflater of src/codec/decode (from stb_image). Both sit behind a bounded,
 // exception-based interface and interoperate with zlib itself: anything zlib can read,
 // `zlib_compress` produces, and anything zlib produces, `zlib_decompress` reads.
 //

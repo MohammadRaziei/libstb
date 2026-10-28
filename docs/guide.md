@@ -199,7 +199,8 @@ An unknown name raises `ValueError` listing the valid ones. There is no
 **Fonts: prefer trusted files.** libstb's font reader (`src/font/truetype/`) checks every read against
 the file's bounds and caps composite-glyph recursion, so a damaged font gives wrong glyphs rather than
 out-of-range reads, but unlike `stb_image` it has not been fuzzed. Load your own or vetted system fonts
-rather than user uploads. (Images: `stb_image` is fuzzed, and libstb adds dimension and size limits.)
+rather than user uploads. (Images: the decoders are stb_image's algorithms, which are fuzzed upstream, and libstb adds dimension and
+size limits; the restructuring kept their output identical on a 640-file corpus including damaged files.)
 
 **Right-to-left text (Persian, Arabic, Urdu, Hebrew).** `draw_text`, `measure`, `render` and the
 canvas shape and reorder it for you: pass the text in the order you type it, no pre-processing with
@@ -361,12 +362,13 @@ include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single sourc
 include/stb/*.hpp           public API (error, util, color, image, font, shaping, draw, zlib); never includes stb
 src/util/                   file I/O helpers, UTF-8
 src/image/                  image, editing ops, resize, EXIF, SIMD kernels and their dispatch
-src/codec/                  every format: decode (stb_image), PNG / JPEG / BMP / TGA encoders, deflate
+src/codec/                  every format: decode/ (one file per format, from stb_image), PNG / JPEG / BMP / TGA
+                            encoders, deflate
 src/zlib/                   the public zlib API (on top of src/codec)
 src/font/                   fonts, text rendering, atlases; truetype/ (font file, CFF, rasterizer, packer) and
                             shaper/ (arabic, bidi, gsub, otl)
 src/draw/                   shapes and colours
-src/third_party/stb/        two vendored stb headers (stb_image, stb_image_resize2), byte-for-byte upstream
+src/image/resize/           the resizer engine, split by topic from stb_image_resize2 (see its README)
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package
 cmake/                      DynamicVersion, Startup, Optimize, package config
 tests/{cpp,python,cmake}    unit tests + find_package consumer test, all run by ctest
@@ -398,5 +400,4 @@ see `.github/workflows/wheels.yml`. Free-threaded builds are not supported.
 
 ## License
 
-MIT for libstb. The vendored stb headers are MIT / public domain (see
-`src/third_party/README.md`).
+MIT for libstb. The code derived from stb is MIT / public domain (see `NOTICE.md`).
