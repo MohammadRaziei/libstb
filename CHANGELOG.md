@@ -30,9 +30,11 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   `std::move` calls (on the trivially copyable `shape`, and in the C++17 aliasing `shared_ptr`
   constructor, which has no moving form) are gone. No behavior change.
 - Naming: data members of the stateful decoder classes (`jpeg_decoder`, `png_decoder`, `gif_decoder`,
-  `inflater`) end in an underscore like the rest of the project (`s_`, `out_`, `code_bits_`), so a member
+  `inflater`) end in an underscore like the rest of the project (`stream_`, `out_`, `code_bits_`), so a member
   is visible without `this->`. `huffman_table` and `zhuffman` are plain structs. The renames were made
   with libclang (every use of the field, nothing by text search); 23,680 decoder cases are unchanged.
+  One-letter and cryptic members got real names: `s_` became `stream_`, and in the GIF decoder `w_`,
+  `h_`, `pal_` and `lpal_` became `width_`, `height_`, `palette_` and `local_palette_`.
 - API: `image::convert`, `flatten`, `orient`, `rotate90` and `pad` have `&&` overloads. When the call
   changes nothing (same channel count, no alpha to flatten, orientation 1, whole turns, no border) a
   temporary or `std::move(img)` hands its pixels back instead of copying them; every other case and

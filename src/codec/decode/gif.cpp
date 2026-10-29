@@ -15,13 +15,13 @@ struct gif_lzw
 
 class gif_decoder {
 public:
-   int w_,h_;
+   int width_,height_;
    byte *out_;                 // output buffer (always 4 components)
    byte *background_;          // The current "background" as far as a gif is concerned
    byte *history_;
    int flags_, bgindex_, ratio_, transparent_, eflags_;
-   byte  pal_[256][4];
-   byte lpal_[256][4];
+   byte  palette_[256][4];
+   byte local_palette_[256][4];
    gif_lzw codes_[8192];
    byte *color_table_;
    int parse_, step_;
@@ -75,22 +75,22 @@ static int gif_header(stream *s, gif_decoder *g, int *comp, int is_info)
    if (s->get8() != 'a')                return fail("not GIF", "Corrupt GIF");
 
    failure_message = "";
-   g->w_ = s->get16le();
-   g->h_ = s->get16le();
+   g->width_ = s->get16le();
+   g->height_ = s->get16le();
    g->flags_ = s->get8();
    g->bgindex_ = s->get8();
    g->ratio_ = s->get8();
    g->transparent_ = -1;
 
-   if (g->w_ > max_dimensions) return fail("too large","Very large image (corrupt?)");
-   if (g->h_ > max_dimensions) return fail("too large","Very large image (corrupt?)");
+   if (g->width_ > max_dimensions) return fail("too large","Very large image (corrupt?)");
+   if (g->height_ > max_dimensions) return fail("too large","Very large image (corrupt?)");
 
    if (comp != 0) *comp = 4;  // can't actually tell whether it's 3 or 4 until we parse the comments
 
    if (is_info) return 1;
 
    if (g->flags_ & 0x80)
-      gif_parse_colortable(s,g->pal_, 2 << (g->flags_ & 7), -1);
+      gif_parse_colortable(s,g->palette_, 2 << (g->flags_ & 7), -1);
 
    return 1;
 }
@@ -104,8 +104,8 @@ static int gif_info_raw(stream *s, int *x, int *y, int *comp)
       s->rewind();
       return 0;
    }
-   if (x) *x = g->w_;
-   if (y) *y = g->h_;
+   if (x) *x = g->width_;
+   if (y) *y = g->height_;
    std::free(g);
    return 1;
 }
@@ -246,9 +246,9 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
    first_frame = 0;
    if (g->out_ == 0) {
       if (!gif_header(s, g, comp,0)) return 0; // failure_message set by gif_header
-      if (!mad3sizes_valid(4, g->w_, g->h_, 0))
+      if (!mad3sizes_valid(4, g->width_, g->height_, 0))
          return fail_bytes("too large", "GIF image is too large");
-      pcount = g->w_ * g->h_;
+      pcount = g->width_ * g->height_;
       g->out_ = (byte *) alloc(4 * pcount);
       g->background_ = (byte *) alloc(4 * pcount);
       g->history_ = (byte *) alloc(pcount);
@@ -265,7 +265,7 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
    } else {
       // second frame - how do we dispose of the previous one?
       dispose = (g->eflags_ & 0x1C) >> 2;
-      pcount = g->w_ * g->h_;
+      pcount = g->width_ * g->height_;
 
       if ((dispose == 3) && (two_back == 0)) {
          dispose = 2; // if I don't have an image to revert back to, default to the old background
@@ -292,11 +292,11 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
       }
 
       // background is what out is after the undoing of the previou frame;
-      memcpy( g->background_, g->out_, 4 * g->w_ * g->h_ );
+      memcpy( g->background_, g->out_, 4 * g->width_ * g->height_ );
    }
 
    // clear my history;
-   memset( g->history_, 0x00, g->w_ * g->h_ );        // pixels that were affected previous frame
+   memset( g->history_, 0x00, g->width_ * g->height_ );        // pixels that were affected previous frame
 
    for (;;) {
       int tag = s->get8();
@@ -310,10 +310,10 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
             y = s->get16le();
             w = s->get16le();
             h = s->get16le();
-            if (((x + w) > (g->w_)) || ((y + h) > (g->h_)))
+            if (((x + w) > (g->width_)) || ((y + h) > (g->height_)))
                return fail_bytes("bad Image Descriptor", "Corrupt GIF");
 
-            g->line_size_ = g->w_ * 4;
+            g->line_size_ = g->width_ * 4;
             g->start_x_ = x * 4;
             g->start_y_ = y * g->line_size_;
             g->max_x_   = g->start_x_ + w * 4;
@@ -339,10 +339,10 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
             }
 
             if (g->lflags_ & 0x80) {
-               gif_parse_colortable(s,g->lpal_, 2 << (g->lflags_ & 7), g->eflags_ & 0x01 ? g->transparent_ : -1);
-               g->color_table_ = (byte *) g->lpal_;
+               gif_parse_colortable(s,g->local_palette_, 2 << (g->lflags_ & 7), g->eflags_ & 0x01 ? g->transparent_ : -1);
+               g->color_table_ = (byte *) g->local_palette_;
             } else if (g->flags_ & 0x80) {
-               g->color_table_ = (byte *) g->pal_;
+               g->color_table_ = (byte *) g->palette_;
             } else
                return fail_bytes("missing color table", "Corrupt GIF");
 
@@ -350,13 +350,13 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
             if (!o) return NULL;
 
             // if this was the first frame,
-            pcount = g->w_ * g->h_;
+            pcount = g->width_ * g->height_;
             if (first_frame && (g->bgindex_ > 0)) {
                // if first frame, any pixel not drawn to gets the background color
                for (pi = 0; pi < pcount; ++pi) {
                   if (g->history_[pi] == 0) {
-                     g->pal_[g->bgindex_][3] = 255; // just in case it was made transparent, undo that; It will be reset next frame if need be;
-                     memcpy( &g->out_[pi * 4], &g->pal_[g->bgindex_], 4 );
+                     g->palette_[g->bgindex_][3] = 255; // just in case it was made transparent, undo that; It will be reset next frame if need be;
+                     memcpy( &g->out_[pi * 4], &g->palette_[g->bgindex_], 4 );
                   }
                }
             }
@@ -376,12 +376,12 @@ static byte *gif_load_next(stream *s, gif_decoder *g, int *comp, int req_comp, b
 
                   // unset old transparent
                   if (g->transparent_ >= 0) {
-                     g->pal_[g->transparent_][3] = 255;
+                     g->palette_[g->transparent_][3] = 255;
                   }
                   if (g->eflags_ & 0x01) {
                      g->transparent_ = s->get8();
                      if (g->transparent_ >= 0) {
-                        g->pal_[g->transparent_][3] = 0;
+                        g->palette_[g->transparent_][3] = 0;
                      }
                   } else {
                      // don't need transparent
@@ -420,13 +420,13 @@ void * gif::load(stream *s, int *x, int *y, int *comp, int req_comp, result_info
    u = gif_load_next(s, &g, comp, req_comp, 0);
    if (u == (byte *) s) u = 0;  // end of animated gif marker
    if (u) {
-      *x = g.w_;
-      *y = g.h_;
+      *x = g.width_;
+      *y = g.height_;
 
       // moved conversion to after successful load so that the same
       // can be done for multiple frames.
       if (req_comp && req_comp != 4)
-         u = convert_format(u, 4, req_comp, g.w_, g.h_);
+         u = convert_format(u, 4, req_comp, g.width_, g.height_);
    } else if (g.out_) {
       // if there was an error and we allocated an image buffer, free it!
       std::free(g.out_);
