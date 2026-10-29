@@ -133,6 +133,19 @@ bool in_ranges(const code_range* first, const code_range* last, char32_t cp) {
     return it != last && it->lo <= cp;
 }
 
+// Does a character of this type join to the one that follows it (forward) or to the one that
+// precedes it (backward)?
+bool joins_forward(join_type t) { return t == join_type::dual || t == join_type::causing; }
+bool joins_backward(join_type t) { return t == join_type::dual || t == join_type::right || t == join_type::causing; }
+
+// The form of a joining letter, given whether its neighbours join towards it.
+form pick_form(join_type t, bool before, bool after) {
+    if (t == join_type::right) return before ? form::fina : form::isol;
+    if (t != join_type::dual) return form::none;
+    if (before) return after ? form::medi : form::fina;
+    return after ? form::init : form::isol;
+}
+
 }  // namespace
 
 bool is_mark(char32_t cp) { return in_ranges(std::begin(mark_ranges), std::end(mark_ranges), cp); }
@@ -197,23 +210,16 @@ std::vector<form> joining_forms(std::u32string_view s) {
     bool carry = false;
     for (std::size_t i = 0; i < n; ++i) {
         from_before[i] = carry;
-        if (t[i] != join_type::transparent) carry = t[i] == join_type::dual || t[i] == join_type::causing;
+        if (t[i] != join_type::transparent) carry = joins_forward(t[i]);
     }
     carry = false;
     for (std::size_t i = n; i-- > 0;) {
         from_after[i] = carry;
-        if (t[i] != join_type::transparent)
-            carry = t[i] == join_type::dual || t[i] == join_type::right || t[i] == join_type::causing;
+        if (t[i] != join_type::transparent) carry = joins_backward(t[i]);
     }
 
     std::vector<form> out(n, form::none);
-    for (std::size_t i = 0; i < n; ++i) {
-        if (t[i] != join_type::dual && t[i] != join_type::right) continue;
-        const bool before = from_before[i];
-        const bool after = t[i] == join_type::dual && from_after[i];
-        if (t[i] == join_type::dual) out[i] = before ? (after ? form::medi : form::fina) : (after ? form::init : form::isol);
-        else out[i] = before ? form::fina : form::isol;
-    }
+    for (std::size_t i = 0; i < n; ++i) out[i] = pick_form(t[i], from_before[i], from_after[i]);
     return out;
 }
 

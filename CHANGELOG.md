@@ -17,6 +17,12 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   decoders, local macros became `constexpr` values and inline functions (`zfast_bits`, `fast_bits`,
   `marker_none`, `is_restart`, `is_sof`, `png_type`, `div4`, `float2fixed`, `hdr_buflen`, ...), and
   `typedef` became `using` or a plain `struct`. Decoded output is unchanged (23,680 decoder cases).
+- Shaper complexity (clang-tidy `readability-function-cognitive-complexity`, no warnings left in
+  `src/font/shaper`): `bidi::classify_wide` reads an ordered range table, `arabic::joining_forms` uses
+  small join helpers, and the GSUB context engine splits `try_rule` into `match_input`, `match_side`
+  and `run_records`, with one `read_rule` instead of two copies of the rule layout code. Verified over
+  every code point (classification, mirroring, joining type), 200,000 random Arabic strings
+  (forms, bidi order and levels) and new format 2 GSUB tests that also pass on the old code.
 - resize: declarations of functions that no longer exist (`stbir_set_pixel_callbacks`,
   `stbir_set_user_data`, `stbir_set_pixel_layouts`, the subrect setters), the unused
   `stbir_quick_resize_helper` and the documentation of the removed setters are deleted, which also

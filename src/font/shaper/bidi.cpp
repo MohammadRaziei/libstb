@@ -44,24 +44,45 @@ cls classify_arabic_block(char32_t cp) {
     return cls::AL;
 }
 
+struct cls_range {
+    char32_t lo, hi;
+    cls value;
+};
+
+// Ranges from U+0100 up, in priority order: the first one that contains the code point wins
+// (the Persian ornate parentheses must come before the Arabic presentation forms around them).
+// U+0600..U+06FF is handled apart (classify_arabic_block) and nonspacing marks come first.
+constexpr cls_range wide_ranges[] = {
+    {0x200E, 0x200E, cls::L},    // LRM
+    {0x200F, 0x200F, cls::R},    // RLM
+    {0x0590, 0x05FF, cls::R},    // Hebrew
+    {0x0700, 0x07BF, cls::AL},   // Syriac, Arabic supplement
+    {0x07C0, 0x089F, cls::R},    // NKo, Samaritan, Mandaic
+    {0x08A0, 0x08FF, cls::AL},   // Arabic extended-A
+    {0xFB1D, 0xFB4F, cls::R},    // Hebrew presentation forms
+    {0xFD3E, 0xFD3F, cls::ON},   // ornate parentheses
+    {0xFB50, 0xFDFF, cls::AL},   // Arabic presentation forms-A
+    {0xFE70, 0xFEFE, cls::AL},   // Arabic presentation forms-B
+    {0x2000, 0x200A, cls::WS},   // spaces
+    {0x2028, 0x2028, cls::WS},
+    {0x205F, 0x205F, cls::WS},
+    {0x3000, 0x3000, cls::WS},
+    {0x2030, 0x2034, cls::ET},   // per mille, prime
+    {0x20A0, 0x20CF, cls::ET},   // currency symbols
+    {0x2010, 0x2027, cls::ON},   // punctuation
+    {0x2035, 0x205E, cls::ON},
+    {0x2190, 0x2BFF, cls::ON},   // arrows, math, symbols
+    {0x3001, 0x303F, cls::ON},   // CJK punctuation
+    {0xFE30, 0xFE6F, cls::ON},
+    {0xFF01, 0xFF0F, cls::ON},   // fullwidth punctuation
+};
+
 // Everything from U+0100 up: the right-to-left scripts, general punctuation and the rest (left to right).
 cls classify_wide(char32_t cp) {
     if (is_nsm(cp)) return cls::NSM;
-    if (cp == 0x200E) return cls::L;  // LRM
-    if (cp == 0x200F) return cls::R;  // RLM
-    if (cp >= 0x0590 && cp <= 0x05FF) return cls::R;
     if (cp >= 0x0600 && cp <= 0x06FF) return classify_arabic_block(cp);
-    if (cp >= 0x0700 && cp <= 0x07BF) return cls::AL;
-    if (cp >= 0x07C0 && cp <= 0x089F) return cls::R;
-    if (cp >= 0x08A0 && cp <= 0x08FF) return cls::AL;
-    if (cp >= 0xFB1D && cp <= 0xFB4F) return cls::R;
-    if (cp == 0xFD3E || cp == 0xFD3F) return cls::ON;
-    if ((cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFE)) return cls::AL;
-    if ((cp >= 0x2000 && cp <= 0x200A) || cp == 0x2028 || cp == 0x205F || cp == 0x3000) return cls::WS;
-    if ((cp >= 0x2030 && cp <= 0x2034) || (cp >= 0x20A0 && cp <= 0x20CF)) return cls::ET;
-    if ((cp >= 0x2010 && cp <= 0x2027) || (cp >= 0x2035 && cp <= 0x205E) || (cp >= 0x2190 && cp <= 0x2BFF) ||
-        (cp >= 0x3001 && cp <= 0x303F) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF01 && cp <= 0xFF0F)) {
-        return cls::ON;
+    for (const cls_range& r : wide_ranges) {
+        if (cp >= r.lo && cp <= r.hi) return r.value;
     }
     return cls::L;
 }

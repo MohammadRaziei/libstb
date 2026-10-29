@@ -187,6 +187,81 @@ bytes chain1(unsigned first, const std::vector<unsigned>& backtrack, const std::
     return b;
 }
 
+// A class definition (format 2): ranges of glyphs (first, last, class).
+struct class_range {
+    unsigned first, last, klass;
+};
+bytes class_def2(const std::vector<class_range>& ranges) {
+    bytes b;
+    u16(b, 2);
+    u16(b, unsigned(ranges.size()));
+    for (const class_range& r : ranges) {
+        u16(b, r.first);
+        u16(b, r.last);
+        u16(b, r.klass);
+    }
+    return b;
+}
+
+// Context, format 2 (type 5): the class of the first glyph picks rule set `set_index`, which holds
+// one rule: the classes of the glyphs after the first, then records.
+bytes context2(unsigned first, const std::vector<class_range>& classes, unsigned set_index,
+               const std::vector<unsigned>& rest, const std::vector<record>& recs) {
+    const bytes cov = coverage({first});
+    const bytes cd = class_def2(classes);
+    const std::size_t head = 8 + 2 * (set_index + 1);
+    bytes b;
+    u16(b, 2);
+    u16(b, unsigned(head));                   // coverage
+    u16(b, unsigned(head + cov.size()));      // class definition
+    u16(b, set_index + 1);                    // rule set count
+    for (unsigned i = 0; i <= set_index; ++i) u16(b, i == set_index ? unsigned(head + cov.size() + cd.size()) : 0);
+    append(b, cov);
+    append(b, cd);
+    u16(b, 1);  // one rule
+    u16(b, 4);  // rule offset, from the rule set
+    u16(b, unsigned(rest.size() + 1));
+    u16(b, unsigned(recs.size()));
+    for (unsigned k : rest) u16(b, k);
+    for (const record& r : recs) {
+        u16(b, r.seq);
+        u16(b, r.lookup);
+    }
+    return b;
+}
+
+// Chaining context, format 2 (type 6): the same class definition serves the backtrack, input and
+// lookahead sequences.
+bytes chain2(unsigned first, const std::vector<class_range>& classes, unsigned set_index,
+             const std::vector<unsigned>& backtrack, const std::vector<unsigned>& rest,
+             const std::vector<unsigned>& lookahead, const std::vector<record>& recs) {
+    const bytes cov = coverage({first});
+    const bytes cd = class_def2(classes);
+    const std::size_t head = 12 + 2 * (set_index + 1);
+    bytes b;
+    u16(b, 2);
+    u16(b, unsigned(head));  // coverage
+    for (int i = 0; i < 3; ++i) u16(b, unsigned(head + cov.size()));  // backtrack, input, lookahead classes
+    u16(b, set_index + 1);
+    for (unsigned i = 0; i <= set_index; ++i) u16(b, i == set_index ? unsigned(head + cov.size() + cd.size()) : 0);
+    append(b, cov);
+    append(b, cd);
+    u16(b, 1);
+    u16(b, 4);
+    u16(b, unsigned(backtrack.size()));
+    for (unsigned k : backtrack) u16(b, k);
+    u16(b, unsigned(rest.size() + 1));
+    for (unsigned k : rest) u16(b, k);
+    u16(b, unsigned(lookahead.size()));
+    for (unsigned k : lookahead) u16(b, k);
+    u16(b, unsigned(recs.size()));
+    for (const record& r : recs) {
+        u16(b, r.seq);
+        u16(b, r.lookup);
+    }
+    return b;
+}
+
 bytes extension(unsigned real_type, const bytes& real) {
     bytes b;
     u16(b, 1);
@@ -345,6 +420,22 @@ UTEST(libstb_gsub_tests, test_context_and_chaining_context_format_1) {
                                                     {6, 0, {chain1(120, {}, {121}, {122}, {{1, 0}})}}});
     ASSERT_TRUE(run_feature(chain, run_of({120, 121, 122})) == (V{120, 131, 122}));
     ASSERT_TRUE(run_feature(chain, run_of({120, 121})) == (V{120, 121}));
+}
+
+UTEST(libstb_gsub_tests, test_context_and_chaining_context_format_2_pick_rules_by_class) {
+    // classes: 120 -> 1, 121 -> 2, 122 -> 3, 119 -> 4
+    const std::vector<class_range> cls = {{119, 119, 4}, {120, 120, 1}, {121, 121, 2}, {122, 122, 3}};
+    const bytes ctx = make_gsub({{kTest, {1}}}, {{1, 0, {single_delta({121}, 10)}},
+                                                  {5, 0, {context2(120, cls, 1, {2, 3}, {{1, 0}})}}});
+    ASSERT_TRUE(run_feature(ctx, run_of({120, 121, 122})) == (V{120, 131, 122}));
+    ASSERT_TRUE(run_feature(ctx, run_of({120, 121})) == (V{120, 121}));            // too short
+    ASSERT_TRUE(run_feature(ctx, run_of({120, 122, 121})) == (V{120, 122, 121}));  // wrong classes
+    ASSERT_TRUE(run_feature(ctx, run_of({7, 120, 121, 122, 7})) == (V{7, 120, 131, 122, 7}));
+    const bytes chain = make_gsub({{kTest, {1}}}, {{1, 0, {single_delta({121}, 10)}},
+                                                    {6, 0, {chain2(120, cls, 1, {4}, {2}, {3}, {{1, 0}})}}});
+    ASSERT_TRUE(run_feature(chain, run_of({119, 120, 121, 122})) == (V{119, 120, 131, 122}));
+    ASSERT_TRUE(run_feature(chain, run_of({120, 121, 122})) == (V{120, 121, 122}));      // no backtrack glyph
+    ASSERT_TRUE(run_feature(chain, run_of({119, 120, 121, 121})) == (V{119, 120, 121, 121}));  // wrong lookahead
 }
 
 UTEST(libstb_gsub_tests, test_context_format_3_and_the_first_glyph_filter) {

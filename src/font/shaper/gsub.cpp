@@ -266,89 +266,90 @@ private:
         return false;
     }
 
-    // Formats 1 and 2: the first glyph picks a rule set (by glyph or by class).
-    bool apply_sets(apply_context& c, const lookup& owner, std::size_t pos, std::size_t& next, entry kind) const {
-        const std::uint32_t gid = c.glyphs[pos].gid;
+    // Reads the counts and offsets of a context rule that starts at byte `start` of `v`
+    // (chained or not). `first_listed`: format 3 lists the first input glyph too, the rule sets
+    // of formats 1 and 2 leave it out because the rule set was picked by it.
+    rule read_rule(const byte_view& v, std::size_t start, bool first_listed) const {
+        rule r;
+        r.v = v;
+        r.input_has_first = first_listed;
+        const auto listed = [&] { return first_listed ? r.input_n : (r.input_n ? r.input_n - 1 : 0); };
+        if (chain_) {
+            r.backtrack_n = v.u16(start);
+            r.backtrack_at = start + 2;
+            std::size_t p = start + 2 + 2 * r.backtrack_n;
+            r.input_n = v.u16(p);
+            r.input_at = p + 2;
+            p += 2 + 2 * listed();
+            r.lookahead_n = v.u16(p);
+            r.lookahead_at = p + 2;
+            p += 2 + 2 * r.lookahead_n;
+            r.records_n = v.u16(p);
+            r.records_at = p + 2;
+        } else {
+            r.input_n = v.u16(start);
+            r.records_n = v.u16(start + 2);
+            r.input_at = start + 4;
+            r.records_at = r.input_at + 2 * listed();
+        }
+        return r;
+    }
+
+    // The rule set the first glyph picks (formats 1 and 2: by glyph or by class); empty if none.
+    byte_view pick_rule_set(std::uint32_t gid, entry kind) const {
         std::size_t index;
         std::size_t count_at, offsets_at;
         if (kind == entry::glyph) {
             const int idx = cov_.index(gid);
-            if (idx < 0) return false;
+            if (idx < 0) return byte_view();
             index = std::size_t(idx);
             count_at = 4;
             offsets_at = 6;
         } else {
-            if (cov_.index(gid) < 0) return false;
+            if (cov_.index(gid) < 0) return byte_view();
             index = input_classes_.class_of(gid);
             count_at = chain_ ? 10 : 6;
             offsets_at = chain_ ? 12 : 8;
         }
-        if (index >= v_.u16(count_at)) return false;
+        if (index >= v_.u16(count_at)) return byte_view();
         const std::size_t set_off = v_.u16(offsets_at + 2 * index);
-        if (set_off == 0) return false;
-        const byte_view set = v_.from(set_off);
+        return set_off == 0 ? byte_view() : v_.from(set_off);
+    }
+
+    // Formats 1 and 2: the first glyph picks a rule set, whose rules are tried in order.
+    bool apply_sets(apply_context& c, const lookup& owner, std::size_t pos, std::size_t& next, entry kind) const {
+        const byte_view set = pick_rule_set(c.glyphs[pos].gid, kind);
+        if (set.empty()) return false;
         const unsigned count = set.u16(0);
         for (unsigned k = 0; k < count; ++k) {
             const std::size_t rule_off = set.u16(2 + 2 * std::size_t(k));
             if (rule_off == 0) continue;
-            rule r;
-            r.v = set.from(rule_off);
-            if (chain_) {
-                r.backtrack_n = r.v.u16(0);
-                r.backtrack_at = 2;
-                std::size_t p = 2 + 2 * r.backtrack_n;
-                r.input_n = r.v.u16(p);
-                r.input_at = p + 2;
-                p += 2 + 2 * (r.input_n ? r.input_n - 1 : 0);
-                r.lookahead_n = r.v.u16(p);
-                r.lookahead_at = p + 2;
-                p += 2 + 2 * r.lookahead_n;
-                r.records_n = r.v.u16(p);
-                r.records_at = p + 2;
-            } else {
-                r.input_n = r.v.u16(0);
-                r.records_n = r.v.u16(2);
-                r.input_at = 4;
-                r.records_at = 4 + 2 * (r.input_n ? r.input_n - 1 : 0);
-            }
-            if (try_rule(c, owner, pos, next, r, kind)) return true;
+            if (try_rule(c, owner, pos, next, read_rule(set.from(rule_off), 0, false), kind)) return true;
         }
         return false;
     }
 
     // Format 3: one coverage table per position.
     bool apply_coverage(apply_context& c, const lookup& owner, std::size_t pos, std::size_t& next) const {
-        rule r;
-        r.v = v_;
-        r.input_has_first = true;
-        if (chain_) {
-            r.backtrack_n = v_.u16(2);
-            r.backtrack_at = 4;
-            std::size_t p = 4 + 2 * r.backtrack_n;
-            r.input_n = v_.u16(p);
-            r.input_at = p + 2;
-            p += 2 + 2 * r.input_n;
-            r.lookahead_n = v_.u16(p);
-            r.lookahead_at = p + 2;
-            p += 2 + 2 * r.lookahead_n;
-            r.records_n = v_.u16(p);
-            r.records_at = p + 2;
-        } else {
-            r.input_n = v_.u16(2);
-            r.records_n = v_.u16(4);
-            r.input_at = 6;
-            r.records_at = 6 + 2 * r.input_n;
-        }
-        return try_rule(c, owner, pos, next, r, entry::coverage);
+        return try_rule(c, owner, pos, next, read_rule(v_, 2, true), entry::coverage);
     }
 
-    bool try_rule(apply_context& c, const lookup& owner, std::size_t pos, std::size_t& next, const rule& r,
-                  entry kind) const {
-        if (r.input_n == 0 || r.input_n > max_input) return false;
-        std::size_t at[max_input];
-        at[0] = pos;
+    // Matches `count` glyphs on one side of the input, nearest first: backwards for the backtrack
+    // sequence, forwards for the lookahead. `j` starts at the glyph next to the sequence.
+    bool match_side(const apply_context& c, const lookup& owner, std::size_t j, std::size_t count, bool backwards,
+                    entry kind, const class_def& classes, const rule& r, std::size_t at) const {
+        for (std::size_t k = 0; k < count; ++k) {
+            j = backwards ? owner.prev_unskipped(c, j) : owner.next_unskipped(c, j);
+            if (j == lookup::npos || !matches(kind, classes, r.v, at, k, c.glyphs[j].gid)) return false;
+        }
+        return true;
+    }
 
-        // Input sequence. The first glyph was matched by the coverage / rule set, except in format 3.
+    // The input sequence: fills at[] with the glyph index of every input position. The first
+    // glyph was matched by the coverage / rule set, except in format 3.
+    bool match_input(const apply_context& c, const lookup& owner, std::size_t pos, const rule& r, entry kind,
+                     std::size_t* at) const {
+        at[0] = pos;
         if (r.input_has_first && !matches(kind, input_classes_, r.v, r.input_at, 0, c.glyphs[pos].gid)) return false;
         for (std::size_t k = 1; k < r.input_n; ++k) {
             const std::size_t j = owner.next_unskipped(c, at[k - 1]);
@@ -357,21 +358,12 @@ private:
             if (!matches(kind, input_classes_, r.v, r.input_at, entry_index, c.glyphs[j].gid)) return false;
             at[k] = j;
         }
-        // Backtrack: the glyphs before the match, nearest first.
-        std::size_t j = pos;
-        for (std::size_t k = 0; k < r.backtrack_n; ++k) {
-            j = owner.prev_unskipped(c, j);
-            if (j == lookup::npos || !matches(kind, backtrack_classes_, r.v, r.backtrack_at, k, c.glyphs[j].gid)) return false;
-        }
-        // Lookahead: the glyphs after the match.
-        j = at[r.input_n - 1];
-        for (std::size_t k = 0; k < r.lookahead_n; ++k) {
-            j = owner.next_unskipped(c, j);
-            if (j == lookup::npos || !matches(kind, lookahead_classes_, r.v, r.lookahead_at, k, c.glyphs[j].gid)) return false;
-        }
+        return true;
+    }
 
-        // Matched: run the nested lookups at their positions in the input, adjusting the later
-        // positions when a lookup changes the number of glyphs.
+    // Runs the nested lookups at their positions in the input, adjusting the later positions when
+    // a lookup changes the number of glyphs. Returns the index of the last input glyph afterwards.
+    std::size_t run_records(apply_context& c, const rule& r, std::size_t* at) const {
         std::size_t end = at[r.input_n - 1];
         for (std::size_t k = 0; k < r.records_n; ++k) {
             const std::size_t rec = r.records_at + 4 * k;
@@ -389,6 +381,18 @@ private:
                 end = std::size_t(std::ptrdiff_t(end) + delta);
             }
         }
+        return end;
+    }
+
+    bool try_rule(apply_context& c, const lookup& owner, std::size_t pos, std::size_t& next, const rule& r,
+                  entry kind) const {
+        if (r.input_n == 0 || r.input_n > max_input) return false;
+        std::size_t at[max_input];
+        if (!match_input(c, owner, pos, r, kind, at)) return false;
+        if (!match_side(c, owner, pos, r.backtrack_n, true, kind, backtrack_classes_, r, r.backtrack_at)) return false;
+        if (!match_side(c, owner, at[r.input_n - 1], r.lookahead_n, false, kind, lookahead_classes_, r, r.lookahead_at))
+            return false;
+        const std::size_t end = run_records(c, r, at);
         next = std::max(pos + 1, end + 1);
         return true;
     }
