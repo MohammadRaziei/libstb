@@ -115,22 +115,22 @@ bytes encode_png(const raster& image, int compression) {
     // smallest sum of absolute values (the usual estimate of what compresses best).
     const row_filter filters(image.pixels, w, n, row);
     bytes filtered((row + 1) * std::size_t(h));
-    std::vector<signed char> line(row);
+    std::vector<signed char> best_line(row), candidate(row);
     for (int y = 0; y < h; ++y) {
         int best = 0, best_cost = 0x7fffffff;
         for (int f = 0; f < filter_count; ++f) {
-            filters.apply(filter(f), y, line.data());
+            filters.apply(filter(f), y, candidate.data());
             int cost = 0;
-            for (std::size_t i = 0; i < row; ++i) cost += std::abs(int(line[i]));
+            for (std::size_t i = 0; i < row; ++i) cost += std::abs(int(candidate[i]));
             if (cost < best_cost) {
                 best_cost = cost;
                 best = f;
+                best_line.swap(candidate);  // keep the best row, no second pass to recompute it
             }
         }
-        filters.apply(filter(best), y, line.data());
         std::uint8_t* dst = filtered.data() + std::size_t(y) * (row + 1);
         dst[0] = std::uint8_t(best);
-        std::memcpy(dst + 1, line.data(), row);
+        std::memcpy(dst + 1, best_line.data(), row);
     }
     const bytes zlib = zlib_deflate(filtered.data(), filtered.size(), compression);
 

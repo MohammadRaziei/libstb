@@ -296,6 +296,70 @@ UTEST(libstb_edit_tests, test_convert_rejects_a_bad_channel_count) {
     ASSERT_THROWS(stb::image().convert(3), std::invalid_argument);
 }
 
+// ------------------------------------------------- operations on a temporary
+
+UTEST(libstb_edit_tests, test_an_operation_that_changes_nothing_moves_the_pixels_of_a_temporary) {
+    const stb::image ref = gradient(5, 4, 4);
+    {
+        stb::image a = ref.copy();
+        const std::uint8_t* p = a.data();
+        stb::image b = std::move(a).convert(4);
+        ASSERT_TRUE(b.data() == p);  // the same buffer, nothing was copied
+        ASSERT_TRUE(a.empty());      // and the source was emptied
+        ASSERT_TRUE(same(ref, b));
+    }
+    {
+        stb::image a = ref.copy();
+        const std::uint8_t* p = a.data();
+        stb::image b = std::move(a).rotate90(-8);
+        ASSERT_TRUE(b.data() == p);
+        ASSERT_TRUE(same(ref, b));
+    }
+    {
+        stb::image a = ref.copy();
+        const std::uint8_t* p = a.data();
+        stb::image b = std::move(a).orient(1);
+        ASSERT_TRUE(b.data() == p);
+        ASSERT_TRUE(same(ref, b));
+    }
+    {
+        stb::image a = ref.copy();
+        const std::uint8_t* p = a.data();
+        stb::image b = std::move(a).pad(0, 0, 0, 0);
+        ASSERT_TRUE(b.data() == p);
+        ASSERT_TRUE(same(ref, b));
+    }
+    {
+        const stb::image rgb = gradient(5, 4, 3);
+        stb::image a = rgb.copy();
+        const std::uint8_t* p = a.data();
+        stb::image b = std::move(a).flatten();
+        ASSERT_TRUE(b.data() == p);
+        ASSERT_TRUE(same(rgb, b));
+    }
+}
+
+UTEST(libstb_edit_tests, test_operations_on_a_temporary_give_the_same_result_as_on_an_lvalue) {
+    const stb::image src = gradient(7, 5, 4);
+    ASSERT_TRUE(same(src.convert(1), src.copy().convert(1)));
+    ASSERT_TRUE(same(src.convert(3), src.copy().convert(3)));
+    ASSERT_TRUE(same(src.rotate90(1), src.copy().rotate90(1)));
+    ASSERT_TRUE(same(src.rotate90(-1), src.copy().rotate90(-1)));
+    ASSERT_TRUE(same(src.orient(6), src.copy().orient(6)));
+    ASSERT_TRUE(same(src.pad(1, 2, 3, 4), src.copy().pad(1, 2, 3, 4)));
+    ASSERT_TRUE(same(src.flatten({10, 20, 30}), src.copy().flatten({10, 20, 30})));
+}
+
+UTEST(libstb_edit_tests, test_operations_on_a_temporary_report_the_same_errors) {
+    ASSERT_THROWS(gradient(2, 2, 3).convert(5), std::invalid_argument);
+    ASSERT_THROWS(gradient(2, 2, 3).orient(9), std::invalid_argument);
+    ASSERT_THROWS(gradient(2, 2, 3).pad(-1, 0, 0, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::image().rotate90(4), std::invalid_argument);
+    ASSERT_THROWS(stb::image().orient(1), std::invalid_argument);
+    ASSERT_THROWS(stb::image().pad(0, 0, 0, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::image().flatten(), std::invalid_argument);
+}
+
 // ------------------------------------------------------------ split/merge
 
 UTEST(libstb_edit_tests, test_split_then_merge_is_the_identity_for_every_channel_count) {

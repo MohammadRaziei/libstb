@@ -201,7 +201,7 @@ image image::flip_horizontal() const { return apply(*this, op::flip_h); }
 image image::flip_vertical() const { return apply(*this, op::flip_v); }
 image image::transpose() const { return apply(*this, op::transpose); }
 
-image image::rotate90(int turns) const {
+image image::rotate90(int turns) const& {
     need_pixels(*this);
     switch (((turns % 4) + 4) % 4) {
         case 1: return apply(*this, op::rot270);  // counter-clockwise, like numpy.rot90 and Pillow
@@ -211,7 +211,13 @@ image image::rotate90(int turns) const {
     }
 }
 
-image image::orient(int orientation) const {
+image image::rotate90(int turns) && {
+    need_pixels(*this);
+    if (turns % 4 == 0) return std::move(*this);
+    return std::as_const(*this).rotate90(turns);
+}
+
+image image::orient(int orientation) const& {
     need_pixels(*this);
     switch (orientation) {
         case 1: return copy();
@@ -226,7 +232,13 @@ image image::orient(int orientation) const {
     }
 }
 
-image image::pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill) const {
+image image::orient(int orientation) && {
+    need_pixels(*this);
+    if (orientation == 1) return std::move(*this);
+    return std::as_const(*this).orient(orientation);
+}
+
+image image::pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill) const& {
     need_pixels(*this);
     if (left < 0 || top < 0 || right < 0 || bottom < 0)
         throw std::invalid_argument("pad widths must be >= 0");
@@ -277,7 +289,15 @@ image image::thumbnail(int max_width, int max_height, std::string_view filter_na
 
 // ------------------------------------------------------------------ channels
 
-image image::convert(int channels) const {
+image image::pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill) && {
+    if (left == 0 && top == 0 && right == 0 && bottom == 0) {
+        need_pixels(*this);
+        return std::move(*this);
+    }
+    return std::as_const(*this).pad(left, top, right, bottom, fill);
+}
+
+image image::convert(int channels) const& {
     need_pixels(*this);
     need_channels(channels);
     if (channels == channels_) return copy();
@@ -285,6 +305,13 @@ image image::convert(int channels) const {
     pick_convert(channels_, channels, detail::current_backend())(data(), out.data(),
                                                          std::size_t(width_) * std::size_t(height_));
     return out;
+}
+
+image image::convert(int channels) && {
+    need_pixels(*this);
+    need_channels(channels);
+    if (channels == channels_) return std::move(*this);
+    return std::as_const(*this).convert(channels);
 }
 
 std::vector<image> image::split() const {
@@ -363,7 +390,13 @@ void image::composite_in_place(const image& overlay, int x, int y) {
     }
 }
 
-image image::flatten(std::array<std::uint8_t, 3> background) const {
+image image::flatten(std::array<std::uint8_t, 3> background) && {
+    need_pixels(*this);
+    if (channels_ == 1 || channels_ == 3) return std::move(*this);
+    return std::as_const(*this).flatten(background);
+}
+
+image image::flatten(std::array<std::uint8_t, 3> background) const& {
     need_pixels(*this);
     if (channels_ == 1 || channels_ == 3) return copy();
     const int dc = channels_ - 1;

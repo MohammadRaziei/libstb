@@ -90,33 +90,33 @@ int zhuffman::build(const byte *sizelist, int num)
 
 inline int inflater::eof()
 {
-   return (zbuffer >= zbuffer_end);
+   return (zbuffer_ >= zbuffer_end_);
 }
 
 inline byte inflater::get8()
 {
-   return eof() ? 0 : *zbuffer++;
+   return eof() ? 0 : *zbuffer_++;
 }
 
 void inflater::fill_bits()
 {
    do {
-      if (code_buffer >= (1U << num_bits)) {
-        zbuffer = zbuffer_end;  /* treat this as EOF so we fail. */
+      if (code_buffer_ >= (1U << num_bits_)) {
+        zbuffer_ = zbuffer_end_;  /* treat this as EOF so we fail. */
         return;
       }
-      code_buffer |= (unsigned int) get8() << num_bits;
-      num_bits += 8;
-   } while (num_bits <= 24);
+      code_buffer_ |= (unsigned int) get8() << num_bits_;
+      num_bits_ += 8;
+   } while (num_bits_ <= 24);
 }
 
 inline unsigned int inflater::receive(int n)
 {
    unsigned int k;
-   if (num_bits < n) fill_bits();
-   k = code_buffer & ((1 << n) - 1);
-   code_buffer >>= n;
-   num_bits -= n;
+   if (num_bits_ < n) fill_bits();
+   k = code_buffer_ & ((1 << n) - 1);
+   code_buffer_ >>= n;
+   num_bits_ -= n;
    return k;
 }
 
@@ -125,7 +125,7 @@ int inflater::huffman_decode_slowpath(zhuffman *z)
    int b,s,k;
    // not resolved by fast table, so compute it the slow way
    // use jpeg approach, which requires MSbits at top
-   k = bit_reverse(code_buffer, 16);
+   k = bit_reverse(code_buffer_, 16);
    for (s=zfast_bits+1; ; ++s)
       if (k < z->maxcode[s])
          break;
@@ -134,22 +134,22 @@ int inflater::huffman_decode_slowpath(zhuffman *z)
    b = (k >> (16-s)) - z->firstcode[s] + z->firstsymbol[s];
    if (b >= znsyms) return -1; // some data was corrupt somewhere!
    if (z->size[b] != s) return -1;  // was originally an assert, but report failure instead.
-   code_buffer >>= s;
-   num_bits -= s;
+   code_buffer_ >>= s;
+   num_bits_ -= s;
    return z->value[b];
 }
 
 inline int inflater::huffman_decode(zhuffman *z)
 {
    int b,s;
-   if (num_bits < 16) {
+   if (num_bits_ < 16) {
       if (eof()) {
-         if (!hit_zeof_once) {
+         if (!hit_zeof_once_) {
             // This is the first time we hit eof, insert 16 extra padding btis
             // to allow us to keep going; if we actually consume any of them
             // though, that is invalid data. This is caught later.
-            hit_zeof_once = 1;
-            num_bits += 16; // add 16 implicit zero bits
+            hit_zeof_once_ = 1;
+            num_bits_ += 16; // add 16 implicit zero bits
          } else {
             // We already inserted our extra 16 padding bits and are again
             // out, this stream is actually prematurely terminated.
@@ -159,11 +159,11 @@ inline int inflater::huffman_decode(zhuffman *z)
          fill_bits();
       }
    }
-   b = z->fast[code_buffer & zfast_mask];
+   b = z->fast[code_buffer_ & zfast_mask];
    if (b) {
       s = b >> 9;
-      code_buffer >>= s;
-      num_bits -= s;
+      code_buffer_ >>= s;
+      num_bits_ -= s;
       return b & 511;
    }
    return huffman_decode_slowpath(z);
@@ -173,21 +173,21 @@ int inflater::expand(char *zout, int n)
 {
    char *q;
    unsigned int cur, limit, old_limit;
-   this->zout = zout;
-   if (!z_expandable) return fail("output buffer limit","Corrupt PNG");
-   cur   = (unsigned int) (this->zout - zout_start);
-   limit = old_limit = (unsigned) (zout_end - zout_start);
+   zout_ = zout;
+   if (!z_expandable_) return fail("output buffer limit","Corrupt PNG");
+   cur   = (unsigned int) (zout_ - zout_start_);
+   limit = old_limit = (unsigned) (zout_end_ - zout_start_);
    if (UINT_MAX - cur < (unsigned) n) return fail("outofmem", "Out of memory");
    while (cur + n > limit) {
       if(limit > UINT_MAX / 2) return fail("outofmem", "Out of memory");
       limit *= 2;
    }
-   q = (char *) realloc_sized(zout_start, old_limit, limit);
+   q = (char *) realloc_sized(zout_start_, old_limit, limit);
    (void)(old_limit);
    if (q == NULL) return fail("outofmem", "Out of memory");
-   zout_start = q;
-   this->zout       = q + cur;
-   zout_end   = q + limit;
+   zout_start_ = q;
+   zout_       = q + cur;
+   zout_end_   = q + limit;
    return 1;
 }
 
@@ -207,22 +207,22 @@ static const int zdist_extra[32] =
 
 int inflater::parse_huffman_block()
 {
-   char *zout = this->zout;
+   char *zout = zout_;
    for(;;) {
-      int z = huffman_decode(&z_length);
+      int z = huffman_decode(&z_length_);
       if (z < 256) {
          if (z < 0) return fail("bad huffman code","Corrupt PNG"); // error in huffman codes
-         if (zout >= zout_end) {
+         if (zout >= zout_end_) {
             if (!expand(zout, 1)) return 0;
-            zout = this->zout;
+            zout = zout_;
          }
          *zout++ = (char) z;
       } else {
          byte *p;
          int len,dist;
          if (z == 256) {
-            this->zout = zout;
-            if (hit_zeof_once && num_bits < 16) {
+            zout_ = zout;
+            if (hit_zeof_once_ && num_bits_ < 16) {
                // The first time we hit zeof, we inserted 16 extra zero bits into our bit
                // buffer so the decoder can just do its speculative decoding. But if we
                // actually consumed any of those bits (which is the case when num_bits < 16),
@@ -235,14 +235,14 @@ int inflater::parse_huffman_block()
          z -= 257;
          len = zlength_base[z];
          if (zlength_extra[z]) len += receive(zlength_extra[z]);
-         z = huffman_decode(&z_distance);
+         z = huffman_decode(&z_distance_);
          if (z < 0 || z >= 30) return fail("bad huffman code","Corrupt PNG"); // per DEFLATE, distance codes 30 and 31 must not appear in compressed data
          dist = zdist_base[z];
          if (zdist_extra[z]) dist += receive(zdist_extra[z]);
-         if (zout - zout_start < dist) return fail("bad dist","Corrupt PNG");
-         if (len > zout_end - zout) {
+         if (zout - zout_start_ < dist) return fail("bad dist","Corrupt PNG");
+         if (len > zout_end_ - zout) {
             if (!expand(zout, len)) return 0;
-            zout = this->zout;
+            zout = zout_;
          }
          p = (byte *) (zout - dist);
          if (dist == 1) { // run of one byte; common in images.
@@ -300,8 +300,8 @@ int inflater::compute_huffman_codes()
       }
    }
    if (n != ntot) return fail("bad codelengths","Corrupt PNG");
-   if (!z_length.build(lencodes, hlit)) return 0;
-   if (!z_distance.build(lencodes+hlit, hdist)) return 0;
+   if (!z_length_.build(lencodes, hlit)) return 0;
+   if (!z_distance_.build(lencodes+hlit, hdist)) return 0;
    return 1;
 }
 
@@ -309,28 +309,28 @@ int inflater::parse_uncompressed_block()
 {
    byte header[4];
    int len,nlen,k;
-   if (num_bits & 7)
-      receive(num_bits & 7); // discard
+   if (num_bits_ & 7)
+      receive(num_bits_ & 7); // discard
    // drain the bit-packed data into header
    k = 0;
-   while (num_bits > 0) {
-      header[k++] = (byte) (code_buffer & 255); // suppress MSVC run-time check
-      code_buffer >>= 8;
-      num_bits -= 8;
+   while (num_bits_ > 0) {
+      header[k++] = (byte) (code_buffer_ & 255); // suppress MSVC run-time check
+      code_buffer_ >>= 8;
+      num_bits_ -= 8;
    }
-   if (num_bits < 0) return fail("zlib corrupt","Corrupt PNG");
+   if (num_bits_ < 0) return fail("zlib corrupt","Corrupt PNG");
    // now fill header the normal way
    while (k < 4)
       header[k++] = get8();
    len  = header[1] * 256 + header[0];
    nlen = header[3] * 256 + header[2];
    if (nlen != (len ^ 0xffff)) return fail("zlib corrupt","Corrupt PNG");
-   if (zbuffer + len > zbuffer_end) return fail("read past buffer","Corrupt PNG");
-   if (zout + len > zout_end)
-      if (!expand(zout, len)) return 0;
-   memcpy(zout, zbuffer, len);
-   zbuffer += len;
-   zout += len;
+   if (zbuffer_ + len > zbuffer_end_) return fail("read past buffer","Corrupt PNG");
+   if (zout_ + len > zout_end_)
+      if (!expand(zout_, len)) return 0;
+   memcpy(zout_, zbuffer_, len);
+   zbuffer_ += len;
+   zout_ += len;
    return 1;
 }
 
@@ -382,9 +382,9 @@ int inflater::parse(int parse_header)
    int final, type;
    if (parse_header)
       if (!read_header()) return 0;
-   num_bits = 0;
-   code_buffer = 0;
-   hit_zeof_once = 0;
+   num_bits_ = 0;
+   code_buffer_ = 0;
+   hit_zeof_once_ = 0;
    do {
       final = receive(1);
       type = receive(2);
@@ -395,8 +395,8 @@ int inflater::parse(int parse_header)
       } else {
          if (type == 1) {
             // use fixed code lengths
-            if (!z_length.build(zdefault_length  , znsyms)) return 0;
-            if (!z_distance.build(zdefault_distance,  32)) return 0;
+            if (!z_length_.build(zdefault_length  , znsyms)) return 0;
+            if (!z_distance_.build(zdefault_distance,  32)) return 0;
          } else {
             if (!compute_huffman_codes()) return 0;
          }
@@ -408,10 +408,10 @@ int inflater::parse(int parse_header)
 
 int inflater::run(char *obuf, int olen, int exp, int parse_header)
 {
-   zout_start = obuf;
-   zout       = obuf;
-   zout_end   = obuf + olen;
-   z_expandable = exp;
+   zout_start_ = obuf;
+   zout_       = obuf;
+   zout_end_   = obuf + olen;
+   z_expandable_ = exp;
 
    return parse(parse_header);
 }
@@ -421,13 +421,13 @@ char *stbi_zlib_decode_malloc_guesssize(const char *buffer, int len, int initial
    inflater a;
    char *p = (char *) alloc(initial_size);
    if (p == NULL) return NULL;
-   a.zbuffer = (byte *) buffer;
-   a.zbuffer_end = (byte *) buffer + len;
+   a.zbuffer_ = (byte *) buffer;
+   a.zbuffer_end_ = (byte *) buffer + len;
    if (a.run(p, initial_size, 1, 1)) {
-      if (outlen) *outlen = (int) (a.zout - a.zout_start);
-      return a.zout_start;
+      if (outlen) *outlen = (int) (a.zout_ - a.zout_start_);
+      return a.zout_start_;
    } else {
-      std::free(a.zout_start);
+      std::free(a.zout_start_);
       return NULL;
    }
 }
@@ -442,13 +442,13 @@ char *zlib_decode_malloc(const char *buffer, int len, int initial_size, int *out
    inflater a;
    char *p = (char *) alloc(initial_size);
    if (p == NULL) return NULL;
-   a.zbuffer = (byte *) buffer;
-   a.zbuffer_end = (byte *) buffer + len;
+   a.zbuffer_ = (byte *) buffer;
+   a.zbuffer_end_ = (byte *) buffer + len;
    if (a.run(p, initial_size, 1, parse_header)) {
-      if (outlen) *outlen = (int) (a.zout - a.zout_start);
-      return a.zout_start;
+      if (outlen) *outlen = (int) (a.zout_ - a.zout_start_);
+      return a.zout_start_;
    } else {
-      std::free(a.zout_start);
+      std::free(a.zout_start_);
       return NULL;
    }
 }
@@ -456,10 +456,10 @@ char *zlib_decode_malloc(const char *buffer, int len, int initial_size, int *out
 int stbi_zlib_decode_buffer(char *obuffer, int olen, char const *ibuffer, int ilen)
 {
    inflater a;
-   a.zbuffer = (byte *) ibuffer;
-   a.zbuffer_end = (byte *) ibuffer + ilen;
+   a.zbuffer_ = (byte *) ibuffer;
+   a.zbuffer_end_ = (byte *) ibuffer + ilen;
    if (a.run(obuffer, olen, 0, 1))
-      return (int) (a.zout - a.zout_start);
+      return (int) (a.zout_ - a.zout_start_);
    else
       return -1;
 }
@@ -469,13 +469,13 @@ char *stbi_zlib_decode_noheader_malloc(char const *buffer, int len, int *outlen)
    inflater a;
    char *p = (char *) alloc(16384);
    if (p == NULL) return NULL;
-   a.zbuffer = (byte *) buffer;
-   a.zbuffer_end = (byte *) buffer+len;
+   a.zbuffer_ = (byte *) buffer;
+   a.zbuffer_end_ = (byte *) buffer+len;
    if (a.run(p, 16384, 1, 0)) {
-      if (outlen) *outlen = (int) (a.zout - a.zout_start);
-      return a.zout_start;
+      if (outlen) *outlen = (int) (a.zout_ - a.zout_start_);
+      return a.zout_start_;
    } else {
-      std::free(a.zout_start);
+      std::free(a.zout_start_);
       return NULL;
    }
 }
@@ -483,10 +483,10 @@ char *stbi_zlib_decode_noheader_malloc(char const *buffer, int len, int *outlen)
 int stbi_zlib_decode_noheader_buffer(char *obuffer, int olen, const char *ibuffer, int ilen)
 {
    inflater a;
-   a.zbuffer = (byte *) ibuffer;
-   a.zbuffer_end = (byte *) ibuffer + ilen;
+   a.zbuffer_ = (byte *) ibuffer;
+   a.zbuffer_end_ = (byte *) ibuffer + ilen;
    if (a.run(obuffer, olen, 0, 0))
-      return (int) (a.zout - a.zout_start);
+      return (int) (a.zout_ - a.zout_start_);
    else
       return -1;
 }

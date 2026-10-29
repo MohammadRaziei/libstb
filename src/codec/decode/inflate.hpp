@@ -13,8 +13,7 @@ constexpr int znsyms = 288;                      // number of symbols in literal
 
 // zlib-style huffman encoding
 // (jpegs packs from left, zlib from right, so can't share code)
-class zhuffman {
-public:
+struct zhuffman {
    std::uint16_t fast[1 << zfast_bits];
    std::uint16_t firstcode[16];
    int maxcode[17];
@@ -28,17 +27,17 @@ public:
 //    memory buffer
 class inflater {
 public:
-   byte *zbuffer, *zbuffer_end;
-   int num_bits;
-   int hit_zeof_once;
-   std::uint32_t code_buffer;
+   byte *zbuffer_, *zbuffer_end_;
+   int num_bits_;
+   int hit_zeof_once_;
+   std::uint32_t code_buffer_;
 
-   char *zout;
-   char *zout_start;
-   char *zout_end;
-   int   z_expandable;
+   char *zout_;
+   char *zout_start_;
+   char *zout_end_;
+   int   z_expandable_;
 
-   zhuffman z_length, z_distance;
+   zhuffman z_length_, z_distance_;
 
     int eof();
     byte get8();

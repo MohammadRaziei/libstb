@@ -443,13 +443,13 @@ void bind_image(nb::module_& m) {
              "Raises ValueError if the rectangle is not inside the image.")
         .def("flip_horizontal", &image::flip_horizontal, release(), "Mirror left <-> right.")
         .def("flip_vertical", &image::flip_vertical, release(), "Mirror top <-> bottom.")
-        .def("rotate90", &image::rotate90, "turns"_a = 1, release(),
+        .def("rotate90", [](const image& self, int turns) { return self.rotate90(turns); }, "turns"_a = 1, release(),
              "Rotate by `turns` quarter turns counter-clockwise, like numpy.rot90 and Pillow's\n"
              "ROTATE_90 (negative: clockwise).\n"
              "Width and height swap for an odd number of turns.")
         .def("transpose", &image::transpose, release(),
              "Swap rows and columns (mirror across the main diagonal); width and height swap.")
-        .def("orient", &image::orient, "orientation"_a, release(),
+        .def("orient", [](const image& self, int orientation) { return self.orient(orientation); }, "orientation"_a, release(),
              "The upright version of an image stored with this EXIF orientation (1..8, see\n"
              "libstb.exif_orientation): the transform a viewer applies. 1 is a copy.")
         .def(
@@ -473,7 +473,7 @@ void bind_image(nb::module_& m) {
              "max_width"_a, "max_height"_a, "resizer"_a, release())
 
         // --- channels and alpha ---
-        .def("convert", &image::convert, "channels"_a, release(),
+        .def("convert", [](const image& self, int channels) { return self.convert(channels); }, "channels"_a, release(),
              "The same pixels with 1 (gray), 2 (gray + alpha), 3 (RGB) or 4 (RGBA) channels.\n\n"
              "Gray is 0.299 R + 0.587 G + 0.114 B on the stored values (no gamma, as in Pillow),\n"
              "a missing alpha is 255, and a dropped alpha is discarded: use flatten() to blend it\n"

@@ -222,16 +222,19 @@ public:
     image flip_horizontal() const;  // mirror left <-> right
     image flip_vertical() const;    // mirror top <-> bottom
     // `turns` quarter turns counter-clockwise, like numpy.rot90 and Pillow (negative: clockwise; any integer).
-    image rotate90(int turns = 1) const;
+    image rotate90(int turns = 1) const&;
+    image rotate90(int turns = 1) &&;  // a whole number of full turns hands the pixels back, no copy
     // Swap rows and columns (mirror across the main diagonal); width and height swap.
     image transpose() const;
     // The upright version of an image stored with this EXIF orientation (1..8,
-    // see exif_orientation): the transform a viewer applies. 1 is a copy.
-    image orient(int orientation) const;
+    // see exif_orientation): the transform a viewer applies. 1 is a copy (a move on a temporary).
+    image orient(int orientation) const&;
+    image orient(int orientation) &&;
     // A larger image with this one in the middle of a border of the given widths
     // (all >= 0). fill[c] is the border value of channel c (so for RGBA {r, g, b, a};
     // for gray + alpha {gray, alpha}); the default is all zero.
-    image pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill = {}) const;
+    image pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill = {}) const&;
+    image pad(int left, int top, int right, int bottom, std::array<std::uint8_t, 4> fill = {}) &&;  // no border: a move
     // Shrink to fit inside max_width x max_height, keeping the aspect ratio. An image
     // that already fits is copied, never enlarged. The filter arguments are those of
     // resize().
@@ -244,8 +247,10 @@ public:
     // Gray comes from RGB as 0.299 R + 0.587 G + 0.114 B (on the stored values, no
     // gamma, as Pillow does), a missing alpha is 255, and a dropped alpha is simply
     // discarded: use flatten() to blend it onto a background instead. Same channel
-    // count: a copy. Throws invalid_argument for a channel count outside 1..4.
-    image convert(int channels) const;
+    // count: a copy (a move on a temporary: `load().convert(3)` costs nothing when the file is
+    // already RGB). Throws invalid_argument for a channel count outside 1..4.
+    image convert(int channels) const&;
+    image convert(int channels) &&;
     // One single-channel image per channel; merge() puts them back together.
     std::vector<image> split() const;
     // 1..4 single-channel images of the same size -> one image with that many
@@ -263,8 +268,9 @@ public:
     // canvas that stamps many overlays onto one copy.
     void composite_in_place(const image& overlay, int x = 0, int y = 0);
     // Blend an alpha channel onto a solid background colour (r, g, b) and drop it:
-    // 2 -> 1 channel, 4 -> 3. Images without alpha are copied.
-    image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const;
+    // 2 -> 1 channel, 4 -> 3. Images without alpha are copied (moved, on a temporary).
+    image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const&;
+    image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) &&;
 
     // --- accessors ---
     int width() const noexcept { return width_; }

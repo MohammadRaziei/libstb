@@ -29,6 +29,18 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   nor moved, the polymorphic bases `glyph_source` and `subtable` cannot be sliced, and two no-op
   `std::move` calls (on the trivially copyable `shape`, and in the C++17 aliasing `shared_ptr`
   constructor, which has no moving form) are gone. No behavior change.
+- Naming: data members of the stateful decoder classes (`jpeg_decoder`, `png_decoder`, `gif_decoder`,
+  `inflater`) end in an underscore like the rest of the project (`s_`, `out_`, `code_bits_`), so a member
+  is visible without `this->`. `huffman_table` and `zhuffman` are plain structs. The renames were made
+  with libclang (every use of the field, nothing by text search); 23,680 decoder cases are unchanged.
+- API: `image::convert`, `flatten`, `orient`, `rotate90` and `pad` have `&&` overloads. When the call
+  changes nothing (same channel count, no alpha to flatten, orientation 1, whole turns, no border) a
+  temporary or `std::move(img)` hands its pixels back instead of copying them; every other case and
+  every error is the same as the `const&` version. The `const&` overloads still copy.
+- PNG encoder: the best filtered row is kept while the five filters are tried, instead of filtering
+  it a second time (one pass less per row, 216 encodes byte for byte identical).
+- Tests: files go through `open`, `write` and `open` for png, bmp, tga and jpeg, in a chain of formats,
+  and from a loaded ppm; new tests for the `&&` overloads and their errors.
 - resize: declarations of functions that no longer exist (`stbir_set_pixel_callbacks`,
   `stbir_set_user_data`, `stbir_set_pixel_layouts`, the subrect setters), the unused
   `stbir_quick_resize_helper` and the documentation of the removed setters are deleted, which also
