@@ -53,6 +53,9 @@ struct apply_context {
 // One subtable of a lookup.
 class subtable {
 public:
+    subtable() = default;
+    subtable(const subtable&) = delete;  // a polymorphic base: no slicing
+    subtable& operator=(const subtable&) = delete;
     virtual ~subtable() = default;
     // Tries to substitute at glyphs[pos]. On success returns true and sets `next` to where the
     // lookup goes on (always > pos, except when the glyph at pos was deleted).

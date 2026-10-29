@@ -79,6 +79,8 @@ public:
     ~simd_scope();
     simd_scope(const simd_scope&) = delete;
     simd_scope& operator=(const simd_scope&) = delete;
+    simd_scope(simd_scope&&) = delete;  // a scope belongs to the thread and block that made it
+    simd_scope& operator=(simd_scope&&) = delete;
 
 private:
     std::size_t previous_;

@@ -43,6 +43,8 @@ struct font_bytes {
     font_bytes() = default;
     font_bytes(const font_bytes&) = delete;
     font_bytes& operator=(const font_bytes&) = delete;
+    font_bytes(font_bytes&&) = delete;  // `ptr` points into `owned` or the mapping
+    font_bytes& operator=(font_bytes&&) = delete;
     ~font_bytes() {
 #ifdef STB_FONT_HAVE_MMAP
         if (map) ::munmap(map, len);

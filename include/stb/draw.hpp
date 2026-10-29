@@ -215,7 +215,7 @@ public:
 
     private:
         friend class canvas;
-        shape_item(canvas* owner, shape s, const stb::color& c) : owner_(owner), s_(std::move(s)), default_(c) {}
+        shape_item(canvas* owner, shape s, const stb::color& c) : owner_(owner), s_(s), default_(c) {}
         void check() const { owner_->check(); }
         void need_closed(const char* what) const {
             if (s_.type == shape::kind::line) {
@@ -230,8 +230,11 @@ public:
 
     // Copies `base` once.
     explicit canvas(const image& base) : img_(base.copy()) {}
+    // Neither copied nor moved: the shape and text items it hands out point back to it.
     canvas(const canvas&) = delete;
     canvas& operator=(const canvas&) = delete;
+    canvas(canvas&&) = delete;
+    canvas& operator=(canvas&&) = delete;
 
     // Defaults for the texts added from now on. Default colour is black, alignment left.
     canvas& set_font(const font& f) {
@@ -317,7 +320,7 @@ private:
         check();
         if (filled) s.fill = color_;
         else s.stroke_color = color_;  // a line: its colour (the width stays 1 until stroke())
-        items_.emplace_back(shape_item(this, std::move(s), color_));
+        items_.emplace_back(shape_item(this, s, color_));
         return std::get<shape_item>(items_.back());
     }
 

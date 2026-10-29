@@ -40,6 +40,9 @@ struct arabic_layout {
 // What the shaper needs from a font.
 class glyph_source {
 public:
+    glyph_source() = default;
+    glyph_source(const glyph_source&) = delete;  // a polymorphic base: no slicing
+    glyph_source& operator=(const glyph_source&) = delete;
     virtual ~glyph_source() = default;
     // The glyph for a code point, 0 if the font has none.
     virtual std::uint32_t glyph(char32_t cp) const = 0;

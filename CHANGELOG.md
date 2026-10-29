@@ -23,6 +23,12 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   and `run_records`, with one `read_rule` instead of two copies of the rule layout code. Verified over
   every code point (classification, mirroring, joining type), 200,000 random Arabic strings
   (forms, bidi order and levels) and new format 2 GSUB tests that also pass on the old code.
+- Move semantics and special members reviewed (clang-tidy `performance-*`, `bugprone-use-after-move`,
+  `cppcoreguidelines-special-member-functions`): no use-after-move and no avoidable by-value copies
+  were found. `canvas`, `simd_scope` and `font_bytes` now say explicitly that they are neither copied
+  nor moved, the polymorphic bases `glyph_source` and `subtable` cannot be sliced, and two no-op
+  `std::move` calls (on the trivially copyable `shape`, and in the C++17 aliasing `shared_ptr`
+  constructor, which has no moving form) are gone. No behavior change.
 - resize: declarations of functions that no longer exist (`stbir_set_pixel_callbacks`,
   `stbir_set_user_data`, `stbir_set_pixel_layouts`, the subrect setters), the unused
   `stbir_quick_resize_helper` and the documentation of the removed setters are deleted, which also

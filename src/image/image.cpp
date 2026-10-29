@@ -92,7 +92,7 @@ image image::wrap(int width, int height, int channels, std::uint8_t* data, std::
     img.width_ = width;
     img.height_ = height;
     img.channels_ = channels;
-    img.data_ = std::shared_ptr<std::uint8_t>(std::move(keep_alive), data);  // aliasing: keeps `keep_alive`
+    img.data_ = std::shared_ptr<std::uint8_t>(keep_alive, data);  // aliasing: keeps `keep_alive` (C++17 has no moving form)
     return img;
 }
 
