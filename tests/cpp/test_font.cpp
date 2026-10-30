@@ -240,7 +240,7 @@ UTEST(libstb_font_estimate_tests, test_errors) {
 
 namespace {
 stb::image filled(int w, int h, int c, std::uint8_t v) {
-    return stb::image(w, h, c, std::vector<std::uint8_t>(std::size_t(w) * std::size_t(h) * std::size_t(c), v));
+    return stb::image(w, h, testutil::fmt(c), std::vector<std::uint8_t>(std::size_t(w) * std::size_t(h) * std::size_t(c), v));
 }
 const std::uint8_t* px(const stb::image& im, int x, int y) {
     return im.data() + std::size_t(y) * im.stride() + std::size_t(x) * std::size_t(im.channels());
@@ -377,7 +377,7 @@ UTEST(libstb_font_tests, test_canvas_set_size_and_order) {
 
 UTEST(libstb_font_tests, test_composite_in_place_matches_composite) {
     const stb::image base = filled(20, 20, 3, 100);
-    const stb::image over(4, 4, 4, std::vector<std::uint8_t>(64, 200));
+    const stb::image over(4, 4, stb::pixel_format::rgba, std::vector<std::uint8_t>(64, 200));
     stb::image a = base.copy();
     a.composite_in_place(over, 18, -2);
     const stb::image b = base.composite(over, 18, -2);

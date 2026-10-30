@@ -24,9 +24,9 @@ void check_input(const void* data, std::size_t size) {
     if (size > static_cast<std::size_t>(INT_MAX)) throw limit_error("input larger than 2 GiB");
 }
 
-std::size_t checked_bytes(int width, int height, int channels) {
+std::size_t checked_bytes(int width, int height, pixel_format format) {
     if (width < 1 || height < 1) throw std::invalid_argument("width and height must be >= 1");
-    if (channels < 1 || channels > 4) throw std::invalid_argument("channels must be in 1..4");
+    const int channels = channel_count(format);
     const std::uint64_t pixels = std::uint64_t(width) * std::uint64_t(height);  // <= 2^62
     if (pixels > std::uint64_t(std::numeric_limits<std::size_t>::max()) / std::uint64_t(channels))
         throw std::invalid_argument("image too large");
@@ -62,7 +62,7 @@ void check_encodable(const image& img) {
 image_info image_info::read(const void* data, std::size_t size) {
     check_input(data, size);
     const codec::image_header h = codec::read_header(static_cast<const std::uint8_t*>(data), size);
-    return image_info{h.width, h.height, h.channels};
+    return image_info{h.width, h.height, pixel_format_from_channels(h.channels)};
 }
 
 image_info image_info::read_file(const std::filesystem::path& path) {
@@ -72,26 +72,34 @@ image_info image_info::read_file(const std::filesystem::path& path) {
 
 // --------------------------------------------------------------------- image
 
-image::image(int width, int height, int channels) : width_(width), height_(height), channels_(channels) {
-    const std::size_t n = checked_bytes(width, height, channels);
+pixel_format pixel_format_from_name(std::string_view name) {
+    for (const pixel_format f : {pixel_format::gray, pixel_format::gray_alpha, pixel_format::rgb, pixel_format::rgba})
+        if (name == pixel_format_name(f)) return f;
+    throw std::invalid_argument("unknown pixel format \"" + std::string(name) +
+                                "\": use gray, gray_alpha, rgb or rgba");
+}
+
+image::image(int width, int height, pixel_format format)
+    : width_(width), height_(height), channels_(channel_count(format)) {
+    const std::size_t n = checked_bytes(width, height, format);
     data_ = std::shared_ptr<std::uint8_t>(new std::uint8_t[n](), std::default_delete<std::uint8_t[]>());
 }
 
-image::image(int width, int height, int channels, std::vector<std::uint8_t> pixels)
-    : width_(width), height_(height), channels_(channels) {
-    if (pixels.size() != checked_bytes(width, height, channels))
+image::image(int width, int height, pixel_format format, std::vector<std::uint8_t> pixels)
+    : width_(width), height_(height), channels_(channel_count(format)) {
+    if (pixels.size() != checked_bytes(width, height, format))
         throw std::invalid_argument("pixel buffer size does not match width * height * channels");
     auto holder = std::make_shared<std::vector<std::uint8_t>>(std::move(pixels));
     data_ = std::shared_ptr<std::uint8_t>(holder, holder->data());  // one block: vector + pointer
 }
 
-image image::wrap(int width, int height, int channels, std::uint8_t* data, std::shared_ptr<void> keep_alive) {
-    checked_bytes(width, height, channels);  // validates the dimensions
+image image::wrap(int width, int height, pixel_format format, std::uint8_t* data, std::shared_ptr<void> keep_alive) {
+    checked_bytes(width, height, format);  // validates the dimensions
     if (!data) throw std::invalid_argument("wrap needs a non-null pointer");
     image img;
     img.width_ = width;
     img.height_ = height;
-    img.channels_ = channels;
+    img.channels_ = channel_count(format);
     img.data_ = std::shared_ptr<std::uint8_t>(keep_alive, data);  // aliasing: keeps `keep_alive` (C++17 has no moving form)
     return img;
 }
@@ -115,17 +123,15 @@ image& image::operator=(image&& o) noexcept {
 
 image image::copy() const {
     if (empty()) return image();
-    return image(width_, height_, channels_, std::vector<std::uint8_t>(begin(), end()));
+    return image(width_, height_, format(), std::vector<std::uint8_t>(begin(), end()));
 }
 
 image image::decode(const void* data, std::size_t size, const load_options& opt) {
-    if (opt.channels < 0 || opt.channels > 4) throw std::invalid_argument("channels must be in 0..4");
-
     // Size check from the header alone: no pixel memory is allocated for a
     // hostile "60000x60000" file. width/height are <= 1<<16 and channels <= 4,
     // so the uint64 product cannot overflow.
     const image_info hdr = image_info::read(data, size);
-    const int want = opt.channels ? opt.channels : hdr.channels;
+    const int want = opt.format ? channel_count(*opt.format) : hdr.channels();
     const std::uint64_t bytes = std::uint64_t(hdr.width) * std::uint64_t(hdr.height) * std::uint64_t(want);
     if (bytes > opt.max_bytes)
         throw limit_error("image too large: " + std::to_string(hdr.width) + "x" +
@@ -137,12 +143,12 @@ image image::decode(const void* data, std::size_t size, const load_options& opt)
     const int orientation = opt.orient ? exif_orientation(data, size) : 1;
     const bool stb_flips = opt.flip && orientation == 1;
 
-    codec::decoded d = codec::decode(static_cast<const std::uint8_t*>(data), size, opt.channels, stb_flips);
+    codec::decoded d = codec::decode(static_cast<const std::uint8_t*>(data), size, opt.format ? channel_count(*opt.format) : 0, stb_flips);
 
     // No copy: the image takes the decoder's buffer as is. The shared_ptr owns it from here on, so
     // it is freed on any later throw too.
     std::uint8_t* raw = d.pixels.release();
-    image img = image::wrap(d.width, d.height, d.channels, raw, std::shared_ptr<void>(raw, codec::free_deleter{}));
+    image img = image::wrap(d.width, d.height, pixel_format_from_channels(d.channels), raw, std::shared_ptr<void>(raw, codec::free_deleter{}));
     if (orientation == 1) return img;
     img = img.orient(orientation);
     return opt.flip ? img.flip_vertical() : std::move(img);

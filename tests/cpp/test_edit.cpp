@@ -15,7 +15,7 @@ using testutil::same;
 using testutil::solid;
 
 namespace {
-stb::image make(int w, int h, int c, std::vector<std::uint8_t> px) { return stb::image(w, h, c, std::move(px)); }
+stb::image make(int w, int h, int c, std::vector<std::uint8_t> px) { return stb::image(w, h, testutil::fmt(c), std::move(px)); }
 }  // namespace
 
 // ------------------------------------------------------------------- crop
@@ -236,7 +236,7 @@ UTEST(libstb_edit_tests, test_thumbnail_takes_the_same_filter_arguments_as_resiz
 
 UTEST(libstb_edit_tests, test_convert_to_gray_uses_the_pillow_luma_formula) {
     const stb::image rgb = make(4, 1, 3, {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255});
-    const stb::image g = rgb.convert(1);
+    const stb::image g = rgb.convert(stb::pixel_format::gray);
     ASSERT_EQ(76, g(0, 0, 0));    // 0.299 * 255
     ASSERT_EQ(150, g(1, 0, 0));   // 0.587 * 255
     ASSERT_EQ(29, g(2, 0, 0));    // 0.114 * 255
@@ -249,51 +249,48 @@ UTEST(libstb_edit_tests, test_convert_between_every_pair_of_channel_counts) {
     const stb::image rgb = make(1, 1, 3, {10, 20, 30});
     const stb::image rgba = make(1, 1, 4, {10, 20, 30, 40});
 
-    stb::image x = gray.convert(2);
+    stb::image x = gray.convert(stb::pixel_format::gray_alpha);
     ASSERT_EQ(100, x(0, 0, 0));
     ASSERT_EQ(255, x(0, 0, 1));
-    x = gray.convert(3);
+    x = gray.convert(stb::pixel_format::rgb);
     ASSERT_TRUE(x(0, 0, 0) == 100 && x(0, 0, 1) == 100 && x(0, 0, 2) == 100);
-    x = gray.convert(4);
+    x = gray.convert(stb::pixel_format::rgba);
     ASSERT_TRUE(x(0, 0, 0) == 100 && x(0, 0, 2) == 100 && x(0, 0, 3) == 255);
 
-    x = ga.convert(1);
+    x = ga.convert(stb::pixel_format::gray);
     ASSERT_EQ(100, x(0, 0, 0));
-    x = ga.convert(3);
+    x = ga.convert(stb::pixel_format::rgb);
     ASSERT_TRUE(x(0, 0, 0) == 100 && x(0, 0, 2) == 100);
-    x = ga.convert(4);
+    x = ga.convert(stb::pixel_format::rgba);
     ASSERT_TRUE(x(0, 0, 1) == 100 && x(0, 0, 3) == 50);  // alpha kept
 
-    x = rgb.convert(2);
+    x = rgb.convert(stb::pixel_format::gray_alpha);
     ASSERT_EQ(255, x(0, 0, 1));
-    x = rgb.convert(4);
+    x = rgb.convert(stb::pixel_format::rgba);
     ASSERT_TRUE(x(0, 0, 0) == 10 && x(0, 0, 2) == 30 && x(0, 0, 3) == 255);
 
-    x = rgba.convert(3);
+    x = rgba.convert(stb::pixel_format::rgb);
     ASSERT_TRUE(x(0, 0, 0) == 10 && x(0, 0, 1) == 20 && x(0, 0, 2) == 30);  // alpha dropped
-    x = rgba.convert(2);
+    x = rgba.convert(stb::pixel_format::gray_alpha);
     ASSERT_EQ(40, x(0, 0, 1));  // alpha kept
-    ASSERT_EQ(rgb.convert(1)(0, 0, 0), x(0, 0, 0));
-    x = rgba.convert(1);
-    ASSERT_EQ(rgb.convert(1)(0, 0, 0), x(0, 0, 0));
+    ASSERT_EQ(rgb.convert(stb::pixel_format::gray)(0, 0, 0), x(0, 0, 0));
+    x = rgba.convert(stb::pixel_format::gray);
+    ASSERT_EQ(rgb.convert(stb::pixel_format::gray)(0, 0, 0), x(0, 0, 0));
 }
 
 UTEST(libstb_edit_tests, test_convert_to_the_same_count_is_a_copy_and_round_trips_are_lossless) {
     const stb::image src = gradient(6, 4, 3);
-    stb::image same_count = src.convert(3);
+    stb::image same_count = src.convert(stb::pixel_format::rgb);
     ASSERT_TRUE(same(src, same_count));
     ASSERT_TRUE(same_count.data() != src.data());
-    ASSERT_TRUE(same(src, src.convert(4).convert(3)));
+    ASSERT_TRUE(same(src, src.convert(stb::pixel_format::rgba).convert(stb::pixel_format::rgb)));
     const stb::image g = gradient(6, 4, 1);
-    ASSERT_TRUE(same(g, g.convert(3).convert(1)));
-    ASSERT_TRUE(same(g, g.convert(4).convert(1)));
+    ASSERT_TRUE(same(g, g.convert(stb::pixel_format::rgb).convert(stb::pixel_format::gray)));
+    ASSERT_TRUE(same(g, g.convert(stb::pixel_format::rgba).convert(stb::pixel_format::gray)));
 }
 
-UTEST(libstb_edit_tests, test_convert_rejects_a_bad_channel_count) {
-    const stb::image src = gradient(2, 2, 3);
-    ASSERT_THROWS(src.convert(0), std::invalid_argument);
-    ASSERT_THROWS(src.convert(5), std::invalid_argument);
-    ASSERT_THROWS(stb::image().convert(3), std::invalid_argument);
+UTEST(libstb_edit_tests, test_convert_rejects_an_empty_image) {
+    ASSERT_THROWS(stb::image().convert(stb::pixel_format::rgb), std::invalid_argument);
 }
 
 // ------------------------------------------------- operations on a temporary
@@ -303,7 +300,7 @@ UTEST(libstb_edit_tests, test_an_operation_that_changes_nothing_moves_the_pixels
     {
         stb::image a = ref.copy();
         const std::uint8_t* p = a.data();
-        stb::image b = std::move(a).convert(4);
+        stb::image b = std::move(a).convert(stb::pixel_format::rgba);
         ASSERT_TRUE(b.data() == p);  // the same buffer, nothing was copied
         ASSERT_TRUE(a.empty());      // and the source was emptied
         ASSERT_TRUE(same(ref, b));
@@ -341,8 +338,8 @@ UTEST(libstb_edit_tests, test_an_operation_that_changes_nothing_moves_the_pixels
 
 UTEST(libstb_edit_tests, test_operations_on_a_temporary_give_the_same_result_as_on_an_lvalue) {
     const stb::image src = gradient(7, 5, 4);
-    ASSERT_TRUE(same(src.convert(1), src.copy().convert(1)));
-    ASSERT_TRUE(same(src.convert(3), src.copy().convert(3)));
+    ASSERT_TRUE(same(src.convert(stb::pixel_format::gray), src.copy().convert(stb::pixel_format::gray)));
+    ASSERT_TRUE(same(src.convert(stb::pixel_format::rgb), src.copy().convert(stb::pixel_format::rgb)));
     ASSERT_TRUE(same(src.rotate90(1), src.copy().rotate90(1)));
     ASSERT_TRUE(same(src.rotate90(-1), src.copy().rotate90(-1)));
     ASSERT_TRUE(same(src.orient(6), src.copy().orient(6)));
@@ -351,7 +348,7 @@ UTEST(libstb_edit_tests, test_operations_on_a_temporary_give_the_same_result_as_
 }
 
 UTEST(libstb_edit_tests, test_operations_on_a_temporary_report_the_same_errors) {
-    ASSERT_THROWS(gradient(2, 2, 3).convert(5), std::invalid_argument);
+    ASSERT_THROWS(stb::image().convert(stb::pixel_format::rgb), std::invalid_argument);
     ASSERT_THROWS(gradient(2, 2, 3).orient(9), std::invalid_argument);
     ASSERT_THROWS(gradient(2, 2, 3).pad(-1, 0, 0, 0), std::invalid_argument);
     ASSERT_THROWS(stb::image().rotate90(4), std::invalid_argument);
@@ -463,7 +460,7 @@ UTEST(libstb_edit_tests, test_composite_of_one_colour_over_itself_keeps_that_col
     // Regression: dividing by an already-rounded alpha made the colour overshoot (255 -> 260
     // wrapped to 4) for e.g. overlay alpha 8 over destination alpha 16.
     for (int c : {255, 100, 1}) {
-        stb::image base(256, 255, 4), over(256, 255, 4);
+        stb::image base(256, 255, stb::pixel_format::rgba), over(256, 255, stb::pixel_format::rgba);
         for (int y = 0; y < 255; ++y)
             for (int x = 0; x < 256; ++x) {
                 std::uint8_t* b = base.data() + (std::size_t(y) * 256 + std::size_t(x)) * 4;
@@ -497,7 +494,7 @@ struct simd_mode {
 };
 
 stb::image random_image(int w, int h, int c, unsigned seed) {
-    stb::image img(w, h, c);
+    stb::image img(w, h, testutil::fmt(c));
     std::uint32_t s = seed * 2654435761u + 1;
     for (std::size_t i = 0; i < std::size_t(w) * h * c; ++i) {
         s = s * 1664525u + 1013904223u;
@@ -613,10 +610,10 @@ UTEST(libstb_simd_tests, test_convert_is_identical_in_every_backend_for_every_pa
     for (int sc = 1; sc <= 4; ++sc)
         for (int dc = 1; dc <= 4; ++dc) {
             const stb::image src = random_image(1003, 7, sc, unsigned(sc * 10 + dc));  // 1003: not a multiple of 8
-            const stb::image want = [&] { simd_mode m("scalar"); return src.convert(dc); }();
+            const stb::image want = [&] { simd_mode m("scalar"); return src.convert(testutil::fmt(dc)); }();
             for (const std::string& be : stb::simd_backends()) {
                 simd_mode m(be);
-                ASSERT_TRUE(same(want, src.convert(dc)));
+                ASSERT_TRUE(same(want, src.convert(testutil::fmt(dc))));
             }
         }
 }
@@ -629,10 +626,10 @@ UTEST(libstb_simd_tests, test_every_small_width_is_identical_in_every_backend_an
         for (int h : {1, 3}) {
             for (int sc : {3, 4}) {
                 const stb::image src = random_image(w, h, sc, unsigned(w * 31 + h * 7 + sc));
-                const stb::image want = [&] { simd_mode m("scalar"); return src.convert(1); }();
+                const stb::image want = [&] { simd_mode m("scalar"); return src.convert(stb::pixel_format::gray); }();
                 for (const std::string& be : stb::simd_backends()) {
                     simd_mode m(be);
-                    ASSERT_TRUE(same(want, src.convert(1)));
+                    ASSERT_TRUE(same(want, src.convert(stb::pixel_format::gray)));
                 }
             }
             const stb::image base = random_image(w, h, 3, unsigned(w * 17 + h));
@@ -665,7 +662,7 @@ UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_pai
     for (const std::string& be : stb::simd_backends()) {
         simd_mode m(be);
         for (int sca : {0, 1, 77, 128, 255}) {
-            stb::image base(256, 256, 4), over(256, 256, 4);
+            stb::image base(256, 256, stb::pixel_format::rgba), over(256, 256, stb::pixel_format::rgba);
             for (int sa = 0; sa < 256; ++sa)
                 for (int da = 0; da < 256; ++da) {
                     std::uint8_t* b = &base(da, sa, 0);

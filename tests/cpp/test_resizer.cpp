@@ -53,13 +53,13 @@ UTEST(libstb_resizer_tests, test_point_upscale_duplicates_pixels) {
 }
 
 UTEST(libstb_resizer_tests, test_box_downscale_averages) {
-    const stb::image src(2, 1, 1, std::vector<std::uint8_t>{0, 255});
+    const stb::image src(2, 1, stb::pixel_format::gray, std::vector<std::uint8_t>{0, 255});
     const int lin = stb::resizer(opts(stb::resize_filter::box, false)).resize(src, 1, 1)(0, 0);
     ASSERT_TRUE(lin >= 127 && lin <= 128);
 }
 
 UTEST(libstb_resizer_tests, test_srgb_blends_in_linear_light) {
-    const stb::image src(2, 1, 1, std::vector<std::uint8_t>{0, 255});
+    const stb::image src(2, 1, stb::pixel_format::gray, std::vector<std::uint8_t>{0, 255});
     // mid-way in *linear light* is ~188 in sRGB, not 127.
     const int v = stb::resizer(opts(stb::resize_filter::box, true)).resize(src, 1, 1)(0, 0);
     ASSERT_TRUE(v >= 186 && v <= 190);
@@ -67,7 +67,7 @@ UTEST(libstb_resizer_tests, test_srgb_blends_in_linear_light) {
 
 UTEST(libstb_resizer_tests, test_alpha_weighting_stops_transparent_pixels_bleeding) {
     // opaque red next to fully transparent green
-    const stb::image src(2, 1, 4, std::vector<std::uint8_t>{255, 0, 0, 255, 0, 255, 0, 0});
+    const stb::image src(2, 1, stb::pixel_format::rgba, std::vector<std::uint8_t>{255, 0, 0, 255, 0, 255, 0, 0});
     const stb::image out = stb::resizer(opts(stb::resize_filter::box)).resize(src, 1, 1);
     ASSERT_TRUE(out(0, 0, 0) >= 250);  // stays red
     ASSERT_TRUE(out(0, 0, 1) <= 5);    // no green leaked in

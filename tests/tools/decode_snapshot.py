@@ -21,6 +21,18 @@ import sys
 import libstb as stb
 
 
+def _open(data, channels):
+    """Image.open with a channel count (0 keeps the file's), for a build with or without PixelFormat."""
+    if hasattr(stb, "PixelFormat"):
+        return stb.Image.open(data, format=None if channels == 0 else stb.PixelFormat(channels))
+    return stb.Image.open(data, channels=channels)
+
+
+def _info(data):
+    i = stb.iminfo(data)  # (width, height, channels) in either generation of the API
+    return (i.width, i.height, i.channels)
+
+
 def digest(fn, exact=True):
     try:
         v = fn()
@@ -53,9 +65,9 @@ def main(out, folder):
         for vname, d in variants(data, zlib.crc32(name.encode()) & 0xffff):
             key = f"{name}/{vname}"
             exact = vname == "full"
-            result[key + "/info"] = digest(lambda d=d: stb.iminfo(d))
+            result[key + "/info"] = digest(lambda d=d: _info(d))
             for ch in (0, 1, 2, 3, 4):
-                result[f"{key}/c{ch}"] = digest(lambda d=d, ch=ch: stb.Image.open(d, channels=ch), exact)
+                result[f"{key}/c{ch}"] = digest(lambda d=d, ch=ch: _open(d, ch), exact)
             if vname == "full":
                 result[f"{key}/flip"] = digest(lambda d=d: stb.Image.open(d, flip=True))
     json.dump(result, open(out, "w"), indent=0, sort_keys=True)

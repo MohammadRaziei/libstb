@@ -26,7 +26,7 @@ small.write_jpg("small.jpg", quality=80)          # or choose the format and its
 data = small.to_png(compression=9)                # -> bytes
 
 thumb = img.thumbnail(256, 256)                   # fits the box, never enlarges
-img.crop(10, 10, 200, 100).rotate90().convert(1)  # every edit returns a new Image
+img.crop(10, 10, 200, 100).rotate90().convert(stb.PixelFormat.GRAY)  # every edit returns a new Image
 
 pixels = img.numpy()                              # zero-copy view (needs numpy); DLPack works too
 photo = stb.Image.open("IMG_0001.jpg", orient=True)   # apply the EXIF rotation while decoding
@@ -60,6 +60,7 @@ target_link_libraries(my_app PRIVATE libstb::core)    # CMake 3.21+, C++17
 
 stb::image img = stb::image::open("photo.jpg");          // throws stb::error subclasses
 stb::image small = img.resize(320, 240, "cubic");        // or stb::resize_filter::mitchell
+stb::image gray = small.convert(stb::pixel_format::gray);  // gray, gray_alpha, rgb or rgba
 small.write("small.png");                                // format from the extension
 small.write_jpg("small.jpg", 80);
 std::vector<std::uint8_t> bytes = small.to_png(9);

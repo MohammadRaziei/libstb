@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,11 +19,41 @@
 
 namespace stb {
 
+// What one pixel holds. The value of each enumerator is its number of 8-bit channels, so
+// channel_count() is a cast, but code never needs to spell that number: say pixel_format::rgb.
+enum class pixel_format : std::uint8_t {
+    gray = 1,        // one channel: luminance
+    gray_alpha = 2,  // luminance, alpha
+    rgb = 3,         // red, green, blue
+    rgba = 4,        // red, green, blue, alpha (straight, not premultiplied)
+};
+
+constexpr int channel_count(pixel_format f) noexcept { return static_cast<int>(f); }
+constexpr bool has_alpha(pixel_format f) noexcept { return f == pixel_format::gray_alpha || f == pixel_format::rgba; }
+// The format with this many channels. Throws invalid_argument unless channels is in 1..4.
+constexpr pixel_format pixel_format_from_channels(int channels) {
+    if (channels < 1 || channels > 4) throw std::invalid_argument("channels must be in 1..4");
+    return static_cast<pixel_format>(channels);
+}
+// "gray", "gray_alpha", "rgb" or "rgba".
+constexpr std::string_view pixel_format_name(pixel_format f) noexcept {
+    switch (f) {
+        case pixel_format::gray: return "gray";
+        case pixel_format::gray_alpha: return "gray_alpha";
+        case pixel_format::rgb: return "rgb";
+        case pixel_format::rgba: return "rgba";
+    }
+    return {};
+}
+// The inverse of pixel_format_name (lower case only). Throws invalid_argument for any other text.
+pixel_format pixel_format_from_name(std::string_view name);
+
 // Header-only facts about an encoded image (no pixel decoding).
 struct image_info {
     int width = 0;
     int height = 0;
-    int channels = 0;  // channels in the source file
+    pixel_format format = pixel_format::gray;  // what the source file holds
+    int channels() const noexcept { return channel_count(format); }
 
     // Throws: invalid_argument (null data), decode_error, limit_error.
     static image_info read(const void* data, std::size_t size);
@@ -30,7 +62,7 @@ struct image_info {
 };
 
 struct load_options {
-    int channels = 0;   // 0 = keep the source's, 1..4 = convert to that many
+    std::optional<pixel_format> format;  // empty = keep the source's, else convert to this
     bool flip = false;  // flip vertically while decoding (per call, thread-safe)
     // Apply the EXIF orientation stored in the file (JPEG and PNG), so a phone
     // photo comes out upright. The result may have width and height swapped
@@ -145,19 +177,18 @@ class image {
 public:
     image() = default;
 
-    // Zero-filled. Throws invalid_argument unless width, height >= 1 and
-    // channels in 1..4.
-    image(int width, int height, int channels);
+    // Zero-filled. Throws invalid_argument unless width, height >= 1.
+    image(int width, int height, pixel_format format);
     // Takes ownership of `pixels`; throws invalid_argument on a size mismatch.
-    image(int width, int height, int channels, std::vector<std::uint8_t> pixels);
+    image(int width, int height, pixel_format format, std::vector<std::uint8_t> pixels);
 
     // Views memory that someone else owns, without copying it. `data` must
-    // hold width * height * channels bytes and stay valid while the image
+    // hold width * height * channel_count(format) bytes and stay valid while the image
     // (or anything moved from it) lives; `keep_alive` is released when that
     // image dies, so put whatever owns or frees the memory in it (a deleter,
     // a Python reference, ...). Throws invalid_argument on a null `data` or
     // bad dimensions.
-    static image wrap(int width, int height, int channels, std::uint8_t* data,
+    static image wrap(int width, int height, pixel_format format, std::uint8_t* data,
                       std::shared_ptr<void> keep_alive = {});
 
     image(image&& other) noexcept;
@@ -243,14 +274,14 @@ public:
     image thumbnail(int max_width, int max_height, std::string_view filter_name) const;
 
     // --- channels and alpha ---
-    // The same pixels with 1 (gray), 2 (gray + alpha), 3 (RGB) or 4 (RGBA) channels.
+    // The same pixels in another format.
     // Gray comes from RGB as 0.299 R + 0.587 G + 0.114 B (on the stored values, no
     // gamma, as Pillow does), a missing alpha is 255, and a dropped alpha is simply
-    // discarded: use flatten() to blend it onto a background instead. Same channel
-    // count: a copy (a move on a temporary: `load().convert(3)` costs nothing when the file is
-    // already RGB). Throws invalid_argument for a channel count outside 1..4.
-    image convert(int channels) const&;
-    image convert(int channels) &&;
+    // discarded: use flatten() to blend it onto a background instead. Same format:
+    // a copy (a move on a temporary: `open(p).convert(pixel_format::rgb)` costs nothing when
+    // the file is already RGB).
+    image convert(pixel_format format) const&;
+    image convert(pixel_format format) &&;
     // One single-channel image per channel; merge() puts them back together.
     std::vector<image> split() const;
     // 1..4 single-channel images of the same size -> one image with that many
@@ -275,7 +306,9 @@ public:
     // --- accessors ---
     int width() const noexcept { return width_; }
     int height() const noexcept { return height_; }
-    int channels() const noexcept { return channels_; }
+    // An empty image has no format: it reports gray and 0 channels.
+    pixel_format format() const noexcept { return channels_ ? static_cast<pixel_format>(channels_) : pixel_format::gray; }
+    int channels() const noexcept { return channels_; }  // channel_count(format()), 0 when empty
     bool empty() const noexcept { return !data_; }
     std::size_t stride() const noexcept { return std::size_t(width_) * std::size_t(channels_); }
     std::size_t size_bytes() const noexcept { return stride() * std::size_t(height_); }

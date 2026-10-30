@@ -30,10 +30,6 @@ void need_pixels(const image& img) {
     if (img.empty()) throw std::invalid_argument("image is empty");
 }
 
-void need_channels(int c) {
-    if (c < 1 || c > 4) throw std::invalid_argument("channels must be in 1..4");
-}
-
 // Pixels the caller overwrites completely (no zero-fill pass). 2 GiB is the ceiling
 // the rest of libstb works with (the encoders size everything with int).
 image allocate(std::int64_t w, std::int64_t h, int c) {
@@ -44,7 +40,7 @@ image allocate(std::int64_t w, std::int64_t h, int c) {
     std::uint8_t* raw = new std::uint8_t[n];
     // If this constructor throws, it calls the deleter: no leak either way.
     std::shared_ptr<void> owner(raw, [](void* p) { delete[] static_cast<std::uint8_t*>(p); });
-    return image::wrap(int(w), int(h), c, raw, std::move(owner));
+    return image::wrap(int(w), int(h), pixel_format_from_channels(c), raw, std::move(owner));
 }
 
 // ------------------------------------------------------------ flips and turns
@@ -297,9 +293,9 @@ image image::pad(int left, int top, int right, int bottom, std::array<std::uint8
     return std::as_const(*this).pad(left, top, right, bottom, fill);
 }
 
-image image::convert(int channels) const& {
+image image::convert(pixel_format target) const& {
     need_pixels(*this);
-    need_channels(channels);
+    const int channels = channel_count(target);
     if (channels == channels_) return copy();
     image out = allocate(width_, height_, channels);
     pick_convert(channels_, channels, detail::current_backend())(data(), out.data(),
@@ -307,11 +303,10 @@ image image::convert(int channels) const& {
     return out;
 }
 
-image image::convert(int channels) && {
+image image::convert(pixel_format target) && {
     need_pixels(*this);
-    need_channels(channels);
-    if (channels == channels_) return std::move(*this);
-    return std::as_const(*this).convert(channels);
+    if (channel_count(target) == channels_) return std::move(*this);
+    return std::as_const(*this).convert(target);
 }
 
 std::vector<image> image::split() const {

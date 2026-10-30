@@ -11,7 +11,7 @@ filters, errors, design notes, source layout, and build and test. The short vers
 import numpy as np
 import libstb as stb
 
-img = stb.Image.open("photo.png")                   # or bytes; also: channels=4, flip=True
+img = stb.Image.open("photo.png")                   # or bytes; also: format=stb.PixelFormat.RGBA, flip=True
 img.width, img.height, img.channels                 # 640, 480, 3
 img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
 np.from_dlpack(img)                                 # DLPack: also torch/jax/cupy.from_dlpack(img), zero-copy
@@ -19,7 +19,7 @@ stb.Image.from_dlpack(tensor)                       # and back: a torch/jax/cupy
 pixels = stb.imread("photo.png")                    # just the ndarray (same options as Image.open)
 stb.imwrite("out.jpg", pixels, quality=80)          # an ndarray or an Image; format from the extension
 small = stb.imresize(pixels, 320, 240)              # resize an ndarray, get an ndarray (no Image needed)
-stb.ImageInfo.read("photo.png")                     # header only: (width, height, channels)
+stb.ImageInfo.read("photo.png")                     # header only: (width, height, format)
 stb.Image(np.zeros((8, 8, 4), np.uint8))            # from your own uint8 array (no copy, see below)
 img.copy()                                          # an independent image (deep copy)
 
@@ -84,8 +84,11 @@ img.thumbnail(256, 256)               # fit inside the box, aspect ratio kept, n
 img.thumbnail(256, 256, "linear")     # same resizer argument as resize()
 ```
 
-**Channels and alpha.** `img.convert(channels)` goes between 1 (gray), 2 (gray +
-alpha), 3 (RGB) and 4 (RGBA). Gray is 0.299 R + 0.587 G + 0.114 B on the stored
+**Pixel formats and alpha.** A `PixelFormat` says what one pixel holds: `GRAY`,
+`GRAY_ALPHA`, `RGB` or `RGBA` (`img.format`; `img.channels` is the count, 1 to 4).
+Everywhere a format is taken you can pass the member or its lower case name
+(`"gray"`, `"gray_alpha"`, `"rgb"`, `"rgba"`), never a bare number. `img.convert(format)`
+goes between them. Gray is 0.299 R + 0.587 G + 0.114 B on the stored
 values (no gamma, as in Pillow), a missing alpha is 255, and a dropped alpha is
 simply discarded: use `img.flatten(background=(255, 255, 255))` to blend it onto
 a colour first. `img.split()` gives one single-channel `Image` per channel and
@@ -95,8 +98,8 @@ operator and straight alpha: the overlay may hang over the edges, may have any
 channel count (no alpha means opaque), and the result keeps the base's channel
 count. Its alpha equals Pillow's `alpha_composite`; the colour is within one level
 wherever the pixel is visible (where alpha is almost 0 the colour is ill-defined,
-and it does not matter). `Image.open(..., channels=n)` converts inside stb, which
-can differ from `convert(n)` by a rounding step.
+and it does not matter). `Image.open(..., format=f)` converts inside stb, which
+can differ from `convert(f)` by a rounding step.
 
 **SIMD.** The loops that are limited by arithmetic rather than by memory
 (`convert`, `composite`, `flatten`) exist in up to three builds that give
@@ -306,11 +309,11 @@ stb::image part  = img.crop(10, 10, 200, 100);        // geometry: each returns 
 stb::image turned = img.rotate90();                    // counter-clockwise; also flip_horizontal/vertical, transpose
 stb::image framed = img.pad(8, 8, 8, 8, {255, 255, 255, 255});   // fill[c] = value of channel c
 stb::image thumb = img.thumbnail(256, 256);            // fits the box, never enlarges (+ resize's filter arguments)
-stb::image gray = img.convert(1);                      // 1..4 channels; flatten() blends alpha onto a colour
+stb::image gray = img.convert(stb::pixel_format::gray);  // gray, gray_alpha, rgb, rgba; flatten() blends alpha onto a colour
 std::vector<stb::image> planes = img.split();          // stb::image::merge(planes) is the inverse
 stb::image over = img.composite(logo, 16, 16);         // "over" operator; logo may hang over the edges
 
-stb::load_options lo;                                  // EXIF orientation: JPEG APP1 / PNG eXIf
+stb::load_options lo;                                  // EXIF orientation: JPEG APP1 / PNG eXIf; lo.format = pixel_format::rgb converts
 lo.orient = true;                                      //   upright while decoding (then `flip` goes after it)
 stb::image photo = stb::image::open("IMG_0001.jpg", lo);
 int turn = stb::exif_orientation(bytes.data(), bytes.size());   // 1..8, 1 if none; never throws

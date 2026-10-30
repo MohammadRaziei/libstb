@@ -130,7 +130,7 @@ image resizer::resize(const image& src, int width, int height) const {
         throw limit_error("resized image too large: " + std::to_string(width) + "x" +
                           std::to_string(height) + "x" + std::to_string(src.channels()));
 
-    image out(width, height, src.channels());
+    image out(width, height, src.format());
 
     STBIR_RESIZE r;
     stbir_resize_init(&r, src.data(), src.width(), src.height(), static_cast<int>(src.stride()),

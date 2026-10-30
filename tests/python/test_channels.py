@@ -27,15 +27,15 @@ def from_pil(p):
 @pytest.mark.parametrize("src, dst", [(s, d) for s in range(1, 5) for d in range(1, 5) if s != d])
 def test_convert_matches_pillow_exactly(src, dst):
     a = rand(7, 9, src, seed=src * 10 + dst)
-    got = stb.Image(a.copy()).convert(dst).numpy()
+    got = stb.Image(a.copy()).convert(stb.PixelFormat(dst)).numpy()
     np.testing.assert_array_equal(got, from_pil(to_pil(a).convert(MODES[dst])))
 
 
 @pytest.mark.parametrize("c", [1, 2, 3, 4])
-def test_convert_to_the_same_count_is_an_independent_copy(c):
+def test_convert_to_the_same_format_is_an_independent_copy(c):
     a = rand(3, 4, c)
     img = stb.Image(a.copy())
-    out = img.convert(c)
+    out = img.convert(stb.PixelFormat(c))
     np.testing.assert_array_equal(out.numpy(), a)
     assert not np.shares_memory(out.numpy(), img.numpy())
 
@@ -43,17 +43,31 @@ def test_convert_to_the_same_count_is_an_independent_copy(c):
 def test_convert_round_trips_that_lose_nothing():
     a = rand(5, 5, 3)
     img = stb.Image(a.copy())
-    np.testing.assert_array_equal(img.convert(4).convert(3).numpy(), a)
+    np.testing.assert_array_equal(img.convert(stb.PixelFormat.RGBA).convert(stb.PixelFormat.RGB).numpy(), a)
     g = rand(5, 5, 1)
     gi = stb.Image(g.copy())
-    np.testing.assert_array_equal(gi.convert(3).convert(1).numpy(), g)
-    np.testing.assert_array_equal(gi.convert(2).convert(1).numpy(), g)
+    np.testing.assert_array_equal(gi.convert(stb.PixelFormat.RGB).convert(stb.PixelFormat.GRAY).numpy(), g)
+    np.testing.assert_array_equal(gi.convert(stb.PixelFormat.GRAY_ALPHA).convert(stb.PixelFormat.GRAY).numpy(), g)
 
 
-@pytest.mark.parametrize("bad", [0, 5, -1])
-def test_convert_rejects_a_bad_channel_count(bad):
+@pytest.mark.parametrize("bad", ["cmyk", "RGB", "rgb ", ""])
+def test_convert_rejects_an_unknown_format_name(bad):
     with pytest.raises(ValueError):
         stb.Image(rand(2, 2, 3)).convert(bad)
+
+
+@pytest.mark.parametrize("bad", [3, 0, 1.5, None])
+def test_convert_wants_a_pixel_format_not_a_number(bad):
+    with pytest.raises(TypeError):
+        stb.Image(rand(2, 2, 3)).convert(bad)
+
+
+@pytest.mark.parametrize("f", list(stb.PixelFormat))
+def test_a_format_can_be_given_by_name(f):
+    name = f.name.lower()  # GRAY_ALPHA -> "gray_alpha"
+    img = stb.Image(rand(3, 3, 4))
+    np.testing.assert_array_equal(img.convert(name).numpy(), img.convert(f).numpy())
+    assert img.convert(name).format == f
 
 
 @pytest.mark.parametrize("c", [1, 2, 3, 4])

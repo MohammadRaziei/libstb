@@ -183,7 +183,7 @@ UTEST(libstb_exif_tests, test_decode_orient_keeps_the_channel_conversion_and_siz
     const bytes file = png_with(src, tiff(8, false));
     stb::load_options o;
     o.orient = true;
-    o.channels = 4;
+    o.format = stb::pixel_format::rgba;
     stb::image r = stb::image::decode(file.data(), file.size(), o);
     ASSERT_EQ(4, r.channels());
     ASSERT_EQ(3, r.width());

@@ -33,5 +33,5 @@ print("imread :", back.shape, back.dtype)
 print("exact  :", np.array_equal(back, pixels))
 
 # Same options as Image.open.
-print("rgba   :", stb.imread(OUT / "pattern.png", channels=4).shape)
+print("rgba   :", stb.imread(OUT / "pattern.png", format=stb.PixelFormat.RGBA).shape)
 print("flipped:", np.array_equal(stb.imread(OUT / "pattern.png", flip=True), pixels[::-1]))

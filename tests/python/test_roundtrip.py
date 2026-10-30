@@ -37,7 +37,7 @@ def test_lossless_encode_then_decode_is_exact(fmt, c):
         pytest.skip("BMP has no gray + alpha: it is stored as RGB")
     im = img(c=c)
     data = getattr(im, f"to_{fmt}")()
-    back = stb.Image.open(data, channels=c)
+    back = stb.Image.open(data, format=stb.PixelFormat(c))
     same(back, im)
 
 
@@ -46,16 +46,16 @@ def test_every_format_in_a_chain_keeps_the_pixels(c):
     im = img(c=c, seed=3)
     data = im.to_png()
     for fmt in ("bmp", "tga", "png", "tga", "bmp", "png") if c != 2 else ("tga", "png", "tga", "png"):
-        step = stb.Image.open(data, channels=c)
+        step = stb.Image.open(data, format=stb.PixelFormat(c))
         data = getattr(step, f"to_{fmt}")()
-    same(stb.Image.open(data, channels=c), im)
+    same(stb.Image.open(data, format=stb.PixelFormat(c)), im)
 
 
 @pytest.mark.parametrize("c", (1, 3))
 @pytest.mark.parametrize("quality", (75, 95, 100))
 def test_jpeg_encode_then_decode_stays_close(c, quality):
     ramp = np.linspace(0, 255, 64 * 64 * c).reshape(64, 64, c).astype(np.uint8)  # smooth: JPEG's best case
-    back = stb.Image.open(stb.Image(ramp).to_jpg(quality), channels=c).numpy()
+    back = stb.Image.open(stb.Image(ramp).to_jpg(quality), format=stb.PixelFormat(c)).numpy()
     diff = np.abs(back.reshape(ramp.shape).astype(int) - ramp.astype(int))
     assert diff.mean() / 255 < (JPEG_NMAE * 40 if quality < 100 else JPEG_NMAE * 10)
     assert diff.max() <= JPEG_MAX_DIFF * (6 if quality < 100 else 3)
@@ -125,12 +125,12 @@ def test_orient_is_undone_by_the_inverse_orientation(orientation):
 @pytest.mark.parametrize("c", (1, 3))
 def test_adding_an_alpha_channel_then_dropping_it_is_exact(c):
     im = img(c=c)
-    same(im.convert(c + 1).convert(c), im)
+    same(im.convert(stb.PixelFormat(c + 1)).convert(stb.PixelFormat(c)), im)
 
 
 def test_gray_to_rgb_to_gray_is_exact():
     im = img(c=1)
-    same(im.convert(3).convert(1), im)
+    same(im.convert(stb.PixelFormat.RGB).convert(stb.PixelFormat.GRAY), im)
 
 
 @pytest.mark.parametrize("c", CHANNELS)

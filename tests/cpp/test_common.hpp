@@ -30,12 +30,15 @@ inline std::string ppm(int w, int h, const std::vector<std::uint8_t>& rgb) {
     return s;
 }
 
+// The format with this many channels, for tests that loop over 1..4.
+inline stb::pixel_format fmt(int channels) { return stb::pixel_format_from_channels(channels); }
+
 // 1x2 image: top row red, bottom row green.
 inline std::string red_over_green() { return ppm(1, 2, {255, 0, 0, 0, 255, 0}); }
 
 // Deterministic, non-flat pixels (defeats trivially-passing round trips).
 inline stb::image gradient(int w, int h, int c) {
-    stb::image img(w, h, c);
+    stb::image img(w, h, fmt(c));
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
             for (int k = 0; k < c; ++k)
@@ -44,7 +47,7 @@ inline stb::image gradient(int w, int h, int c) {
 }
 
 inline stb::image solid(int w, int h, int c, std::uint8_t v) {
-    return stb::image(w, h, c, std::vector<std::uint8_t>(std::size_t(w) * h * c, v));
+    return stb::image(w, h, fmt(c), std::vector<std::uint8_t>(std::size_t(w) * h * c, v));
 }
 
 inline bool same(const stb::image& a, const stb::image& b) {

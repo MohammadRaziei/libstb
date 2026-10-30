@@ -24,7 +24,7 @@ def test_import_and_core_api_work_without_numpy():
         assert img.shape == (2, 4, 3)
         png = img.to_png()
         assert stb.Image.open(png).shape == (2, 4, 3)
-        assert stb.iminfo(png) == (4, 2, 3)
+        assert stb.iminfo(png) == (4, 2, stb.PixelFormat.RGB)
         assert img.resize(2, 1).shape == (1, 2, 3)
         assert len(img.to_jpg()) > 0
     """)
@@ -100,6 +100,6 @@ def test_imwrite_and_iminfo_work_without_numpy(tmp_path=None):
         buf = memoryview(bytearray(range(24))).cast("B", shape=[2, 4, 3])
         stb.imwrite({d!r} + "/a.png", buf)
         stb.imwrite({d!r} + "/a.jpg", stb.Image(buf), quality=50)
-        assert stb.iminfo({d!r} + "/a.png") == (4, 2, 3)
+        assert stb.iminfo({d!r} + "/a.png") == (4, 2, stb.PixelFormat.RGB)
     """)
     assert r.returncode == 0, r.stderr

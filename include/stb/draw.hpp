@@ -339,7 +339,7 @@ private:
         const std::int64_t x1 = (std::min)(left + w + pad, std::int64_t(img_.width()));
         const std::int64_t y1 = (std::min)(std::int64_t(t.y_) + h + pad, std::int64_t(img_.height()));
         if (x1 <= x0 || y1 <= y0) return;  // entirely outside the image
-        image layer(int(x1 - x0), int(y1 - y0), 4);
+        image layer(int(x1 - x0), int(y1 - y0), pixel_format::rgba);
         for (int row = 0; row < layer.height(); ++row) {
             std::uint8_t* d = layer.data() + std::size_t(row) * layer.stride();
             for (int col = 0; col < layer.width(); ++col, d += 4) {

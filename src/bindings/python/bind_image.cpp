@@ -82,7 +82,7 @@ stb::image copy_pixels(const std::uint8_t* src, std::size_t h, std::size_t w, st
                 for (std::size_t k = 0; k < c; ++k)
                     px[(y * w + x) * c + k] = src[std::int64_t(y) * s0 + std::int64_t(x) * s1 + std::int64_t(k) * s2];
     }
-    return stb::image(int(w), int(h), int(c), std::move(px));
+    return stb::image(int(w), int(h), stb::pixel_format_from_channels(int(c)), std::move(px));
 }
 
 // An object that only speaks NumPy's __array_interface__ (version 3), e.g. a Pillow image:
@@ -128,7 +128,7 @@ stb::image image_from_array_interface(nb::handle obj) {
         const bool readonly = nb::cast<bool>(t[1]);
         if (!addr) throw std::invalid_argument("__array_interface__: null data address");
         auto* base = reinterpret_cast<std::uint8_t*>(addr);
-        if (contiguous && !readonly) return stb::image::wrap(int(w), int(h), int(c), base, keep_alive(obj));
+        if (contiguous && !readonly) return stb::image::wrap(int(w), int(h), stb::pixel_format_from_channels(int(c)), base, keep_alive(obj));
         return copy_pixels(base, std::size_t(h), std::size_t(w), std::size_t(c), s0, s1, s2);
     }
 
@@ -164,14 +164,23 @@ stb::image image_from_array(nb::handle obj) {
 
     array_rw rw;
     if (contiguous && nb::try_cast(obj, rw, /*convert=*/false))
-        return stb::image::wrap(int(w), int(h), int(c), static_cast<std::uint8_t*>(rw.data()),
+        return stb::image::wrap(int(w), int(h), stb::pixel_format_from_channels(int(c)), static_cast<std::uint8_t*>(rw.data()),
                                 keep_alive(obj));
     return copy_pixels(static_cast<const std::uint8_t*>(a.data()), h, w, c, s0, s1, s2);
 }
 
-stb::load_options make_options(int channels, bool flip, std::size_t max_bytes, bool orient) {
+// A pixel format given as a PixelFormat or by name ("gray", "gray_alpha", "rgb", "rgba").
+// Needs the GIL (it reads a Python object): call it before releasing it.
+stb::pixel_format to_format(nb::handle h) {
+    if (nb::isinstance<nb::str>(h)) return stb::pixel_format_from_name(nb::cast<std::string>(h));
+    stb::pixel_format f;
+    if (nb::try_cast(h, f, false)) return f;
+    throw nb::type_error("format must be a PixelFormat or one of 'gray', 'gray_alpha', 'rgb', 'rgba'");
+}
+
+stb::load_options make_options(nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
     stb::load_options o;
-    o.channels = channels;
+    if (!format.is_none()) o.format = to_format(format);
     o.flip = flip;
     o.max_bytes = max_bytes;
     o.orient = orient;
@@ -282,6 +291,14 @@ void bind_image(nb::module_& m) {
 
     m.attr("DEFAULT_MAX_BYTES") = stb::load_options{}.max_bytes;
 
+    nb::enum_<stb::pixel_format>(m, "PixelFormat",
+                                 "What one pixel holds. Functions that take a PixelFormat also take its name:\n"
+                                 "\"gray\", \"gray_alpha\", \"rgb\" or \"rgba\".")
+        .value("GRAY", stb::pixel_format::gray)
+        .value("GRAY_ALPHA", stb::pixel_format::gray_alpha)
+        .value("RGB", stb::pixel_format::rgb)
+        .value("RGBA", stb::pixel_format::rgba);
+
     // plain tuple; the Python package wraps it in ImageInfo.
     m.def(
         "info_bytes",
@@ -293,7 +310,7 @@ void bind_image(nb::module_& m) {
                 nb::gil_scoped_release unlock;  // decode without holding the GIL
                 i = stb::image_info::read(p, n);
             }
-            return std::make_tuple(i.width, i.height, i.channels);
+            return std::make_tuple(i.width, i.height, i.format);
         },
         "data"_a);
 
@@ -380,17 +397,19 @@ void bind_image(nb::module_& m) {
         .def("__copy__", &image::copy, release())
         .def("__deepcopy__", [](const image& i, nb::handle) { return i.copy(); }, "memo"_a)
 
-        // --- decoding: open(bytes-like | path, *, channels, flip, max_bytes) ---
+        // --- decoding: open(bytes-like | path, *, format, flip, max_bytes) ---
+        // The format is read (needs the GIL) before the decode, which runs without it.
         .def_static(
             "open",
-            [](const bytes_in& data, int channels, bool flip, std::size_t max_bytes, bool orient) {
-                return image::decode(data.data(), data.size(),
-                                     make_options(channels, flip, max_bytes, orient));
+            [](const bytes_in& data, nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
+                const stb::load_options opt = make_options(format, flip, max_bytes, orient);
+                nb::gil_scoped_release unlock;
+                return image::decode(data.data(), data.size(), opt);
             },
-            "source"_a, nb::kw_only(), "channels"_a = 0, "flip"_a = false,
-            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false, release(),
+            "source"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
+            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false,
             "Decode an image from encoded bytes (bytes, bytearray, memoryview) or from a file path.\n\n"
-            "channels  : 0 keeps the file's channel count; 1..4 converts.\n"
+            "format    : None keeps the file's format; a PixelFormat (or its name) converts.\n"
             "flip      : flip vertically while decoding.\n"
             "orient    : apply the EXIF orientation of a JPEG or PNG, so a phone photo comes out\n"
             "            upright (width and height may swap; a flip is applied after it).\n"
@@ -399,12 +418,14 @@ void bind_image(nb::module_& m) {
             "Raises ValueError (bad arguments), DecodeError, LimitError, OSError (unreadable file).")
         .def_static(
             "open",
-            [](const std::filesystem::path& path, int channels, bool flip, std::size_t max_bytes,
+            [](const std::filesystem::path& path, nb::handle format, bool flip, std::size_t max_bytes,
                bool orient) {
-                return image::open(path, make_options(channels, flip, max_bytes, orient));
+                const stb::load_options opt = make_options(format, flip, max_bytes, orient);
+                nb::gil_scoped_release unlock;
+                return image::open(path, opt);
             },
-            "source"_a, nb::kw_only(), "channels"_a = 0, "flip"_a = false,
-            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false, release())
+            "source"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
+            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false)
 
         // --- DLPack import: Image.from_dlpack(x), the mirror of np.from_dlpack(img) ---
         .def_static(
@@ -473,11 +494,17 @@ void bind_image(nb::module_& m) {
              "max_width"_a, "max_height"_a, "resizer"_a, release())
 
         // --- channels and alpha ---
-        .def("convert", [](const image& self, int channels) { return self.convert(channels); }, "channels"_a, release(),
-             "The same pixels with 1 (gray), 2 (gray + alpha), 3 (RGB) or 4 (RGBA) channels.\n\n"
+        .def("convert",
+             [](const image& self, nb::handle format) {
+                 const stb::pixel_format f = to_format(format);
+                 nb::gil_scoped_release unlock;
+                 return self.convert(f);
+             },
+             "format"_a,
+             "The same pixels as a PixelFormat (or its name: \"gray\", \"gray_alpha\", \"rgb\", \"rgba\").\n\n"
              "Gray is 0.299 R + 0.587 G + 0.114 B on the stored values (no gamma, as in Pillow),\n"
              "a missing alpha is 255, and a dropped alpha is discarded: use flatten() to blend it\n"
-             "onto a background instead. The same channel count gives a copy.")
+             "onto a background instead. The same format gives a copy.")
         .def(
             "split",
             [](const image& i) {
@@ -548,7 +575,8 @@ void bind_image(nb::module_& m) {
         // --- accessors and numpy interop ---
         .def_prop_ro("width", &image::width)
         .def_prop_ro("height", &image::height)
-        .def_prop_ro("channels", &image::channels)
+        .def_prop_ro("format", &image::format, "The PixelFormat of the pixels (GRAY for an empty image).")
+        .def_prop_ro("channels", &image::channels, "Number of channels: 1 to 4 (0 for an empty image).")
         .def_prop_ro("shape",
                      [](const image& i) { return std::make_tuple(i.height(), i.width(), i.channels()); })
         // DLPack: np.from_dlpack(img), torch.from_dlpack(img), jax.numpy.from_dlpack(img),
@@ -624,6 +652,6 @@ void bind_image(nb::module_& m) {
              "dtype differs from uint8.")
         .def("__repr__", [](const image& i) {
             return "Image(width=" + std::to_string(i.width()) + ", height=" + std::to_string(i.height()) +
-                   ", channels=" + std::to_string(i.channels()) + ")";
+                   ", format=" + std::string(stb::pixel_format_name(i.format())) + ")";
         });
 }

@@ -145,9 +145,9 @@ def test_info_and_load_agree_with_pillow(fmt, c, tmp_path):
     src = photo(c, 83, 61)
     data = pil_bytes(src, fmt)
     ref = PIL.Image.open(io.BytesIO(data))
-    width, height, channels = stb.iminfo(data)
+    width, height, format = stb.iminfo(data)
     assert (width, height) == ref.size
-    assert channels == len(ref.getbands())
+    assert format.value == len(ref.getbands())
 
     path = tmp_path / f"x.{fmt.lower()}"
     path.write_bytes(data)

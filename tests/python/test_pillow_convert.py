@@ -163,6 +163,6 @@ def test_without_pillow_the_methods_say_how_to_install_it_and_the_rest_works():
                 assert 'libstb[pillow]' in str(e), e
             else:
                 raise SystemExit('no ImportError')
-        assert img.convert(1).channels == 1 and len(img.to_png()) > 0  # everything else is unaffected
+        assert img.convert(stb.PixelFormat.GRAY).channels == 1 and len(img.to_png()) > 0  # everything else is unaffected
     """)
     assert r.returncode == 0, r.stderr

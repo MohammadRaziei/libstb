@@ -102,7 +102,7 @@ def test_geometry_leaves_nothing_behind(small):
 def test_convert_composite_and_flatten_leave_nothing_behind(small):
     rgb, rgba = stb.Image(small), stb.Image(_rgb(c=4))
     for _ in range(ROUNDS):
-        rgb.convert(1), rgb.convert(4), rgba.convert(3)
+        rgb.convert(stb.PixelFormat.GRAY), rgb.convert(stb.PixelFormat.RGBA), rgba.convert(stb.PixelFormat.RGB)
         rgb.composite(rgba)
         rgba.composite(rgba)
         rgba.flatten((10, 20, 30))
@@ -138,7 +138,7 @@ def test_the_simd_context_manager_and_the_resizer_leave_nothing_behind(small):
     img = stb.Image(small)
     for _ in range(ROUNDS):
         with stb.simd("scalar"):
-            img.convert(1)
+            img.convert(stb.PixelFormat.GRAY)
         stb.Resizer("cubic")
         stb.imresize(small, 100, 100)
 
@@ -210,7 +210,7 @@ def test_crop_allocates_only_the_cropped_pixels(big):
 
 @pytest.mark.limit_memory("26 MB")
 def test_convert_to_gray_allocates_only_the_gray_plane(big):
-    out = stb.Image(big).convert(1)  # 12 MB
+    out = stb.Image(big).convert(stb.PixelFormat.GRAY)  # 12 MB
     assert out.channels == 1
 
 

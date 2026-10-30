@@ -106,7 +106,7 @@ def test_orient_with_flip_flips_after_orienting():
 
 def test_orient_with_channels_and_limits():
     data = encode("PNG", 6)
-    out = stb.Image.open(data, orient=True, channels=4)
+    out = stb.Image.open(data, orient=True, format=stb.PixelFormat.RGBA)
     assert out.channels == 4 and out.width == 6
     with pytest.raises(stb.LimitError):
         stb.Image.open(data, orient=True, max_bytes=10)

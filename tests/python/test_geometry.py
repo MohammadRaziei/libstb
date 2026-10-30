@@ -80,7 +80,7 @@ def test_transforms_return_new_images_and_leave_the_source_alone():
     out.numpy()[:] = 0
     np.testing.assert_array_equal(img.numpy(), a)
     assert not np.shares_memory(img.numpy(), out.numpy())
-    for same in (img.rotate90(0), img.orient(1), img.crop(0, 0, 5, 4), img.pad(0, 0, 0, 0), img.convert(3)):
+    for same in (img.rotate90(0), img.orient(1), img.crop(0, 0, 5, 4), img.pad(0, 0, 0, 0), img.convert(stb.PixelFormat.RGB)):
         assert not np.shares_memory(img.numpy(), same.numpy())
 
 

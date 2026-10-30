@@ -17,11 +17,26 @@ compiler on the same code must give the same bytes, and any difference here is w
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import pathlib
 import sys
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
+
+
+def _fmt(stb, channels):
+    """What a build takes for this channel count: a PixelFormat if it has one, else the number.
+
+    Lets one script run on a build from before PixelFormat and on a newer one, so the two can
+    still be compared.
+    """
+    return stb.PixelFormat(channels) if hasattr(stb, "PixelFormat") else channels
+
+
+def _info(value):
+    """(width, height, channels) whatever the build's ImageInfo holds (a number or a PixelFormat)."""
+    return (value.width, value.height, value.channels)
 
 
 def _digest(value) -> str:
@@ -32,7 +47,10 @@ def _digest(value) -> str:
         h.update(f"{value.width}x{value.height}x{value.channels}".encode())
         h.update(value.tobytes())
     else:
-        h.update(repr(value).encode())
+        # An Image inside the repr says "channels=3" on a build from before PixelFormat and
+        # "format=rgb" after it: write both the same way so the two stay comparable.
+        text = re.sub(r"format=(gray_alpha|gray|rgba|rgb)\b", lambda m: "channels=" + str({"gray": 1, "gray_alpha": 2, "rgb": 3, "rgba": 4}[m.group(1)]), repr(value))
+        h.update(text.encode())
     return h.hexdigest()
 
 
@@ -69,6 +87,13 @@ class _Raw:
                                     "version": 3}
 
 
+def _open(stb, data, channels, **options):
+    """Image.open with a channel count (0 keeps the file's), for a build with or without PixelFormat."""
+    if hasattr(stb, "PixelFormat"):
+        return stb.Image.open(data, format=None if channels == 0 else stb.PixelFormat(channels), **options)
+    return stb.Image.open(data, channels=channels, **options)
+
+
 def run(stb) -> dict:
     r: dict = {}
 
@@ -92,11 +117,11 @@ def run(stb) -> dict:
         for fmt in ("png", "bmp", "tga"):
             data = getattr(im, f"to_{fmt}")()
             put(f"roundtrip/{fmt}/c{c}", lambda data=data: stb.Image.open(data))
-            put(f"info/{fmt}/c{c}", lambda data=data: stb.iminfo(data))
+            put(f"info/{fmt}/c{c}", lambda data=data: _info(stb.iminfo(data)))
         jdata = im.to_jpg(95)
         put(f"decode/jpg/c{c}", lambda jdata=jdata: stb.Image.open(jdata))
         for want in (1, 3, 4):
-            put(f"decode/png/c{c}->{want}", lambda im=im, want=want: stb.Image.open(im.to_png(), channels=want))
+            put(f"decode/png/c{c}->{want}", lambda im=im, want=want: _open(stb, im.to_png(), want))
         put(f"decode/flip/c{c}", lambda im=im: stb.Image.open(im.to_png(), flip=True))
 
     big = _image(stb, 640, 480, 3, 99)
@@ -143,7 +168,7 @@ def run(stb) -> dict:
         with stb.simd(b):
             for src in (1, 2, 3, 4):
                 for dst in (1, 2, 3, 4):
-                    put(f"convert/{b}/{src}->{dst}", lambda s=src, d=dst: imgs[s].convert(d))
+                    put(f"convert/{b}/{src}->{dst}", lambda s=src, d=dst: imgs[s].convert(_fmt(stb, d)))
             put(f"composite/{b}/rgba", lambda: imgs[3].composite(imgs[4], 7, 3))
             put(f"composite/{b}/la", lambda: imgs[1].composite(imgs[2], -5, 9))
             put(f"composite/{b}/rgba-on-rgba", lambda: imgs[4].composite(_image(stb, 30, 30, 4, 5), 20, 20))
@@ -228,7 +253,7 @@ def run(stb) -> dict:
     put("err/empty", lambda: stb.Image.open(b""))
     put("err/garbage", lambda: stb.Image.open(b"not an image at all"))
     put("err/crop", lambda: imgs[3].crop(0, 0, 0, 5))
-    put("err/convert", lambda: imgs[3].convert(7))
+    put("err/convert", lambda: imgs[3].convert(_fmt(stb, 7)))  # the message differs between old and new builds
     put("err/jpg-quality", lambda: imgs[3].to_jpg(0))
     put("err/png-level", lambda: imgs[3].to_png(99))
     return r

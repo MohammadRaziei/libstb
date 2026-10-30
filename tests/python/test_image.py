@@ -38,7 +38,7 @@ def test_load_png_bytes():
 
 def test_info():
     i = stb.iminfo(RGB)
-    assert i == (2, 2, 3)
+    assert i == (2, 2, stb.PixelFormat.RGB)
     assert (i.width, i.height, i.channels) == (2, 2, 3)
 
 
@@ -47,7 +47,7 @@ def test_load_from_str_and_pathlib_paths(tmp_path):
     p.write_bytes(RGB)
     np.testing.assert_array_equal(stb.imread(p), EXPECTED)
     np.testing.assert_array_equal(stb.imread(str(p)), EXPECTED)
-    assert stb.iminfo(p) == (2, 2, 3)
+    assert stb.iminfo(p) == (2, 2, stb.PixelFormat.RGB)
 
 
 def test_load_from_bytearray_and_memoryview():
@@ -61,11 +61,11 @@ def test_missing_file_raises_oserror(tmp_path):
 
 
 def test_channels_conversion():
-    rgba = stb.imread(RGB, channels=4)
+    rgba = stb.imread(RGB, format=stb.PixelFormat.RGBA)
     assert rgba.shape == (2, 2, 4)
     assert (rgba[..., 3] == 255).all()
     np.testing.assert_array_equal(rgba[..., :3], EXPECTED)
-    assert stb.imread(RGB, channels=1).shape == (2, 2, 1)
+    assert stb.imread(RGB, format=stb.PixelFormat.GRAY).shape == (2, 2, 1)
 
 
 def test_flip():
@@ -99,10 +99,16 @@ def test_truncated_png_raises_decode_error():
         stb.imread(RGB[: len(RGB) // 2])
 
 
-@pytest.mark.parametrize("bad", [-1, 5])
-def test_bad_channels_raises_value_error(bad):
+@pytest.mark.parametrize("bad", ["cmyk", "RGB", ""])
+def test_bad_format_name_raises_value_error(bad):
     with pytest.raises(ValueError):
-        stb.imread(RGB, channels=bad)
+        stb.imread(RGB, format=bad)
+
+
+@pytest.mark.parametrize("bad", [3, 0, 1.5])
+def test_a_number_is_not_a_format(bad):
+    with pytest.raises(TypeError):
+        stb.imread(RGB, format=bad)
 
 
 def test_max_bytes():

@@ -22,7 +22,7 @@ try:
 except Exception:  # pragma: no cover
     __version__ = "0.0.0+unknown"
 
-from .image import DEFAULT_MAX_BYTES, Image, ImageInfo
+from .image import DEFAULT_MAX_BYTES, Image, ImageInfo, PixelFormat
 from .font import (Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, TextSize,
                    estimate_metrics, estimate_text)
 from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
@@ -37,7 +37,7 @@ def simd(name):
     """Use one SIMD backend for the calling thread inside a `with` block:
 
         with libstb.simd("scalar"):
-            out = img.convert(1)      # runs the scalar kernels, on this thread only
+            out = img.convert("gray")  # runs the scalar kernels, on this thread only
 
     Unlike set_simd (the whole process), other threads are not affected and the previous
     backend comes back on exit; blocks nest. `name` is one of simd_backends() or "auto"
@@ -48,7 +48,7 @@ def simd(name):
 
 
 def iminfo(source):
-    """Shortcut for ImageInfo.read(source): (width, height, channels), header only."""
+    """Shortcut for ImageInfo.read(source): (width, height, format), header only."""
     return ImageInfo.read(source)
 
 
@@ -62,15 +62,15 @@ def exif_orientation(source):
     return _native_exif_orientation(_read(source))
 
 
-def imread(source, *, channels=0, flip=False, max_bytes=DEFAULT_MAX_BYTES, orient=False):
+def imread(source, *, format=None, flip=False, max_bytes=DEFAULT_MAX_BYTES, orient=False):
     """Decode an image file (path) or encoded bytes straight to a uint8 ndarray
     of shape (height, width, channels). Needs numpy; use Image.open without it.
 
-    Same options as Image.open: channels (0 keeps the file's), flip, max_bytes, orient
+    Same options as Image.open: format (None keeps the file's), flip, max_bytes, orient
     (apply the EXIF orientation).
     """
     return Image.open(
-        source, channels=channels, flip=flip, max_bytes=max_bytes, orient=orient
+        source, format=format, flip=flip, max_bytes=max_bytes, orient=orient
     ).numpy()
 
 
@@ -136,7 +136,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "imresize",
+    "Image", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "imresize",
     "Resizer",
     "Font", "Canvas", "CanvasText", "CanvasShape", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",

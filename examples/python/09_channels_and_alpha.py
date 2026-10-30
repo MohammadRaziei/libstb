@@ -21,11 +21,11 @@ background = stb.Image(
     np.dstack([xx * 255 // 299, yy * 255 // 199, np.full_like(xx, 140)]).astype(np.uint8)
 )
 
-# convert(channels): 1 gray, 2 gray + alpha, 3 RGB, 4 RGBA.
-gray = background.convert(1)
+# convert(format): PixelFormat.GRAY, GRAY_ALPHA, RGB or RGBA (or the name, "gray" ...).
+gray = background.convert(stb.PixelFormat.GRAY)
 print("gray          :", gray.channels, "channel, top-left value", int(gray.numpy()[0, 0, 0]))
-print("RGB -> RGBA   :", background.convert(4).numpy()[0, 0].tolist(), "(a missing alpha is 255)")
-print("RGBA -> RGB   :", badge.convert(3).channels, "channels (the alpha is simply dropped)")
+print("RGB -> RGBA   :", background.convert(stb.PixelFormat.RGBA).numpy()[0, 0].tolist(), "(a missing alpha is 255)")
+print("RGBA -> RGB   :", badge.convert(stb.PixelFormat.RGB).channels, "channels (the alpha is simply dropped)")
 
 # split() / merge(): one single-channel Image per channel, and back, in any order.
 r, g, b = background.split()

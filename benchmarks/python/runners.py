@@ -248,7 +248,7 @@ def _libstb(op, inp, srgb=False):
         if op == "flip_horizontal":
             return lambda: img.flip_horizontal()
         if op == "convert_gray":
-            return lambda: img.convert(1)
+            return lambda: img.convert(stb.PixelFormat.GRAY)
         over = stb.Image(_overlay(inp))
         return lambda: img.composite(over)
     raise Unavailable(f"no libstb runner for {op}")

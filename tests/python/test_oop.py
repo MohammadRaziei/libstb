@@ -11,9 +11,10 @@ def test_open_bytes_and_properties():
     img = Image.open(RGB)
     assert (img.width, img.height, img.channels) == (2, 2, 3)
     assert img.shape == (2, 2, 3)
+    assert img.format == stb.PixelFormat.RGB
     assert img.numpy().dtype == np.uint8
     np.testing.assert_array_equal(img.numpy(), EXPECTED)
-    assert repr(img) == "Image(width=2, height=2, channels=3)"
+    assert repr(img) == "Image(width=2, height=2, format=rgb)"
 
 
 def test_open_path(tmp_path):
@@ -24,12 +25,12 @@ def test_open_path(tmp_path):
 
 
 def test_open_options():
-    assert Image.open(RGB, channels=4).channels == 4
+    assert Image.open(RGB, format=stb.PixelFormat.RGBA).channels == 4
     np.testing.assert_array_equal(Image.open(RGB, flip=True).numpy(), EXPECTED[::-1])
     with pytest.raises(stb.LimitError, match="too large"):
         Image.open(RGB, max_bytes=1)
     with pytest.raises(ValueError):
-        Image.open(RGB, channels=9)
+        Image.open(RGB, format="cmyk")
 
 
 def test_numpy_interop():
@@ -54,7 +55,7 @@ def test_constructor_from_array():
 def test_image_info_class():
     i = ImageInfo.read(RGB)
     assert isinstance(i, ImageInfo)
-    assert i == (2, 2, 3) == stb.iminfo(RGB)
+    assert i == (2, 2, stb.PixelFormat.RGB) == stb.iminfo(RGB)
 
 
 def test_functional_shortcuts_match_object_api():

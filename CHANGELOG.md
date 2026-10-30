@@ -8,6 +8,18 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Changed
+- **Breaking:** the channel count is no longer a bare number anywhere in the public API. A new
+  `enum class pixel_format { gray, gray_alpha, rgb, rgba }` (Python: `PixelFormat.GRAY`,
+  `GRAY_ALPHA`, `RGB`, `RGBA`) replaces it: `image(w, h, format)`, `image::wrap`,
+  `convert(format)`, `load_options::format` (an empty `std::optional` keeps the file's format),
+  `image_info::format`, and in Python `Image.open(..., format=)`, `imread(..., format=)`,
+  `Image.convert(format)`, `ImageInfo.format`. Python also takes the lower case name
+  (`"gray"`, `"gray_alpha"`, `"rgb"`, `"rgba"`); a bare number is a `TypeError`. New:
+  `image::format()`, `Image.format`, `channel_count`, `has_alpha`, `pixel_format_name`,
+  `pixel_format_from_name`, `pixel_format_from_channels` (the one place a number becomes a
+  format). `channels()` / `.channels` stay as the plain count. `iminfo()` now returns
+  `(width, height, format)`, and `ImageInfo.channels` is a property. A bad channel count can no
+  longer be spelled, so those tests became tests of the enum helpers and of bad names.
 - `include/stb/color.hpp` went from 1051 to 240 lines: string parsing (`from_string`, `from_hash`,
   `from_name`), `to_string`, `blend` and the stream operators moved to `src/draw/color.cpp`, and
   `from_name` looks names up in one table (values still come from the named factories, so each color

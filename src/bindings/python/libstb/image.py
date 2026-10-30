@@ -6,7 +6,7 @@ import os
 from typing import NamedTuple, Union
 
 from . import libstb_py as _native
-from .libstb_py import DEFAULT_MAX_BYTES, Image
+from .libstb_py import DEFAULT_MAX_BYTES, Image, PixelFormat
 
 # Path, or the encoded image itself.
 Source = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
@@ -29,7 +29,12 @@ def _read(source: Source) -> bytes:
 # --- Pillow interop. Pillow is not a dependency: it is imported when one of these runs
 # (like numpy for Image.numpy()); install it with `pip install "libstb[pillow]"`.
 
-_PIL_MODES = {1: "L", 2: "LA", 3: "RGB", 4: "RGBA"}
+_PIL_MODES = {
+    PixelFormat.GRAY: "L",
+    PixelFormat.GRAY_ALPHA: "LA",
+    PixelFormat.RGB: "RGB",
+    PixelFormat.RGBA: "RGBA",
+}
 
 # Pillow modes that are not 8-bit L / LA / RGB / RGBA but convert to one without guessing.
 _PIL_CONVERT = {"1": "L", "La": "LA", "PA": "RGBA", "RGBa": "RGBA", "RGBX": "RGB", "CMYK": "RGB", "YCbCr": "RGB"}
@@ -44,12 +49,12 @@ def _pillow():
 
 
 def _to_pil(self):
-    """A Pillow image with these pixels (a copy): mode L, LA, RGB or RGBA by channel count.
+    """A Pillow image with these pixels (a copy): mode L, LA, RGB or RGBA by pixel format.
 
     Needs Pillow, imported only here.
     """
     PILImage = _pillow()
-    return PILImage.frombytes(_PIL_MODES[self.channels], (self.width, self.height), memoryview(self))
+    return PILImage.frombytes(_PIL_MODES[self.format], (self.width, self.height), memoryview(self))
 
 
 def _from_pil(cls, pil):
@@ -87,7 +92,12 @@ class ImageInfo(NamedTuple):
 
     width: int
     height: int
-    channels: int
+    format: PixelFormat
+
+    @property
+    def channels(self) -> int:
+        """Number of channels in the file: 1 to 4."""
+        return int(self.format.value)
 
     @classmethod
     def read(cls, source: Source) -> "ImageInfo":
@@ -95,4 +105,4 @@ class ImageInfo(NamedTuple):
         return cls(*_native.info_bytes(_read(source)))
 
 
-__all__ = ["DEFAULT_MAX_BYTES", "Image", "ImageInfo", "Source"]
+__all__ = ["DEFAULT_MAX_BYTES", "Image", "ImageInfo", "PixelFormat", "Source"]

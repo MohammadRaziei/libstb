@@ -40,7 +40,7 @@ print("top-left     :", pixels[0, 0])
 print("bottom-right :", pixels[-1, -1])
 
 # Ask for a different channel count, or flip vertically while decoding.
-rgba = stb.Image.open(src, channels=4)
+rgba = stb.Image.open(src, format=stb.PixelFormat.RGBA)
 print("rgba   :", rgba.channels, "channels, alpha =", rgba.numpy()[0, 0, 3])
 
 flipped = stb.Image.open(src, flip=True)

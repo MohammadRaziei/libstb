@@ -21,5 +21,5 @@ def test_bad_arguments_are_value_error_not_libstb_error():
     from test_image import RGB
 
     with pytest.raises(ValueError) as e:
-        stb.imread(RGB, channels=9)
+        stb.imread(RGB, format="cmyk")
     assert not isinstance(e.value, stb.Error)

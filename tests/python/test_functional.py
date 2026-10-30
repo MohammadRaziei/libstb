@@ -74,7 +74,7 @@ def test_imwrite_bad_array_is_a_type_or_value_error(tmp_path):
 def test_imread_options_and_bytes(tmp_path):
     data = stb.Image(SRC).to_png()
     assert stb.imread(data).shape == (4, 6, 3)
-    assert stb.imread(data, channels=4).shape == (4, 6, 4)
+    assert stb.imread(data, format=stb.PixelFormat.RGBA).shape == (4, 6, 4)
     np.testing.assert_array_equal(stb.imread(data, flip=True), SRC[::-1])
     with pytest.raises(stb.LimitError):
         stb.imread(data, max_bytes=10)
@@ -91,7 +91,7 @@ def test_imread_missing_file_and_garbage():
 
 def test_iminfo_is_header_only(tmp_path):
     data = stb.Image(SRC).to_png()
-    assert stb.iminfo(data) == (6, 4, 3)
+    assert stb.iminfo(data) == (6, 4, stb.PixelFormat.RGB)
     assert stb.iminfo(data).channels == 3
 
 

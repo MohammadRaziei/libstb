@@ -62,8 +62,8 @@ def test_set_simd_wants_a_name_not_a_bool():
 @pytest.mark.parametrize("src, dst", [(s, d) for s in range(1, 5) for d in range(1, 5) if s != d])
 def test_convert_equals_the_scalar_reference(backend, src, dst):
     img = stb.Image(rand(7, 1003, src, src * 10 + dst))  # 1003 is not a multiple of any vector width
-    want = under("scalar", lambda: img.convert(dst).numpy())
-    np.testing.assert_array_equal(under(backend, lambda: img.convert(dst).numpy()), want)
+    want = under("scalar", lambda: img.convert(stb.PixelFormat(dst)).numpy())
+    np.testing.assert_array_equal(under(backend, lambda: img.convert(stb.PixelFormat(dst)).numpy()), want)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -108,9 +108,9 @@ def test_simd_context_sets_the_backend_for_the_block_only():
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_simd_context_gives_the_same_pixels_as_set_simd(backend):
     img = stb.Image(rand(7, 1003, 4, 3))
-    want = under("scalar", lambda: img.convert(1).numpy())
+    want = under("scalar", lambda: img.convert(stb.PixelFormat.GRAY).numpy())
     with stb.simd(backend):
-        np.testing.assert_array_equal(img.convert(1).numpy(), want)
+        np.testing.assert_array_equal(img.convert(stb.PixelFormat.GRAY).numpy(), want)
 
 
 def test_simd_contexts_nest_and_restore_even_after_an_exception():

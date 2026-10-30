@@ -292,7 +292,7 @@ glyph render_glyph_index(const font::impl& f, int gid, float px) {
     int adv = 0, lsb = 0;
     f.face.h_metrics(gid, adv, lsb);
     g.advance = adv * s;
-    if (bmp.width > 0 && bmp.height > 0) g.bitmap = image(bmp.width, bmp.height, 1, bmp.pixels);
+    if (bmp.width > 0 && bmp.height > 0) g.bitmap = image(bmp.width, bmp.height, pixel_format::gray, bmp.pixels);
     return g;
 }
 
@@ -351,7 +351,7 @@ text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes)
         std::uint64_t(w) * std::uint64_t(h) > std::min<std::uint64_t>(max_bytes, INT_MAX))
         throw limit_error("rendered text too large: " + std::to_string(w) + "x" + std::to_string(h));
 
-    image canvas(int(w), int(h), 1);
+    image canvas(int(w), int(h), pixel_format::gray);
     for (const auto& p : placements) {
         const image& b = p.g->bitmap;
         for (int row = 0; row < b.height(); ++row) {
@@ -396,7 +396,7 @@ void font::draw_text_in_place(image& dst, std::string_view utf8, float px, int x
     // blends: no second blending loop to keep in step with it (and it gets the SIMD kernels).
     const text_bitmap t = render(utf8, px);
     const image& cov = t.bitmap;
-    image layer(cov.width(), cov.height(), 4);
+    image layer(cov.width(), cov.height(), pixel_format::rgba);
     for (int row = 0; row < cov.height(); ++row) {
         const std::uint8_t* s = cov.data() + std::size_t(row) * cov.stride();
         std::uint8_t* d = layer.data() + std::size_t(row) * layer.stride();
@@ -436,7 +436,7 @@ atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int 
         const truetype::packed_glyph& c = packed[i];
         glyphs.push_back({char32_t(ids[i]), c.x0, c.y0, c.x1, c.y1, c.x_offset, c.y_offset, c.x_offset2, c.y_offset2, c.x_advance});
     }
-    return atlas(image(width, height, 1, std::move(pixels)), std::move(glyphs));
+    return atlas(image(width, height, pixel_format::gray, std::move(pixels)), std::move(glyphs));
 }
 
 // --------------------------------------------------------------- estimate

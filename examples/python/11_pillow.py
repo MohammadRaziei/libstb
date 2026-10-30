@@ -15,7 +15,7 @@ img = stb.Image(np.dstack([x * 255 // 89, y * 255 // 59, np.full_like(x, 120)]).
 # libstb -> Pillow: the mode follows the channel count (L, LA, RGB, RGBA). It is a copy.
 pil = img.to_pil()
 print("to_pil        :", pil.mode, pil.size)
-print("gray and alpha:", img.convert(1).to_pil().mode, img.convert(4).to_pil().mode)
+print("gray and alpha:", img.convert(stb.PixelFormat.GRAY).to_pil().mode, img.convert(stb.PixelFormat.RGBA).to_pil().mode)
 
 # Pillow -> libstb.
 back = stb.Image.from_pil(pil)

@@ -12,7 +12,7 @@ UTEST(libstb_image_tests, test_info_reads_header) {
     stb::image_info i = stb::image_info::read(d.data(), d.size());
     ASSERT_EQ(1, i.width);
     ASSERT_EQ(2, i.height);
-    ASSERT_EQ(3, i.channels);
+    ASSERT_EQ(3, i.channels());
 }
 
 UTEST(libstb_image_tests, test_decode_and_accessors) {
@@ -33,7 +33,7 @@ UTEST(libstb_image_tests, test_decode_and_accessors) {
 UTEST(libstb_image_tests, test_decode_converts_to_rgba_with_opaque_alpha) {
     const std::string d = red_over_green();
     stb::load_options o;
-    o.channels = 4;
+    o.format = stb::pixel_format::rgba;
     stb::image img = stb::image::decode(d.data(), d.size(), o);
     ASSERT_EQ(4, img.channels());
     ASSERT_EQ(8u, img.size_bytes());
@@ -44,7 +44,7 @@ UTEST(libstb_image_tests, test_decode_converts_to_rgba_with_opaque_alpha) {
 UTEST(libstb_image_tests, test_decode_converts_to_gray) {
     const std::string d = red_over_green();
     stb::load_options o;
-    o.channels = 1;
+    o.format = stb::pixel_format::gray;
     stb::image img = stb::image::decode(d.data(), d.size(), o);
     ASSERT_EQ(1, img.channels());
     ASSERT_EQ(2u, img.size_bytes());
@@ -88,10 +88,6 @@ UTEST(libstb_image_tests, test_errors_form_one_hierarchy) {
 UTEST(libstb_image_tests, test_bad_arguments_throw_invalid_argument) {
     const std::string d = red_over_green();
     stb::load_options o;
-    o.channels = 5;
-    ASSERT_THROWS(stb::image::decode(d.data(), d.size(), o), std::invalid_argument);
-    o.channels = -1;
-    ASSERT_THROWS(stb::image::decode(d.data(), d.size(), o), std::invalid_argument);
     ASSERT_THROWS(stb::image::decode(nullptr, 10), std::invalid_argument);
 }
 
@@ -102,7 +98,7 @@ UTEST(libstb_image_tests, test_a_real_png_bomb_is_refused_from_its_header) {
     // memory is allocated (tests/python/test_png_bomb.py does the same past the 512 MiB default).
     std::vector<std::uint8_t> png;
     {
-        stb::image zeros(6000, 6000, 4);
+        stb::image zeros(6000, 6000, stb::pixel_format::rgba);
         std::fill(zeros.begin(), zeros.end(), std::uint8_t(0));
         png = zeros.to_png();
     }                                                   // the 144 MB image is gone before decoding
@@ -116,7 +112,7 @@ UTEST(libstb_image_tests, test_a_real_png_bomb_is_refused_from_its_header) {
     stb::load_options o;
     o.max_bytes = std::size_t(64) << 20;
     ASSERT_THROWS(stb::image::decode(png.data(), png.size(), o), stb::limit_error);   // not decode_error
-    o.channels = 1;                                     // asking for gray: 36 MB, under the limit
+    o.format = stb::pixel_format::gray;                                     // asking for gray: 36 MB, under the limit
     ASSERT_EQ(6000, stb::image::decode(png.data(), png.size(), o).width());           // so it is decoded
 }
 
@@ -147,16 +143,41 @@ UTEST(libstb_image_tests, test_default_image_is_empty) {
     ASSERT_EQ(0u, img.size_bytes());
 }
 
+UTEST(libstb_image_tests, test_pixel_format_helpers) {
+    using stb::pixel_format;
+    ASSERT_EQ(1, stb::channel_count(pixel_format::gray));
+    ASSERT_EQ(2, stb::channel_count(pixel_format::gray_alpha));
+    ASSERT_EQ(3, stb::channel_count(pixel_format::rgb));
+    ASSERT_EQ(4, stb::channel_count(pixel_format::rgba));
+    ASSERT_FALSE(stb::has_alpha(pixel_format::gray));
+    ASSERT_TRUE(stb::has_alpha(pixel_format::gray_alpha));
+    ASSERT_FALSE(stb::has_alpha(pixel_format::rgb));
+    ASSERT_TRUE(stb::has_alpha(pixel_format::rgba));
+    for (int c = 1; c <= 4; ++c) {
+        const pixel_format f = stb::pixel_format_from_channels(c);
+        ASSERT_EQ(c, stb::channel_count(f));
+        ASSERT_TRUE(f == stb::pixel_format_from_name(stb::pixel_format_name(f)));  // name round trip
+    }
+    ASSERT_THROWS(stb::pixel_format_from_channels(0), std::invalid_argument);
+    ASSERT_THROWS(stb::pixel_format_from_channels(5), std::invalid_argument);
+    ASSERT_THROWS(stb::pixel_format_from_name("RGB"), std::invalid_argument);  // lower case only
+    ASSERT_THROWS(stb::pixel_format_from_name("cmyk"), std::invalid_argument);
+}
+
+UTEST(libstb_image_tests, test_an_image_reports_its_format) {
+    ASSERT_TRUE(stb::pixel_format::rgba == stb::image(2, 2, stb::pixel_format::rgba).format());
+    ASSERT_TRUE(stb::pixel_format::gray == stb::image().format());  // an empty image reports gray, 0 channels
+    ASSERT_EQ(0, stb::image().channels());
+}
+
 UTEST(libstb_image_tests, test_constructors_validate) {
-    stb::image img(3, 2, 4);
+    stb::image img(3, 2, stb::pixel_format::rgba);
     ASSERT_EQ(24u, img.size_bytes());
     ASSERT_EQ(0, img(2, 1, 3));  // zero-filled
-    ASSERT_THROWS(stb::image(0, 2, 3), std::invalid_argument);
-    ASSERT_THROWS(stb::image(2, -1, 3), std::invalid_argument);
-    ASSERT_THROWS(stb::image(2, 2, 0), std::invalid_argument);
-    ASSERT_THROWS(stb::image(2, 2, 5), std::invalid_argument);
-    ASSERT_THROWS(stb::image(2, 2, 3, std::vector<std::uint8_t>(11)), std::invalid_argument);
-    stb::image ok(2, 2, 3, std::vector<std::uint8_t>(12, 7));
+    ASSERT_THROWS(stb::image(0, 2, stb::pixel_format::rgb), std::invalid_argument);
+    ASSERT_THROWS(stb::image(2, -1, stb::pixel_format::rgb), std::invalid_argument);
+    ASSERT_THROWS(stb::image(2, 2, stb::pixel_format::rgb, std::vector<std::uint8_t>(11)), std::invalid_argument);
+    stb::image ok(2, 2, stb::pixel_format::rgb, std::vector<std::uint8_t>(12, 7));
     ASSERT_EQ(7, ok(1, 1, 2));
 }
 
@@ -239,7 +260,7 @@ UTEST(libstb_image_tests, test_image_is_move_only_and_copies_are_explicit) {
 }
 
 UTEST(libstb_image_tests, test_copy_is_deep_and_independent) {
-    stb::image a(2, 2, 3);
+    stb::image a(2, 2, stb::pixel_format::rgb);
     a(0, 0, 0) = 10;
     stb::image b = a.copy();
     ASSERT_TRUE(a.data() != b.data());
@@ -250,7 +271,7 @@ UTEST(libstb_image_tests, test_copy_is_deep_and_independent) {
 }
 
 UTEST(libstb_image_tests, test_moved_from_image_is_empty) {
-    stb::image a(2, 2, 3);
+    stb::image a(2, 2, stb::pixel_format::rgb);
     const std::uint8_t* p = a.data();
     stb::image b = std::move(a);
     ASSERT_TRUE(a.empty());
@@ -265,7 +286,7 @@ UTEST(libstb_image_tests, test_moved_from_image_is_empty) {
 
 UTEST(libstb_image_tests, test_wrap_views_foreign_memory_without_copying) {
     std::vector<std::uint8_t> buf(2 * 2 * 3, 7);
-    stb::image img = stb::image::wrap(2, 2, 3, buf.data());
+    stb::image img = stb::image::wrap(2, 2, stb::pixel_format::rgb, buf.data());
     ASSERT_TRUE(img.data() == buf.data());
     img(1, 1, 2) = 9;
     ASSERT_EQ(9, buf[buf.size() - 1]);  // it is the same memory
@@ -282,7 +303,7 @@ UTEST(libstb_image_tests, test_wrap_keeps_its_owner_alive_until_the_image_dies) 
         stb::image moved;
         {
             std::shared_ptr<void> keep(px, [](void*) { freed = true; });
-            stb::image img = stb::image::wrap(4, 4, 1, px, std::move(keep));
+            stb::image img = stb::image::wrap(4, 4, stb::pixel_format::gray, px, std::move(keep));
             ASSERT_FALSE(freed);
             moved = std::move(img);  // the owner travels with the pixels
         }
@@ -293,9 +314,8 @@ UTEST(libstb_image_tests, test_wrap_keeps_its_owner_alive_until_the_image_dies) 
 
 UTEST(libstb_image_tests, test_wrap_validates_its_arguments) {
     std::uint8_t px[4] = {};
-    ASSERT_THROWS(stb::image::wrap(2, 2, 1, nullptr), std::invalid_argument);
-    ASSERT_THROWS(stb::image::wrap(0, 2, 1, px), std::invalid_argument);
-    ASSERT_THROWS(stb::image::wrap(2, 2, 5, px), std::invalid_argument);
+    ASSERT_THROWS(stb::image::wrap(2, 2, stb::pixel_format::gray, nullptr), std::invalid_argument);
+    ASSERT_THROWS(stb::image::wrap(0, 2, stb::pixel_format::gray, px), std::invalid_argument);
 }
 
 UTEST(libstb_image_tests, test_decoded_image_owns_stbs_buffer_and_survives_moves) {

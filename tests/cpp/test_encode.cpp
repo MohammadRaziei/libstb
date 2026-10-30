@@ -35,7 +35,7 @@ namespace {
 
 // Deterministic pseudo-random bytes (an LCG), identical on every platform.
 stb::image content(int kind, int w, int h, int c) {
-    stb::image img(w, h, c);
+    stb::image img(w, h, testutil::fmt(c));
     std::uint32_t s = 12345u + static_cast<std::uint32_t>(kind);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
@@ -169,7 +169,7 @@ UTEST(libstb_encode_tests, test_write_matches_to_and_ignores_the_extension) {
     const stb::image src = gradient(6, 6, 3);
     const auto path = tmp("libstb_test_write.dat");
     src.write_bmp(path);
-    ASSERT_EQ(3, stb::image_info::read_file(path).channels);
+    ASSERT_EQ(3, stb::image_info::read_file(path).channels());
     ASSERT_TRUE(same(src, stb::image::open(path)));
     src.write_png(path, 9);
     ASSERT_TRUE(same(src, stb::image::open(path)));
@@ -193,7 +193,7 @@ namespace {
 
 // A smooth ramp: the case JPEG compresses well, so a tolerance can be small.
 stb::image ramp(int w, int h, int c) {
-    stb::image img(w, h, c);
+    stb::image img(w, h, testutil::fmt(c));
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
             for (int k = 0; k < c; ++k)
@@ -205,7 +205,7 @@ stb::image ramp(int w, int h, int c) {
 // as three channels unless it is asked for as one.
 stb::image open_as(const std::filesystem::path& path, int c) {
     stb::load_options opt;
-    opt.channels = c;
+    opt.format = testutil::fmt(c);
     return stb::image::open(path, opt);
 }
 
@@ -270,7 +270,7 @@ UTEST(libstb_encode_tests, test_jpeg_drops_the_alpha_channel_and_the_file_loads_
         const stb::image back = open_as(path, c - 1);  // gray (from gray + alpha) or RGB (from RGBA)
         ASSERT_EQ(32, back.width());
         ASSERT_EQ(c - 1, back.channels());
-        ASSERT_TRUE(mean_abs_diff(src.convert(c - 1), back) < 3.0);
+        ASSERT_TRUE(mean_abs_diff(src.convert(testutil::fmt(c - 1)), back) < 3.0);
         std::filesystem::remove(path);
     }
 }

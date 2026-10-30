@@ -72,7 +72,7 @@ bounds clipped_bounds(const shape& s, int w, int h) {
 template <class Coverage>
 void paint(image& dst, const bounds& b, const color& c, Coverage cov) {
     if (b.x1 <= b.x0 || b.y1 <= b.y0) return;  // entirely outside the image
-    image layer(b.x1 - b.x0, b.y1 - b.y0, 4);
+    image layer(b.x1 - b.x0, b.y1 - b.y0, pixel_format::rgba);
     for (int row = 0; row < layer.height(); ++row) {
         std::uint8_t* d = layer.data() + std::size_t(row) * layer.stride();
         const double py = b.y0 + row + 0.5;
