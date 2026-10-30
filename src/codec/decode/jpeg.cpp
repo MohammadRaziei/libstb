@@ -259,7 +259,7 @@ inline int jpeg_decoder::huff_decode(huffman_table *h)
    c = ((code_buffer_ >> (32 - k)) & bmask[k]) + h->delta[k];
    if(c < 0 || c >= 256) // symbol id out of bounds!
        return -1;
-   assert((((code_buffer) >> (32 - h->size[c])) & bmask[h->size[c]]) == h->code[c]);
+   assert((((code_buffer_) >> (32 - h->size[c])) & bmask[h->size[c]]) == h->code[c]);
 
    // convert the id to a symbol
    code_bits_ -= k;

@@ -127,7 +127,7 @@ int png_decoder::create_png_image_raw(byte *raw, std::uint32_t raw_len, int out_
    int filter_bytes = img_n*bytes;
    int width = x;
 
-   assert(out_n == s->img_n || out_n == s->img_n+1);
+   assert(out_n == stream_->img_n || out_n == stream_->img_n+1);
    out_ = (byte *) alloc_mad3(x, y, output_bytes, 0); // extra bytes to write off the end into
    if (!out_) return fail("outofmem", "Out of memory");
 
