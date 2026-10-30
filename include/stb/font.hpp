@@ -131,7 +131,7 @@ public:
     // empty `dst`.
     image draw_text(const image& dst, std::string_view utf8, float pixel_height, int x, int y,
                     const color& text_color = color(), text_align align = text_align::left) const;
-    // The same, drawn into `dst` itself (no copy; see image::composite_in_place).
+    // The same, drawn into `dst` itself (no copy; see image::blend).
     void draw_text_in_place(image& dst, std::string_view utf8, float pixel_height, int x, int y,
                             const color& text_color = color(),
                             text_align align = text_align::left) const;

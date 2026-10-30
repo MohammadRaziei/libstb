@@ -73,8 +73,8 @@ def test_convert_equals_the_scalar_reference(backend, src, dst):
 def test_composite_equals_the_scalar_reference(backend, dc, sc, offset):
     base = stb.Image(rand(11, 317, dc, dc * 7 + sc))
     over = stb.Image(rand(9, 211, sc, dc * 13 + sc + 100))
-    want = under("scalar", lambda: base.composite(over, *offset).numpy())
-    np.testing.assert_array_equal(under(backend, lambda: base.composite(over, *offset).numpy()), want)
+    want = under("scalar", lambda: base.blend(over, *offset).numpy())
+    np.testing.assert_array_equal(under(backend, lambda: base.blend(over, *offset).numpy()), want)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -91,7 +91,7 @@ def test_the_alpha_regression_grid_is_right_in_every_backend(backend):
     for c in (255, 100, 1):
         base = stb.Image(np.stack([np.full(da.shape, c)] * 3 + [da], -1).astype(np.uint8))
         over = stb.Image(np.stack([np.full(da.shape, c)] * 3 + [sa], -1).astype(np.uint8))
-        out = under(backend, lambda: base.composite(over).numpy())
+        out = under(backend, lambda: base.blend(over).numpy())
         np.testing.assert_array_equal(out[..., :3], c)
 
 

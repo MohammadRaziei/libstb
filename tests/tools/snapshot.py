@@ -94,6 +94,11 @@ def _open(stb, data, channels, **options):
     return stb.Image.open(data, channels=channels, **options)
 
 
+def _blend(base, overlay, x, y):
+    """Image.blend, or Image.composite in a build from before the rename."""
+    return base.blend(overlay, x, y) if hasattr(base, "blend") else base.composite(overlay, x, y)
+
+
 def run(stb) -> dict:
     r: dict = {}
 
@@ -169,9 +174,9 @@ def run(stb) -> dict:
             for src in (1, 2, 3, 4):
                 for dst in (1, 2, 3, 4):
                     put(f"convert/{b}/{src}->{dst}", lambda s=src, d=dst: imgs[s].convert(_fmt(stb, d)))
-            put(f"composite/{b}/rgba", lambda: imgs[3].composite(imgs[4], 7, 3))
-            put(f"composite/{b}/la", lambda: imgs[1].composite(imgs[2], -5, 9))
-            put(f"composite/{b}/rgba-on-rgba", lambda: imgs[4].composite(_image(stb, 30, 30, 4, 5), 20, 20))
+            put(f"composite/{b}/rgba", lambda: _blend(imgs[3], imgs[4], 7, 3))
+            put(f"composite/{b}/la", lambda: _blend(imgs[1], imgs[2], -5, 9))
+            put(f"composite/{b}/rgba-on-rgba", lambda: _blend(imgs[4], _image(stb, 30, 30, 4, 5), 20, 20))
             put(f"flatten/{b}/rgba", lambda: imgs[4].flatten((10, 120, 200)))
             put(f"flatten/{b}/la", lambda: imgs[2].flatten(40))
     put("simd/name", stb.simd_name)

@@ -84,7 +84,7 @@ void paint(image& dst, const bounds& b, const color& c, Coverage cov) {
             d[3] = static_cast<std::uint8_t>(a + 0.5);
         }
     }
-    dst.composite_in_place(layer, b.x0, b.y0);
+    dst.blend(layer, b.x0, b.y0);
 }
 
 }  // namespace

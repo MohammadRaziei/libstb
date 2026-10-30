@@ -1,5 +1,6 @@
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/string_view.h>
@@ -169,6 +170,22 @@ stb::image image_from_array(nb::handle obj) {
     return copy_pixels(static_cast<const std::uint8_t*>(a.data()), h, w, c, s0, s1, s2);
 }
 
+// hstack / vstack over any iterable of Images; the Images stay alive while we point at them.
+stb::image stack_images(nb::iterable images, int gap, nb::handle background, nb::handle where, bool horizontal) {
+    std::vector<nb::object> keep;
+    std::vector<const stb::image*> ptrs;
+    for (nb::handle h : images) {
+        stb::image* p = nullptr;
+        if (!nb::try_cast<stb::image*>(h, p, /*convert=*/false) || !p) throw nb::type_error("expected Image objects");
+        keep.push_back(nb::borrow(h));
+        ptrs.push_back(p);
+    }
+    const stb::color bg = text_colour(background);
+    const stb::align a = to_align(where);
+    nb::gil_scoped_release unlock;
+    return horizontal ? stb::image::hstack(ptrs, gap, bg, a) : stb::image::vstack(ptrs, gap, bg, a);
+}
+
 // A pixel format given as a PixelFormat or by name ("gray", "gray_alpha", "rgb", "rgba").
 // Needs the GIL (it reads a Python object): call it before releasing it.
 stb::pixel_format to_format(nb::handle h) {
@@ -298,6 +315,25 @@ void bind_image(nb::module_& m) {
         .value("GRAY_ALPHA", stb::pixel_format::gray_alpha)
         .value("RGB", stb::pixel_format::rgb)
         .value("RGBA", stb::pixel_format::rgba);
+
+    nb::enum_<stb::blend_mode>(m, "BlendMode",
+                               "How Image.blend mixes an overlay into the pixels below it. Functions that take a "
+                               "BlendMode also take its lower-case name, e.g. \"multiply\".")
+        .value("NORMAL", stb::blend_mode::normal)
+        .value("MULTIPLY", stb::blend_mode::multiply)
+        .value("SCREEN", stb::blend_mode::screen)
+        .value("OVERLAY", stb::blend_mode::overlay)
+        .value("DARKEN", stb::blend_mode::darken)
+        .value("LIGHTEN", stb::blend_mode::lighten)
+        .value("ADD", stb::blend_mode::add)
+        .value("DIFFERENCE", stb::blend_mode::difference);
+
+    nb::enum_<stb::align>(m, "Align",
+                          "Where the shorter images of Image.hstack / vstack sit across the stack. Functions that "
+                          "take an Align also take \"start\", \"center\" or \"end\".")
+        .value("START", stb::align::start)
+        .value("CENTER", stb::align::center)
+        .value("END", stb::align::end);
 
     // plain tuple; the Python package wraps it in ImageInfo.
     m.def(
@@ -536,12 +572,55 @@ void bind_image(nb::module_& m) {
             "channels"_a,
             "One Image from 1 to 4 single-channel Images of the same size, in channel order\n"
             "(the inverse of split()). Raises ValueError otherwise.")
-        .def("composite", &image::composite, "overlay"_a, "x"_a = 0, "y"_a = 0, release(),
-             "This image with `overlay` blended on top at (x, y): the usual \"over\" operator with\n"
-             "straight alpha. The overlay may hang over the edges (it is clipped) and may have any\n"
-             "channel count: without alpha it is opaque, gray is replicated into colour. The result\n"
-             "has this image's channel count; if that has no alpha, the overlay's alpha just\n"
-             "weights the blend.")
+        .def(
+            "blend",
+            [](const image& i, const image& overlay, int x, int y, nb::handle mode, float opacity) {
+                const stb::blend_mode m = to_blend_mode(mode);
+                nb::gil_scoped_release unlock;
+                return i.copy().blend(overlay, x, y, m, opacity);
+            },
+            "overlay"_a, "x"_a = 0, "y"_a = 0, "mode"_a = "normal", "opacity"_a = 1.0f,
+            "A new Image: this one with `overlay` blended on top at (x, y). `mode` is a BlendMode or its name\n"
+            "(\"normal\" is the usual \"over\" operator with straight alpha; \"multiply\", \"screen\", \"overlay\",\n"
+            "\"darken\", \"lighten\", \"add\" and \"difference\" are the Photoshop modes of those names), and\n"
+            "`opacity` (0..1) scales the overlay's alpha. The overlay may hang over the edges (it is\n"
+            "clipped) and may have any channel count: without alpha it is opaque, gray is replicated\n"
+            "into colour. The result has this image's channel count; if that has no alpha, the\n"
+            "overlay's alpha just weights the blend. ValueError for an unknown mode or an opacity outside 0..1.")
+        .def(
+            "fill",
+            [](const image& i, nb::handle color, int x, int y, std::optional<int> width, std::optional<int> height) {
+                const stb::color c = text_colour(color);
+                nb::gil_scoped_release unlock;
+                return i.copy().fill(c, x, y, width.value_or(i.width()), height.value_or(i.height()));
+            },
+            "color"_a, "x"_a = 0, "y"_a = 0, "width"_a = nb::none(), "height"_a = nb::none(),
+            "A new Image with every pixel, or the rectangle (x, y, width, height) clipped to the image,\n"
+            "overwritten with `color`: an int (gray), (r, g, b), (r, g, b, a) or a string such as \"red\" or\n"
+            "\"#ff8800\". No blending: the alpha is stored as is and dropped on a format without alpha; gray\n"
+            "formats take the luma. width and height default to the rest of the image.")
+        .def("alpha", &image::alpha, release(),
+             "The alpha channel as a gray Image (a mask). ValueError if the image has no alpha.")
+        .def("with_alpha", &image::with_alpha, "mask"_a, release(),
+             "A new Image with `mask` (gray, the same size) as its alpha channel: GRAY -> GRAY_ALPHA, RGB -> RGBA,\n"
+             "and an existing alpha is replaced. 0 hides a pixel, 255 shows it.")
+        .def_static(
+            "hstack",
+            [](nb::iterable images, int gap, nb::handle background, nb::handle where) {
+                return stack_images(images, gap, background, where, true);
+            },
+            "images"_a, "gap"_a = 0, "background"_a = 0, "align"_a = "start",
+            "Several Images side by side, `gap` pixels apart. The shorter ones sit at the \"start\" (top),\n"
+            "\"center\" or \"end\" (bottom) (an Align or its name); the rest is `background` (a colour as in\n"
+            "fill(), black by default). The result has colour if any input has and alpha if any has.")
+        .def_static(
+            "vstack",
+            [](nb::iterable images, int gap, nb::handle background, nb::handle where) {
+                return stack_images(images, gap, background, where, false);
+            },
+            "images"_a, "gap"_a = 0, "background"_a = 0, "align"_a = "start",
+            "Several Images one above the other, `gap` pixels apart. The narrower ones sit at the \"start\"\n"
+            "(left), \"center\" or \"end\" (right); otherwise like hstack().")
         .def(
             "flatten",
             [](const image& i, nb::handle background) {

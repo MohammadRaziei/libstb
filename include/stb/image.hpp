@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -15,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "stb/color.hpp"
 #include "stb/error.hpp"
 
 namespace stb {
@@ -47,6 +49,28 @@ constexpr std::string_view pixel_format_name(pixel_format f) noexcept {
 }
 // The inverse of pixel_format_name (lower case only). Throws invalid_argument for any other text.
 pixel_format pixel_format_from_name(std::string_view name);
+
+// How image::blend mixes an overlay pixel (s) into the pixel below it (b), per colour channel,
+// before the overlay's alpha and opacity decide how much of the result shows. These are the
+// separable modes of the W3C compositing spec, i.e. the ones Photoshop and CSS call by the same names.
+enum class blend_mode : std::uint8_t {
+    normal,      // s: the overlay replaces what is below (the usual "over" operator)
+    multiply,    // b * s: darkens; white changes nothing
+    screen,      // 1 - (1 - b)(1 - s): lightens; black changes nothing
+    overlay,     // multiply where b is dark, screen where b is light: contrast
+    darken,      // min(b, s)
+    lighten,     // max(b, s)
+    add,         // min(1, b + s)
+    difference,  // |b - s|
+};
+// "normal", "multiply", "screen", "overlay", "darken", "lighten", "add" or "difference".
+std::string_view blend_mode_name(blend_mode m) noexcept;
+// The inverse of blend_mode_name (lower case only). Throws invalid_argument for any other text.
+blend_mode blend_mode_from_name(std::string_view name);
+
+// Where the shorter images of hstack / vstack sit across the stack: at the start (top or left),
+// in the middle, or at the end (bottom or right).
+enum class align : std::uint8_t { start, center, end };
 
 // Header-only facts about an encoded image (no pixel decoding).
 struct image_info {
@@ -288,16 +312,56 @@ public:
     // channels (in that order). Throws invalid_argument otherwise.
     static image merge(const std::vector<const image*>& channels);
     static image merge(const std::vector<image>& channels);
-    // This image with `overlay` blended on top at (x, y) ("over" operator, straight
-    // alpha). The overlay may hang over the edges (it is clipped), and may have any
-    // channel count: without alpha it is opaque, gray is replicated into colour. The
-    // result has this image's channel count; if that has no alpha, the overlay's alpha
-    // just weights the blend. Not fully inside: the rest of this image is a copy.
-    image composite(const image& overlay, int x = 0, int y = 0) const;
-    // The same blend written into THIS image's pixels: no copy. If this image wraps memory it
-    // does not own (see wrap()), that memory changes. Use it when you own the image, e.g. a
-    // canvas that stamps many overlays onto one copy.
-    void composite_in_place(const image& overlay, int x = 0, int y = 0);
+    // The alpha channel as a gray image (mask). Throws invalid_argument unless the format has alpha.
+    image alpha() const;
+    // This image with `mask` (gray, the same size) as its alpha channel: gray -> gray_alpha, rgb ->
+    // rgba, and an existing alpha channel is replaced. 0 hides a pixel, 255 shows it.
+    image with_alpha(const image& mask) const;
+
+    // --- drawing into this image (these change THIS image: use copy() to keep the original) ---
+    // `overlay` blended on top at (x, y). The overlay may hang over the edges (it is clipped) and
+    // may have any channel count: without alpha it is opaque, gray is replicated into colour. The
+    // image keeps its own channel count; if that has no alpha, the overlay's alpha just weights
+    // the blend. `mode` says how the colours mix (blend_mode::normal: the "over" operator with
+    // straight alpha), `opacity` (0..1) scales the overlay's alpha. If this image wraps memory it
+    // does not own (see wrap()), that memory changes. Returns *this, so calls chain, and on a
+    // temporary the temporary itself: `stb::image b = a.copy().blend(logo, 16, 16);`.
+    // Throws invalid_argument on an empty image or an opacity outside 0..1.
+    image& blend(const image& overlay, int x = 0, int y = 0, blend_mode mode = blend_mode::normal,
+                 float opacity = 1.0f) &;
+    image&& blend(const image& overlay, int x = 0, int y = 0, blend_mode mode = blend_mode::normal,
+                  float opacity = 1.0f) &&;
+    // Overwrite every pixel, or the rectangle (x, y, width, height) clipped to the image, with
+    // `color` (no blending: its alpha is stored as is, and dropped on a format without alpha;
+    // gray formats take its luma). A rectangle that is entirely outside changes nothing. Throws
+    // invalid_argument on an empty image or a negative width or height. Returns *this like blend().
+    image& fill(const color& c) &;
+    image&& fill(const color& c) &&;
+    image& fill(const color& c, int x, int y, int width, int height) &;
+    image&& fill(const color& c, int x, int y, int width, int height) &&;
+
+    // Several images side by side (hstack) or one above the other (vstack), `gap` pixels apart.
+    // The others are lined up on the cross axis by `where`; the rest of the result is `background`.
+    // The result has colour if any input has, and alpha if any input has: gray and rgb make rgb,
+    // rgb and gray_alpha make rgba. Throws invalid_argument (nothing to stack, null or empty
+    // image, negative gap), limit_error (result over 2 GiB).
+    //   stb::image row = stb::image::hstack({&a, &b, &c}, 8, "white", stb::align::center);
+    static image hstack(std::initializer_list<const image*> images, int gap = 0, const color& background = {},
+                        align where = align::start) {
+        return hstack(std::vector<const image*>(images), gap, background, where);
+    }
+    static image hstack(const std::vector<const image*>& images, int gap = 0, const color& background = {},
+                        align where = align::start);
+    static image hstack(const std::vector<image>& images, int gap = 0, const color& background = {},
+                        align where = align::start);
+    static image vstack(std::initializer_list<const image*> images, int gap = 0, const color& background = {},
+                        align where = align::start) {
+        return vstack(std::vector<const image*>(images), gap, background, where);
+    }
+    static image vstack(const std::vector<const image*>& images, int gap = 0, const color& background = {},
+                        align where = align::start);
+    static image vstack(const std::vector<image>& images, int gap = 0, const color& background = {},
+                        align where = align::start);
     // Blend an alpha channel onto a solid background colour (r, g, b) and drop it:
     // 2 -> 1 channel, 4 -> 3. Images without alpha are copied (moved, on a temporary).
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const&;

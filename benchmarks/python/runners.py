@@ -250,7 +250,7 @@ def _libstb(op, inp, srgb=False):
         if op == "convert_gray":
             return lambda: img.convert(stb.PixelFormat.GRAY)
         over = stb.Image(_overlay(inp))
-        return lambda: img.composite(over)
+        return lambda: img.blend(over)
     raise Unavailable(f"no libstb runner for {op}")
 
 

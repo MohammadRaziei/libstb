@@ -46,22 +46,6 @@ stb::font_family parse_family(const std::string& name) {
     throw std::invalid_argument("family must be \"sans\", \"serif\" or \"mono\"");
 }
 
-// A text colour: an int (gray), (r, g, b), (r, g, b, a) (a missing alpha is 255), or a string
-// stb::color parses ("red", "#ff8800", "#f80", "ff8800").
-stb::color text_colour(nb::handle obj) {
-    if (nb::isinstance<nb::str>(obj)) return stb::color(nb::cast<std::string>(obj));
-    if (PyLong_Check(obj.ptr())) {
-        const std::uint8_t v = byte_of(obj);
-        return stb::color(v, v, v);
-    }
-    if (nb::len(nb::cast<nb::sequence>(obj)) == 4) {
-        const auto c = colour_of<4>(obj, 4, "color");
-        return stb::color(c[0], c[1], c[2], c[3]);
-    }
-    const auto c = colour_of<3>(obj, 3, "color");
-    return stb::color(c[0], c[1], c[2]);
-}
-
 // "left", "center" or "right".
 stb::text_align text_alignment(const std::string& name) {
     if (name == "left") return stb::text_align::left;
@@ -250,6 +234,20 @@ void bind_font(nb::module_& m) {
             "Corner radius in pixels (rectangles only; at most half the short side is used). "
             "ValueError if negative or not a rectangle.");
 
+    using image_item = stb::canvas::image_item;
+    nb::class_<image_item>(
+        m, "CanvasImage",
+        "One image on a Canvas, as returned by Canvas.add_image(). Each method changes this image only and "
+        "returns it, so calls chain. Every method raises ValueError once the Canvas was finished.")
+        .def(
+            "blend", [](image_item& t, nb::handle mode) -> image_item& { return t.blend(to_blend_mode(mode)); },
+            "mode"_a, keep,
+            "How the colours mix: a BlendMode or its name (\"normal\" by default, \"multiply\", \"screen\", \"overlay\", "
+            "\"darken\", \"lighten\", \"add\", \"difference\").")
+        .def(
+            "opacity", [](image_item& t, float o) -> image_item& { return t.opacity(o); }, "opacity"_a, keep,
+            "Scales the image's alpha, 0..1 (1 by default). ValueError outside 0..1.");
+
     nb::class_<canvas>(
         m, "Canvas",
         "Several texts and shapes on ONE copy of an Image.\n\n"
@@ -301,6 +299,12 @@ void bind_font(nb::module_& m) {
             [](canvas& c, const std::string& text, int x, int y) -> text_item& { return c.add_text(text, x, y); },
             "text"_a, "x"_a = 0, "y"_a = 0, keep,
             "Add `text` at (x, y) with the current defaults and return it (a CanvasText).")
+        .def(
+            "add_image",
+            [](canvas& c, const stb::image& img, int x, int y) -> image_item& { return c.add_image(img, x, y); },
+            "image"_a, "x"_a = 0, "y"_a = 0, keep,
+            "Add `image` with its top-left corner at (x, y) and return it (a CanvasImage): its blend mode and "
+            "opacity can be set. It may hang over the edges. The Canvas keeps its own copy of the pixels.")
         .def(
             "add_rect",
             [](canvas& c, int x, int y, int w, int h) -> shape_item& { return c.add_rect(x, y, w, h); },

@@ -49,7 +49,7 @@ def warm_up(small):
     png, jpg = img.to_png(), img.to_jpg()
     stb.Image.open(png), stb.Image.open(jpg)
     img.resize(100, 100).numpy()
-    stb.Image(_rgb(c=4)).composite(stb.Image(_rgb(c=4)))
+    stb.Image(_rgb(c=4)).blend(stb.Image(_rgb(c=4)))
     for _ in range(2):
         gc.collect()
 
@@ -103,8 +103,8 @@ def test_convert_composite_and_flatten_leave_nothing_behind(small):
     rgb, rgba = stb.Image(small), stb.Image(_rgb(c=4))
     for _ in range(ROUNDS):
         rgb.convert(stb.PixelFormat.GRAY), rgb.convert(stb.PixelFormat.RGBA), rgba.convert(stb.PixelFormat.RGB)
-        rgb.composite(rgba)
-        rgba.composite(rgba)
+        rgb.blend(rgba)
+        rgba.blend(rgba)
         rgba.flatten((10, 20, 30))
         a = rgba.split()
         stb.Image.merge(a)

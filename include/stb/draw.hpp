@@ -90,10 +90,11 @@ void draw_shape(image& dst, const shape& s);
 //       .font(other).bg_color("red").padding(10);                  // this text only
 //   c.add_text("small", 20, 200).size(24);
 //   c.add_line(0, 240, 400, 240).stroke(3, "red");
+//   c.add_image(logo, 16, 16).blend(stb::blend_mode::multiply).opacity(0.6f);   // another image
 //
 //   stb::image out = c.finish();                                   // drawn here, in order
 //
-// add_text and the add_rect, add_ellipse and add_line shapes return the new item, so its own
+// add_text, add_image and the add_rect, add_ellipse and add_line shapes return the new item, so its own
 // settings can be chained onto it; every item starts again from `c`. An item takes the canvas
 // defaults as they are when it is added: changing a default later does not touch items that
 // already exist. Items are drawn in the order they were added, so a later one lands on top.
@@ -173,6 +174,35 @@ public:
         text_align align_;
         std::optional<stb::color> bg_;
         int padding_ = 0;
+    };
+
+    // One image on a canvas, as returned by add_image. It belongs to the canvas, like a text_item.
+    class image_item {
+    public:
+        // How the colours mix (blend_mode::normal by default, the usual "over").
+        image_item& blend(blend_mode m) {
+            check();
+            mode_ = m;
+            return *this;
+        }
+        // Scales the image's alpha, 0..1 (1 by default). Throws invalid_argument outside 0..1.
+        image_item& opacity(float o) {
+            check();
+            if (!(o >= 0.0f && o <= 1.0f)) throw std::invalid_argument("canvas: opacity must be in 0..1");
+            opacity_ = o;
+            return *this;
+        }
+
+    private:
+        friend class canvas;
+        image_item(canvas* owner, image img, int x, int y) : owner_(owner), img_(std::move(img)), x_(x), y_(y) {}
+        void check() const { owner_->check(); }
+
+        canvas* owner_;
+        image img_;
+        int x_, y_;
+        blend_mode mode_ = blend_mode::normal;
+        float opacity_ = 1.0f;
     };
 
     // One rectangle, ellipse or line on a canvas, as returned by add_rect, add_ellipse and
@@ -271,6 +301,20 @@ public:
         return std::get<text_item>(items_.back());
     }
 
+    // Adds an image with its top-left corner at (x, y); it may hang over the edges. The canvas
+    // keeps its own copy (a temporary is moved in, not copied), so `img` may go away. Throws
+    // invalid_argument if it is empty. See image::blend for how it is mixed in.
+    image_item& add_image(const image& img, int x, int y) {
+        check();
+        return add_image(img.copy(), x, y);
+    }
+    image_item& add_image(image&& img, int x, int y) {
+        check();
+        if (img.empty()) throw std::invalid_argument("canvas: image is empty");
+        items_.emplace_back(image_item(this, std::move(img), x, y));
+        return std::get<image_item>(items_.back());
+    }
+
     // Adds a rectangle / ellipse with the box x, y, w, h (filled with the canvas colour until
     // told otherwise), or a line from (x1, y1) to (x2, y2). Throws invalid_argument if w or h is
     // not positive.
@@ -286,7 +330,7 @@ public:
 
     bool finished() const { return finished_; }
 
-    // Draws every text in order onto the copy and hands the image over (no further copy).
+    // Draws every item in order onto the copy and hands the image over (no further copy).
     image finish() {
         check();
         std::size_t n = 0;  // texts so far, for the message
@@ -304,6 +348,8 @@ public:
             if (const text_item* t = std::get_if<text_item>(&it)) {
                 if (t->bg_) fill_box(*t);
                 t->font_->draw_text_in_place(img_, t->text_, t->px_, t->x_, t->y_, t->color_, t->align_);
+            } else if (const image_item* i = std::get_if<image_item>(&it)) {
+                img_.blend(i->img_, i->x_, i->y_, i->mode_, i->opacity_);
             } else {
                 draw_shape(img_, std::get<shape_item>(it).s_);
             }
@@ -349,11 +395,11 @@ private:
                 d[3] = t.bg_->a();
             }
         }
-        img_.composite_in_place(layer, int(x0), int(y0));
+        img_.blend(layer, int(x0), int(y0));
     }
 
     image img_;
-    using item = std::variant<text_item, shape_item>;
+    using item = std::variant<text_item, shape_item, image_item>;
     std::deque<item> items_;  // a deque: the references add_* returns stay valid
     std::optional<font> font_;
     float px_ = 0;

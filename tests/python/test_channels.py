@@ -113,7 +113,7 @@ def alpha_composite_reference(base, over, x=0, y=0):
 @pytest.mark.parametrize("x, y", [(0, 0), (3, 2), (-2, 1), (5, -3), (-100, 0), (100, 100)])
 def test_composite_positions_and_clipping_match_pillow(x, y):
     base, over = rand(8, 9, 4, 1), rand(4, 5, 4, 2)
-    got = stb.Image(base.copy()).composite(stb.Image(over.copy()), x, y).numpy()
+    got = stb.Image(base.copy()).blend(stb.Image(over.copy()), x, y).numpy()
     want = alpha_composite_reference(base, over, x, y)
     np.testing.assert_array_equal(got[..., 3], want[..., 3])
     pm = lambda a: a[..., :3].astype(float) * a[..., 3:] / 255
@@ -129,7 +129,7 @@ def test_composite_alpha_is_pillows_and_colour_is_never_wrong_for_any_pair_of_al
     for c in (255, 100, 1):
         base = np.stack([np.full(da.shape, c)] * 3 + [da], -1).astype(np.uint8)
         over = np.stack([np.full(da.shape, c)] * 3 + [sa], -1).astype(np.uint8)
-        got = stb.Image(base.copy()).composite(stb.Image(over.copy())).numpy()
+        got = stb.Image(base.copy()).blend(stb.Image(over.copy())).numpy()
         np.testing.assert_array_equal(got[..., :3], c)
         np.testing.assert_array_equal(got[..., 3], alpha_composite_reference(base, over)[..., 3])
 
@@ -138,7 +138,7 @@ def test_composite_matches_pillow_where_it_is_visible():
     rng = np.random.default_rng(0)
     base = rng.integers(0, 256, (200, 200, 4), dtype=np.uint8)
     over = rng.integers(0, 256, (200, 200, 4), dtype=np.uint8)
-    got = stb.Image(base.copy()).composite(stb.Image(over.copy())).numpy().astype(float)
+    got = stb.Image(base.copy()).blend(stb.Image(over.copy())).numpy().astype(float)
     want = alpha_composite_reference(base, over).astype(float)
     np.testing.assert_array_equal(got[..., 3], want[..., 3])
     premult = lambda x: x[..., :3] * x[..., 3:] / 255  # what actually reaches the screen
@@ -149,7 +149,7 @@ def test_composite_matches_pillow_where_it_is_visible():
 
 def test_composite_onto_an_image_without_alpha_matches_pillow():
     base, over = rand(6, 7, 3, 3), rand(6, 7, 4, 4)
-    got = stb.Image(base.copy()).composite(stb.Image(over.copy()))
+    got = stb.Image(base.copy()).blend(stb.Image(over.copy()))
     assert got.channels == 3
     opaque = np.dstack([base, np.full(base.shape[:2], 255, np.uint8)])
     want = alpha_composite_reference(opaque, over)[..., :3]
@@ -159,7 +159,7 @@ def test_composite_onto_an_image_without_alpha_matches_pillow():
 def test_composite_special_alphas_are_exact():
     base = np.full((1, 3, 4), (10, 20, 30, 255), np.uint8)
     over = np.array([[(200, 100, 50, 0), (200, 100, 50, 255), (7, 7, 7, 0)]], np.uint8)
-    out = stb.Image(base.copy()).composite(stb.Image(over)).numpy()
+    out = stb.Image(base.copy()).blend(stb.Image(over)).numpy()
     assert out[0, 0].tolist() == [10, 20, 30, 255]    # transparent overlay: untouched
     assert out[0, 1].tolist() == [200, 100, 50, 255]  # opaque overlay: replaces
     assert out[0, 2].tolist() == [10, 20, 30, 255]
@@ -167,21 +167,21 @@ def test_composite_special_alphas_are_exact():
 
 def test_composite_with_gray_and_mixed_channel_counts():
     rgb = stb.Image(np.full((1, 1, 3), 50, np.uint8))
-    assert rgb.composite(stb.Image(np.full((1, 1, 1), 77, np.uint8))).numpy()[0, 0].tolist() == [77, 77, 77]
+    assert rgb.blend(stb.Image(np.full((1, 1, 1), 77, np.uint8))).numpy()[0, 0].tolist() == [77, 77, 77]
     gray = stb.Image(np.full((1, 1, 1), 50, np.uint8))
-    out = gray.composite(stb.Image(np.full((1, 1, 3), 90, np.uint8)))
+    out = gray.blend(stb.Image(np.full((1, 1, 3), 90, np.uint8)))
     assert out.channels == 1 and out.numpy()[0, 0, 0] == 90
 
 
 def test_composite_leaves_both_inputs_alone_and_needs_an_image():
     base, over = stb.Image(rand(4, 4, 4)), stb.Image(rand(2, 2, 4, 5))
     b0, o0 = base.numpy().copy(), over.numpy().copy()
-    out = base.composite(over, 1, 1)
+    out = base.blend(over, 1, 1)
     np.testing.assert_array_equal(base.numpy(), b0)
     np.testing.assert_array_equal(over.numpy(), o0)
     assert not np.shares_memory(out.numpy(), base.numpy())
     with pytest.raises(TypeError):
-        base.composite(rand(2, 2, 4))
+        base.blend(rand(2, 2, 4))
 
 
 def test_flatten_matches_compositing_onto_a_solid_background():

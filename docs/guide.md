@@ -93,13 +93,27 @@ values (no gamma, as in Pillow), a missing alpha is 255, and a dropped alpha is
 simply discarded: use `img.flatten(background=(255, 255, 255))` to blend it onto
 a colour first. `img.split()` gives one single-channel `Image` per channel and
 `Image.merge(channels)` puts 1 to 4 of them back (in any order).
-`base.composite(overlay, x=0, y=0)` blends `overlay` on top with the usual "over"
-operator and straight alpha: the overlay may hang over the edges, may have any
+`base.blend(overlay, x=0, y=0, mode="normal", opacity=1.0)` returns a new image with
+`overlay` blended on top (with the usual "over" operator and straight alpha for
+`mode="normal"`; `"multiply"`, `"screen"`, `"overlay"`, `"darken"`, `"lighten"`, `"add"` and
+`"difference"` are the Photoshop modes of those names, and `opacity` scales the overlay's alpha): the overlay may hang over the edges, may have any
 channel count (no alpha means opaque), and the result keeps the base's channel
 count. Its alpha equals Pillow's `alpha_composite`; the colour is within one level
 wherever the pixel is visible (where alpha is almost 0 the colour is ill-defined,
 and it does not matter). `Image.open(..., format=f)` converts inside stb, which
 can differ from `convert(f)` by a rounding step.
+
+`img.fill(color, x=0, y=0, width=None, height=None)` returns a new image with the whole
+image or that rectangle (clipped to the image) overwritten by `color`: an int (gray),
+`(r, g, b)`, `(r, g, b, a)` or a name or hex string. `img.alpha()` is the alpha channel as a
+gray image (a mask) and `img.with_alpha(mask)` sets or replaces it, so a mask and `blend`
+give "show this overlay only here". `Image.hstack(images, gap=0, background=0, align="start")`
+and `Image.vstack` put images side by side or one above the other (the shorter ones sit at
+the `"start"`, `"center"` or `"end"`; the result has colour and alpha if any input has).
+`Canvas.add_image(img, x, y)` does the same blending inside a canvas, with
+`.blend(mode)` and `.opacity(o)` on the returned item. In C++, `blend` and `fill` change the
+image they are called on (use `copy()` to keep the original); in Python every method returns
+a new `Image`.
 
 **SIMD.** The loops that are limited by arithmetic rather than by memory
 (`convert`, `composite`, `flatten`) exist in up to three builds that give
@@ -311,7 +325,11 @@ stb::image framed = img.pad(8, 8, 8, 8, {255, 255, 255, 255});   // fill[c] = va
 stb::image thumb = img.thumbnail(256, 256);            // fits the box, never enlarges (+ resize's filter arguments)
 stb::image gray = img.convert(stb::pixel_format::gray);  // gray, gray_alpha, rgb, rgba; flatten() blends alpha onto a colour
 std::vector<stb::image> planes = img.split();          // stb::image::merge(planes) is the inverse
-stb::image over = img.composite(logo, 16, 16);         // "over" operator; logo may hang over the edges
+stb::image over = img.copy().blend(logo, 16, 16);      // blend() changes the image it is called on: copy() first to keep it
+img.blend(shadow, 0, 0, stb::blend_mode::multiply, 0.6f);   // modes and opacity (blend_mode: normal, multiply, screen, ...)
+img.fill("red", 10, 10, 50, 20);                       // overwrite a rectangle (no x, y, w, h: the whole image)
+stb::image mask = logo.alpha();                        // the alpha channel as a gray image; with_alpha(mask) sets it
+stb::image strip = stb::image::hstack({&a, &b, &c}, 8, "white", stb::align::center);   // also vstack
 
 stb::load_options lo;                                  // EXIF orientation: JPEG APP1 / PNG eXIf; lo.format = pixel_format::rgb converts
 lo.orient = true;                                      //   upright while decoding (then `flip` goes after it)

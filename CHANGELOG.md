@@ -7,7 +7,35 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Added
+- `image::blend(overlay, x, y, mode, opacity)`: blend modes `normal`, `multiply`, `screen`,
+  `overlay`, `darken`, `lighten`, `add` and `difference` (`enum class blend_mode`, Python
+  `BlendMode` or the lower case name), and an `opacity` between 0 and 1 that scales the overlay's
+  alpha. Works with every channel count and with alpha below and above. Python:
+  `Image.blend(overlay, x, y, mode="normal", opacity=1.0)`.
+- `image::fill(color, x, y, width, height)` (and `fill(color)` for the whole image): overwrites
+  pixels with a colour, clipped to the image, stored in the image's format (gray takes the
+  luma, alpha is dropped where there is none). Python: `Image.fill(color, x, y, width, height)`.
+- `image::alpha()` (the alpha channel as a gray mask) and `image::with_alpha(mask)` (add or
+  replace the alpha channel). Python: `Image.alpha()`, `Image.with_alpha(mask)`.
+- `image::hstack` and `image::vstack` (also `Image.hstack`, `Image.vstack`): several images side
+  by side or one above the other, with `gap`, `background` and `align` (`enum class align`,
+  Python `Align` or `"start"`, `"center"`, `"end"`). The result has colour and alpha if any
+  input has.
+- `canvas::add_image(image, x, y)` with `.blend(mode)` and `.opacity(o)` on the returned
+  `image_item` (Python `Canvas.add_image`, `CanvasImage`). The canvas keeps its own copy.
+- `examples/cpp/tour.cpp`: one walk through load, inspect, geometry, resize, canvas, masks,
+  stacking and encode.
+
 ### Changed
+- **Breaking:** `image::composite` and `image::composite_in_place` are gone: `blend` replaces
+  both and changes the image it is called on (it returns `*this`, so calls chain, and a
+  temporary comes back by value: `base.copy().blend(logo, 16, 16)` is the old `composite`).
+  In Python `Image.composite` is `Image.blend` and still returns a new image. `blend_mode::normal`
+  at opacity 1 runs the same integer kernels as before, so its output is byte for byte the old
+  one (the 533-case snapshot of the whole library shows 0 differences).
+- `canvas` can now hold images next to texts and shapes; its items are drawn in the order they
+  were added.
 - **Breaking:** the channel count is no longer a bare number anywhere in the public API. A new
   `enum class pixel_format { gray, gray_alpha, rgb, rgba }` (Python: `PixelFormat.GRAY`,
   `GRAY_ALPHA`, `RGB`, `RGBA`) replaces it: `image(w, h, format)`, `image::wrap`,

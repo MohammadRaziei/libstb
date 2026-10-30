@@ -375,14 +375,15 @@ UTEST(libstb_font_tests, test_canvas_set_size_and_order) {
     ASSERT_EQ(255, top(10, 10));
 }
 
-UTEST(libstb_font_tests, test_composite_in_place_matches_composite) {
+UTEST(libstb_font_tests, test_blend_changes_the_image_it_is_called_on_and_a_copy_keeps_the_source) {
     const stb::image base = filled(20, 20, 3, 100);
     const stb::image over(4, 4, stb::pixel_format::rgba, std::vector<std::uint8_t>(64, 200));
     stb::image a = base.copy();
-    a.composite_in_place(over, 18, -2);
-    const stb::image b = base.composite(over, 18, -2);
+    a.blend(over, 18, -2);
+    const stb::image b = base.copy().blend(over, 18, -2);
     ASSERT_TRUE(std::memcmp(a.data(), b.data(), std::size_t(b.stride()) * b.height()) == 0);
-    ASSERT_EQ(100, px(base, 19, 0)[0]);              // composite() left its source alone
+    ASSERT_EQ(100, px(base, 19, 0)[0]);              // the copy was blended, base was left alone
+    ASSERT_NE(100, px(a, 19, 0)[0]);
 }
 
 UTEST(libstb_font_tests, test_draw_text_align_puts_x_at_the_centre_or_right_edge) {

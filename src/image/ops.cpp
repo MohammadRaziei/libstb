@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "image/kernels.hpp"
+#include "image/pixels.hpp"
 #include "image/simd.hpp"
 #include "stb/image.hpp"
 
@@ -18,30 +19,16 @@
 namespace stb {
 namespace {
 
+using detail::allocate;
 using detail::backend;
 using detail::composite_row;
 using detail::convert_row;
+using detail::fill_run;
 using detail::luma;
+using detail::need_pixels;
 using detail::pick_composite_scalar;
 using detail::pick_convert_scalar;
 using detail::row_fn;
-
-void need_pixels(const image& img) {
-    if (img.empty()) throw std::invalid_argument("image is empty");
-}
-
-// Pixels the caller overwrites completely (no zero-fill pass). 2 GiB is the ceiling
-// the rest of libstb works with (the encoders size everything with int).
-image allocate(std::int64_t w, std::int64_t h, int c) {
-    if (w < 1 || h < 1) throw std::invalid_argument("width and height must be >= 1");
-    if (w > INT_MAX || h > INT_MAX || std::uint64_t(w) * std::uint64_t(h) * std::uint64_t(c) > std::uint64_t(INT_MAX))
-        throw limit_error("result larger than 2 GiB");
-    const std::size_t n = std::size_t(w) * std::size_t(h) * std::size_t(c);
-    std::uint8_t* raw = new std::uint8_t[n];
-    // If this constructor throws, it calls the deleter: no leak either way.
-    std::shared_ptr<void> owner(raw, [](void* p) { delete[] static_cast<std::uint8_t*>(p); });
-    return image::wrap(int(w), int(h), pixel_format_from_channels(c), raw, std::move(owner));
-}
 
 // ------------------------------------------------------------ flips and turns
 //
@@ -166,14 +153,6 @@ void fit_size(int w, int h, int mw, int mh, int& nw, int& nh) {
         nh = mh;
         nw = int(std::max<std::int64_t>(1, (std::int64_t(w) * mh + h / 2) / h));
     }
-}
-
-void fill_run(std::uint8_t* d, std::size_t pixels, const std::uint8_t* px, int c) {
-    if (c == 1) {
-        std::memset(d, px[0], pixels);
-        return;
-    }
-    for (std::size_t i = 0; i < pixels; ++i, d += c) std::memcpy(d, px, std::size_t(c));
 }
 
 }  // namespace
@@ -352,37 +331,44 @@ image image::merge(const std::vector<image>& channels) {
 
 // --------------------------------------------------------------------- alpha
 
-image image::composite(const image& overlay, int x, int y) const {
-    image out = copy();
-    out.composite_in_place(overlay, x, y);
-    return out;
-}
-
-void image::composite_in_place(const image& overlay, int x, int y) {
+image& image::blend(const image& overlay, int x, int y, blend_mode mode, float opacity) & {
     need_pixels(*this);
     need_pixels(overlay);
+    if (!(opacity >= 0.0f && opacity <= 1.0f)) throw std::invalid_argument("opacity must be in 0..1");
     // The part of the overlay that lands inside this image.
     const std::int64_t x0 = std::max<std::int64_t>(0, x), y0 = std::max<std::int64_t>(0, y);
     const std::int64_t x1 = std::min<std::int64_t>(width_, std::int64_t(x) + overlay.width());
     const std::int64_t y1 = std::min<std::int64_t>(height_, std::int64_t(y) + overlay.height());
-    if (x0 >= x1 || y0 >= y1) return;
+    if (x0 >= x1 || y0 >= y1) return *this;
 
     const int dc = channels_, sc = overlay.channels();
     const std::size_t n = std::size_t(x1 - x0);
+    // The common case (the "over" operator at full opacity) has integer kernels; anything else
+    // goes through the general floating-point row.
+    const bool plain = mode == blend_mode::normal && opacity == 1.0f;
     // An overlay without alpha is opaque: its rows replace the destination's (converted to
     // this image's channel count); one with alpha is blended.
-    const bool blend = sc == 2 || sc == 4;
-    const row_fn fn = blend ? pick_composite(sc, dc, detail::current_backend())
-                            : (sc == dc ? nullptr : pick_convert(sc, dc, detail::current_backend()));
+    const bool mixes = sc == 2 || sc == 4;
+    const row_fn fn = !plain ? nullptr
+                      : mixes ? pick_composite(sc, dc, detail::current_backend())
+                              : (sc == dc ? nullptr : pick_convert(sc, dc, detail::current_backend()));
     for (std::int64_t py = y0; py < y1; ++py) {
         std::uint8_t* d = data() + std::size_t(py) * stride() + std::size_t(x0) * std::size_t(dc);
         const std::uint8_t* s = overlay.data() + std::size_t(py - y) * overlay.stride() +
                                 std::size_t(x0 - x) * std::size_t(sc);
-        if (fn)
+        if (!plain)
+            detail::blend_row(s, sc, d, dc, n, mode, opacity);
+        else if (fn)
             fn(s, d, n);
         else
             std::memcpy(d, s, n * std::size_t(dc));
     }
+    return *this;
+}
+
+image&& image::blend(const image& overlay, int x, int y, blend_mode mode, float opacity) && {
+    blend(overlay, x, y, mode, opacity);
+    return std::move(*this);
 }
 
 image image::flatten(std::array<std::uint8_t, 3> background) && {
@@ -399,7 +385,7 @@ image image::flatten(std::array<std::uint8_t, 3> background) const& {
     const std::uint8_t px[3] = {dc == 1 ? luma(background[0], background[1], background[2]) : background[0],
                                 background[1], background[2]};
     fill_run(base.data(), std::size_t(width_) * std::size_t(height_), px, dc);
-    return base.composite(*this);
+    return std::move(base).blend(*this);
 }
 
 }  // namespace stb

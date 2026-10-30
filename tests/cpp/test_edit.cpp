@@ -383,61 +383,61 @@ UTEST(libstb_edit_tests, test_merge_rejects_wrong_input) {
 
 // -------------------------------------------------------------- composite
 
-UTEST(libstb_edit_tests, test_composite_with_an_opaque_overlay_replaces_the_pixels) {
+UTEST(libstb_edit_tests, test_blend_with_an_opaque_overlay_replaces_the_pixels) {
     const stb::image base = solid(4, 4, 3, 10);
     const stb::image over = solid(2, 2, 3, 200);
-    const stb::image r = base.composite(over, 1, 1);
+    const stb::image r = base.copy().blend(over, 1, 1);
     for (int y = 0; y < 4; ++y)
         for (int x = 0; x < 4; ++x) ASSERT_EQ((x >= 1 && x < 3 && y >= 1 && y < 3) ? 200 : 10, r(x, y, 1));
 }
 
-UTEST(libstb_edit_tests, test_composite_blends_by_the_overlay_alpha) {
+UTEST(libstb_edit_tests, test_blend_blends_by_the_overlay_alpha) {
     const stb::image base = solid(1, 1, 3, 100);
-    ASSERT_EQ(100, base.composite(make(1, 1, 4, {200, 200, 200, 0}))(0, 0, 0));    // transparent
-    ASSERT_EQ(200, base.composite(make(1, 1, 4, {200, 200, 200, 255}))(0, 0, 0));  // opaque
-    ASSERT_EQ(150, base.composite(make(1, 1, 4, {200, 200, 200, 128}))(0, 0, 0));  // about half
-    ASSERT_EQ(3, base.composite(make(1, 1, 4, {200, 200, 200, 128})).channels());  // keeps this image's channels
+    ASSERT_EQ(100, base.copy().blend(make(1, 1, 4, {200, 200, 200, 0}))(0, 0, 0));    // transparent
+    ASSERT_EQ(200, base.copy().blend(make(1, 1, 4, {200, 200, 200, 255}))(0, 0, 0));  // opaque
+    ASSERT_EQ(150, base.copy().blend(make(1, 1, 4, {200, 200, 200, 128}))(0, 0, 0));  // about half
+    ASSERT_EQ(3, base.copy().blend(make(1, 1, 4, {200, 200, 200, 128})).channels());  // keeps this image's channels
 }
 
-UTEST(libstb_edit_tests, test_composite_onto_alpha_uses_the_over_operator) {
+UTEST(libstb_edit_tests, test_blend_onto_alpha_uses_the_over_operator) {
     const stb::image base = make(1, 1, 4, {0, 0, 255, 128});
-    const stb::image r = base.composite(make(1, 1, 4, {255, 0, 0, 128}));
+    const stb::image r = base.copy().blend(make(1, 1, 4, {255, 0, 0, 128}));
     ASSERT_EQ(192, r(0, 0, 3));  // 128 + 128 * (1 - 128/255)
     ASSERT_TRUE(r(0, 0, 0) > 130 && r(0, 0, 0) < 190);  // red and blue mixed, red the stronger
     ASSERT_TRUE(r(0, 0, 2) > 60 && r(0, 0, 2) < 120);
     // Over a fully transparent pixel the overlay's colour comes through untouched.
-    const stb::image clear = make(1, 1, 4, {9, 9, 9, 0}).composite(make(1, 1, 4, {40, 50, 60, 77}));
+    const stb::image clear = make(1, 1, 4, {9, 9, 9, 0}).copy().blend(make(1, 1, 4, {40, 50, 60, 77}));
     ASSERT_TRUE(clear(0, 0, 0) == 40 && clear(0, 0, 1) == 50 && clear(0, 0, 2) == 60 && clear(0, 0, 3) == 77);
 }
 
-UTEST(libstb_edit_tests, test_composite_clips_an_overlay_that_hangs_over_the_edges) {
+UTEST(libstb_edit_tests, test_blend_clips_an_overlay_that_hangs_over_the_edges) {
     const stb::image base = solid(3, 3, 1, 0);
     const stb::image over = solid(3, 3, 1, 255);
-    const stb::image r = base.composite(over, -2, 2);  // only its top-right pixel row of 1 lands inside
+    const stb::image r = base.copy().blend(over, -2, 2);  // only its top-right pixel row of 1 lands inside
     int lit = 0;
     for (int y = 0; y < 3; ++y)
         for (int x = 0; x < 3; ++x) lit += r(x, y, 0) == 255;
     ASSERT_EQ(1, lit);
     ASSERT_EQ(255, r(0, 2, 0));
-    ASSERT_TRUE(same(base, base.composite(over, 3, 0)));   // entirely right of the image
-    ASSERT_TRUE(same(base, base.composite(over, 0, -3)));  // entirely above it
-    ASSERT_TRUE(same(base, base.composite(over, INT_MAX, INT_MAX)));
-    ASSERT_TRUE(same(base, base.composite(over, INT_MIN, INT_MIN)));
+    ASSERT_TRUE(same(base, base.copy().blend(over, 3, 0)));   // entirely right of the image
+    ASSERT_TRUE(same(base, base.copy().blend(over, 0, -3)));  // entirely above it
+    ASSERT_TRUE(same(base, base.copy().blend(over, INT_MAX, INT_MAX)));
+    ASSERT_TRUE(same(base, base.copy().blend(over, INT_MIN, INT_MIN)));
 }
 
-UTEST(libstb_edit_tests, test_composite_mixes_channel_counts) {
+UTEST(libstb_edit_tests, test_blend_mixes_channel_counts) {
     const stb::image rgb = solid(1, 1, 3, 50);
-    ASSERT_EQ(77, rgb.composite(make(1, 1, 1, {77}))(0, 0, 2));  // gray overlay is opaque gray
+    ASSERT_EQ(77, rgb.copy().blend(make(1, 1, 1, {77}))(0, 0, 2));  // gray overlay is opaque gray
     const stb::image gray = solid(1, 1, 1, 50);
-    ASSERT_EQ(1, gray.composite(make(1, 1, 3, {90, 90, 90})).channels());
-    ASSERT_EQ(90, gray.composite(make(1, 1, 3, {90, 90, 90}))(0, 0, 0));
-    ASSERT_EQ(70, gray.composite(make(1, 1, 2, {90, 128}))(0, 0, 0));  // 50 -> 90 by about 128/255
+    ASSERT_EQ(1, gray.copy().blend(make(1, 1, 3, {90, 90, 90})).channels());
+    ASSERT_EQ(90, gray.copy().blend(make(1, 1, 3, {90, 90, 90}))(0, 0, 0));
+    ASSERT_EQ(70, gray.copy().blend(make(1, 1, 2, {90, 128}))(0, 0, 0));  // 50 -> 90 by about 128/255
 }
 
-UTEST(libstb_edit_tests, test_composite_does_not_modify_either_input) {
+UTEST(libstb_edit_tests, test_blend_does_not_modify_either_input) {
     const stb::image base = gradient(4, 4, 4), over = gradient(2, 2, 4);
     const stb::image base_copy = base.copy(), over_copy = over.copy();
-    (void)base.composite(over, 1, 1);
+    (void)base.copy().blend(over, 1, 1);
     ASSERT_TRUE(same(base, base_copy));
     ASSERT_TRUE(same(over, over_copy));
 }
@@ -456,7 +456,7 @@ UTEST(libstb_edit_tests, test_flatten_blends_alpha_onto_a_background) {
     ASSERT_EQ(255, make(1, 1, 4, {5, 5, 5, 0}).flatten()(0, 0, 0));  // default background is white
 }
 
-UTEST(libstb_edit_tests, test_composite_of_one_colour_over_itself_keeps_that_colour_for_every_pair_of_alphas) {
+UTEST(libstb_edit_tests, test_blend_of_one_colour_over_itself_keeps_that_colour_for_every_pair_of_alphas) {
     // Regression: dividing by an already-rounded alpha made the colour overshoot (255 -> 260
     // wrapped to 4) for e.g. overlay alpha 8 over destination alpha 16.
     for (int c : {255, 100, 1}) {
@@ -469,7 +469,7 @@ UTEST(libstb_edit_tests, test_composite_of_one_colour_over_itself_keeps_that_col
                 b[3] = std::uint8_t(x);      // destination alpha 0..255
                 o[3] = std::uint8_t(y + 1);  // overlay alpha 1..255
             }
-        const stb::image r = base.composite(over);
+        const stb::image r = base.copy().blend(over);
         for (int y = 0; y < 255; ++y)
             for (int x = 0; x < 256; ++x) {
                 for (int k = 0; k < 3; ++k) ASSERT_EQ(c, r(x, y, k));
@@ -477,7 +477,7 @@ UTEST(libstb_edit_tests, test_composite_of_one_colour_over_itself_keeps_that_col
                 ASSERT_EQ(expect, r(x, y, 3));
             }
     }
-    const stb::image r = make(1, 1, 4, {255, 255, 255, 16}).composite(make(1, 1, 4, {255, 255, 255, 8}));
+    const stb::image r = make(1, 1, 4, {255, 255, 255, 16}).copy().blend(make(1, 1, 4, {255, 255, 255, 8}));
     ASSERT_TRUE(r(0, 0, 0) == 255 && r(0, 0, 1) == 255 && r(0, 0, 2) == 255);
     ASSERT_EQ(23, r(0, 0, 3));
 }
@@ -634,15 +634,15 @@ UTEST(libstb_simd_tests, test_every_small_width_is_identical_in_every_backend_an
             }
             const stb::image base = random_image(w, h, 3, unsigned(w * 17 + h));
             const stb::image over = random_image(w, h, 4, unsigned(w * 19 + h + 500));
-            const stb::image want = [&] { simd_mode m("scalar"); return base.composite(over); }();
+            const stb::image want = [&] { simd_mode m("scalar"); return base.copy().blend(over); }();
             for (const std::string& be : stb::simd_backends()) {
                 simd_mode m(be);
-                ASSERT_TRUE(same(want, base.composite(over)));
+                ASSERT_TRUE(same(want, base.copy().blend(over)));
             }
         }
 }
 
-UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_in_every_backend_for_every_channel_combination) {
+UTEST(libstb_simd_tests, test_blend_equals_the_integer_formula_in_every_backend_for_every_channel_combination) {
     for (int dc = 1; dc <= 4; ++dc)
         for (int sc = 1; sc <= 4; ++sc) {
             const stb::image base = random_image(317, 11, dc, unsigned(dc * 7 + sc));
@@ -651,13 +651,13 @@ UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_in_every_back
                 const stb::image want = composite_reference(base, over, off.first, off.second);
                 for (const std::string& be : stb::simd_backends()) {
                     simd_mode m(be);
-                    ASSERT_TRUE(same(want, base.composite(over, off.first, off.second)));
+                    ASSERT_TRUE(same(want, base.copy().blend(over, off.first, off.second)));
                 }
             }
         }
 }
 
-UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_pair_of_alphas_and_colours) {
+UTEST(libstb_simd_tests, test_blend_equals_the_integer_formula_for_every_pair_of_alphas_and_colours) {
     // Exhaustive in (source alpha, destination alpha); the colours span the extremes and the middle.
     for (const std::string& be : stb::simd_backends()) {
         simd_mode m(be);
@@ -672,7 +672,7 @@ UTEST(libstb_simd_tests, test_composite_equals_the_integer_formula_for_every_pai
                     o[0] = std::uint8_t(sa), o[1] = std::uint8_t(sca), o[2] = std::uint8_t(255 - sca);
                     o[3] = std::uint8_t(sa);
                 }
-            ASSERT_TRUE(same(composite_reference(base, over, 0, 0), base.composite(over)));
+            ASSERT_TRUE(same(composite_reference(base, over, 0, 0), base.copy().blend(over)));
         }
     }
 }

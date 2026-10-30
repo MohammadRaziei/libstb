@@ -407,7 +407,7 @@ void font::draw_text_in_place(image& dst, std::string_view utf8, float px, int x
             d[3] = static_cast<std::uint8_t>((int(s[col]) * text_color.a() + 127) / 255);
         }
     }
-    dst.composite_in_place(layer, int(std::int64_t(x) - t.origin_x), int(std::int64_t(y) - t.origin_y));
+    dst.blend(layer, int(std::int64_t(x) - t.origin_x), int(std::int64_t(y) - t.origin_y));
 }
 
 atlas font::make_atlas(std::u32string_view codepoints, float px, int width, int height, int padding) const {

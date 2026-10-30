@@ -32,10 +32,11 @@ r, g, b = background.split()
 swapped = stb.Image.merge([b, g, r])
 print("split/merge   :", [p.channels for p in (r, g, b)], "->", swapped.channels, "channels, R and B swapped")
 
-# composite(overlay, x, y): the usual "over" operator. The overlay may hang over the edge.
-placed = background.composite(badge, 20, 30)
-clipped = background.composite(badge, 250, 150)  # only part of it lands inside
-print("composite     :", placed.channels, "channels (the base's channel count is kept)")
+# blend(overlay, x, y): the usual "over" operator. The overlay may hang over the edge.
+# mode= ("multiply", "screen", ...) and opacity= change how it mixes; it returns a new Image.
+placed = background.blend(badge, 20, 30)
+clipped = background.blend(badge, 250, 150)  # only part of it lands inside
+print("blend         :", placed.channels, "channels (the base's channel count is kept)")
 
 # flatten(background): blend the alpha channel onto a colour and drop it (white by default).
 on_white = badge.flatten()
