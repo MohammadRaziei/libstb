@@ -65,6 +65,13 @@ test-extras = ["test"]
 # [project.optional-dependencies]); the test modules that need it skip themselves
 # (pytest.importorskip) and the rest, such as test_no_numpy.py, still run on those wheels.
 
+# TEMPORARY: the musllinux wheels segfault in tests/python/test_blend.py (cp39, after the core became a
+# shared library). Run that file first with a Python-level traceback, print what the wheel links
+# against, then run the whole suite as usual. Remove once the cause is fixed.
+[[tool.cibuildwheel.overrides]]
+select = "*-musllinux*"
+test-command = "python -X faulthandler -m pytest -x -v -s -p no:cacheprovider {project}/tests/python/test_blend.py; python {project}/tests/tools/wheel_diag.py; pytest {project}/tests/python"
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = ["-ra", "--strict-markers", "--strict-config"]
