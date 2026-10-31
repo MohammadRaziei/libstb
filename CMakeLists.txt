@@ -19,7 +19,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(Optimize)
 
-option(STB_BUILD_SHARED "Build the C++ core as a shared library (libstb.so, libstb.dylib, stb.dll) instead of a static one" ON)
 option(STB_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_PYTHON "Build Python bindings" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_EXAMPLES "Build the C++ examples in examples/cpp" OFF)
@@ -30,10 +29,10 @@ option(STB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 # libstb's own code derived from stb (see NOTICE.md), and no public include/ header includes any of it.
 # One folder per module (util, image, codec, zlib, font, draw); the bindings live elsewhere.
 #
-# The core is a shared library by default (libstb.so, libstb.dylib, stb.dll): the Python extension
-# and every C++ program link to the same copy, which is what lets a wheel carry one engine instead
+# The core is always a shared library (libstb.so, libstb.dylib, stb.dll): the Python extension and
+# every C++ program link to the same copy, which is what lets a wheel carry one engine instead
 # of two. Only what the public headers mark STB_API is exported (include/stb/export.hpp); the rest
-# is hidden. -DSTB_BUILD_SHARED=OFF gives libstb_core.a / stb_core.lib instead.
+# is hidden.
 file(GLOB_RECURSE LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/util/*.cpp
     ${PROJECT_SOURCE_DIR}/src/image/*.cpp
@@ -42,25 +41,17 @@ file(GLOB_RECURSE LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/font/*.cpp
     ${PROJECT_SOURCE_DIR}/src/draw/*.cpp)
 
-if(STB_BUILD_SHARED)
-    add_library(stb_core SHARED ${LIBSTB_CORE_SOURCES})
-    target_compile_definitions(stb_core PRIVATE STB_BUILDING_LIBRARY)
-    set(_libstb_output_name stb)            # libstb.so / libstb.dylib / stb.dll
-else()
-    add_library(stb_core STATIC ${LIBSTB_CORE_SOURCES})
-    target_compile_definitions(stb_core PUBLIC STB_STATIC_DEFINE)   # STB_API is empty
-    set(_libstb_output_name stb_core)       # libstb_core.a / stb_core.lib
-endif()
+add_library(stb_core SHARED ${LIBSTB_CORE_SOURCES})
+target_compile_definitions(stb_core PRIVATE STB_BUILDING_LIBRARY)
 add_library(libstb::core ALIAS stb_core)
 
 set_target_properties(stb_core PROPERTIES
-    POSITION_INDEPENDENT_CODE ON        # the static library is linked into the Python extension too
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     EXPORT_NAME core                    # consumers link libstb::core
-    OUTPUT_NAME ${_libstb_output_name}
+    OUTPUT_NAME stb                     # libstb.so / libstb.dylib / stb.dll
 )
-if(STB_BUILD_SHARED AND NOT DEFINED SKBUILD)
+if(NOT DEFINED SKBUILD)
     # libstb.so -> libstb.so.0.8 -> libstb.so.0.8.0 in a plain install. A wheel carries a single
     # file (zip has no symlinks), so it gets no version suffix.
     set_target_properties(stb_core PROPERTIES
@@ -101,7 +92,7 @@ function(libstb_apply_core_build_settings target)
     target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
     # A target that compiles the core sources itself (the C++ tests) has no library to import
-    # from: STB_API must be empty there. stb_core sets its own definition.
+    # from: STB_API must be empty there. stb_core builds with STB_BUILDING_LIBRARY instead.
     if(NOT target STREQUAL "stb_core")
         target_compile_definitions(${target} PRIVATE STB_STATIC_DEFINE)
     endif()
@@ -148,7 +139,7 @@ include(CMakePackageConfigHelpers)
 install(TARGETS stb_core EXPORT libstbTargets
     LIBRARY DESTINATION ${_libstb_lib_dest}     # libstb.so, libstb.dylib
     RUNTIME DESTINATION ${_libstb_bin_dest}     # stb.dll
-    ARCHIVE DESTINATION ${_libstb_lib_dest}     # stb.lib (the import library) or libstb_core.a
+    ARCHIVE DESTINATION ${_libstb_lib_dest}     # stb.lib, the import library on Windows
 )
 install(DIRECTORY include/ DESTINATION ${_libstb_inc_dest})
 install(EXPORT libstbTargets FILE libstbTargets.cmake NAMESPACE libstb:: DESTINATION ${_libstb_cmake_dest})

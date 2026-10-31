@@ -43,15 +43,19 @@ def test_the_shared_library_loads_on_its_own_and_exports_the_public_api():
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux") or not shutil.which("readelf"), reason="needs Linux and readelf")
-def test_the_extension_uses_the_dynamic_cpp_runtime_the_shared_core_uses():
-    # An extension with its own static libstdc++ next to a libstb.so that uses the dynamic one has two
-    # C++ runtimes in the process: an exception thrown inside libstb.so then crashes the caller
-    # (this is what nanobind does by default on musllinux: -static-libstdc++).
+def test_the_extension_never_mixes_a_static_cpp_runtime_with_the_shared_core():
+    # Two C++ runtimes in one process cannot hand an exception to each other: an extension with a
+    # static libstdc++ that calls into a libstb.so with the dynamic one crashes on the first
+    # exception thrown inside the library. So an extension that links libstb.so must use the
+    # dynamic libstdc++ too (glibc), and one with a static libstdc++ (musllinux: nanobind's
+    # default there, and the only choice that works) must carry its own copy of the core instead.
     def needed(path):
         out = subprocess.run(["readelf", "-d", str(path)], capture_output=True, text=True).stdout
         return [line for line in out.splitlines() if "NEEDED" in line]
 
-    core = needed(found(SHARED_NAME)[0])
-    assert any("libstdc++" in line for line in core)
-    extension = next(PACKAGE.glob("libstb_py*.so"))
-    assert any("libstdc++" in line for line in needed(extension)), "the extension has a static libstdc++ of its own"
+    extension = needed(next(PACKAGE.glob("libstb_py*.so")))
+    uses_shared_core = any("libstb.so" in line for line in extension)
+    dynamic_runtime = any("libstdc++" in line for line in extension)
+    assert uses_shared_core == dynamic_runtime, (
+        "the extension uses the shared core and a static libstdc++, or the other way round: " + str(extension)
+    )

@@ -7,8 +7,8 @@
 //   building the shared library      STB_BUILDING_LIBRARY is defined: dllexport on Windows,
 //                                    default visibility elsewhere.
 //   using the shared library         dllimport on Windows, default visibility elsewhere.
-//   static library, or the sources   STB_STATIC_DEFINE is defined (CMake does it for you):
-//   compiled straight into a target  STB_API is empty.
+//   sources compiled straight into   STB_STATIC_DEFINE is defined (CMake does it for the tests):
+//   a target (no library to use)     STB_API is empty.
 
 #if defined(STB_STATIC_DEFINE)
 #define STB_API

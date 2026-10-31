@@ -34,11 +34,13 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   already contained the same code). `find_package(libstb)` after `pip install libstb` links C++
   programs to that `libstb.so`, with an rpath, so nothing needs `LD_LIBRARY_PATH`. Linux and
   macOS set `$ORIGIN/lib` / `@loader_path/lib` on the extension; on Windows `stb.dll` is installed
-  in `libstb/lib` too and `libstb/__init__.py` registers that folder with `os.add_dll_directory`. `-DSTB_BUILD_SHARED=OFF` builds the static library as before.
-- musllinux: the extension uses the dynamic `libstdc++` (nanobind's `MUSL_DYNAMIC_LIBCPP`), the one
-  `libstb.so` uses. nanobind's default there is `-static-libstdc++ -static-libgcc`, which gave the
-  process two C++ runtimes, and the first exception thrown inside `libstb.so` crashed the caller.
-  `test_packaging.py` checks the extension's `NEEDED` entries.
+  in `libstb/lib` too and `libstb/__init__.py` registers that folder with `os.add_dll_directory`.
+- musllinux wheels: the extension carries its own statically linked copy of the core instead of
+  using `libstb.so`. nanobind links extensions there with `-static-libstdc++ -static-libgcc`, and a
+  dynamic libstdc++ crashes on the first C++ exception on musl, so the shared core cannot be used
+  from Python there; two C++ runtimes (static in the extension, dynamic in `libstb.so`) cannot
+  pass an exception to each other either. `libstb.so` is still installed for C++ programs.
+  `test_packaging.py` checks that an extension never mixes the two.
 - Public headers mark the exported classes and functions with `STB_API` (`include/stb/export.hpp`:
   `dllexport`/`dllimport` on Windows, default visibility elsewhere, empty for a static build or
   for sources compiled into a target). The library is built with `-fvisibility=hidden`, so the

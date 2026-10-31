@@ -303,13 +303,13 @@ target (`libstb::core`) and the Python package (`libstb`) keep the project name.
 `libstb::core` is a shared library (`libstb.so`, `libstb.dylib`, `stb.dll`). The wheel carries
 exactly one copy, in `libstb/lib` (on Windows `libstb/__init__.py` registers that folder with
 `os.add_dll_directory` before loading the extension), and the Python extension and your program
-both load it, so there is one engine per process. Your CMake target
+both load it, so there is one engine per process (on musllinux the Python extension has its own
+static copy of the core instead: a dynamic libstdc++ crashes on C++ exceptions there). Your CMake target
 gets an rpath to it, so the program runs without setting `LD_LIBRARY_PATH`. Windows has no rpath:
 copy `stb.dll` next to your executable (`$<TARGET_FILE:libstb::core>` in a post-build step) or put
 its folder on `PATH`. Only what the public
 headers mark `STB_API` is exported (`stb/export.hpp`: `dllexport`/`dllimport` on Windows, default
-visibility elsewhere); decoders, the font reader and the SIMD kernels stay hidden. For a static
-library build libstb yourself with `-DSTB_BUILD_SHARED=OFF` (`libstb_core.a`, `STB_API` is empty).
+visibility elsewhere); decoders, the font reader and the SIMD kernels stay hidden.
 
 ```cpp
 #include <stb.h>

@@ -10,18 +10,30 @@ if(DEFINED SKBUILD)
 
     file(GLOB LIBSTB_BINDING_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/binding.cpp ${CMAKE_CURRENT_SOURCE_DIR}/bind_*.cpp)
-    # On musllinux nanobind links the extension with -static-libstdc++ -static-libgcc (it looks at
-    # AUDITWHEEL_PLAT). Next to a shared libstb.so, which uses the dynamic libstdc++, that gives the
-    # process two C++ runtimes: an exception thrown inside libstb.so (every invalid_argument and
-    # decode_error) is caught by an extension that has its own typeinfo and unwinder, and the
-    # process segfaults. The extension must use the same libstdc++ as libstb.so, so there the
-    # dynamic one is asked for (auditwheel then grafts a single copy into the wheel).
-    set(_libstb_nb_options STABLE_ABI NB_STATIC)
-    if(STB_BUILD_SHARED)
-        list(APPEND _libstb_nb_options MUSL_DYNAMIC_LIBCPP)
+    # musllinux is the one platform where the extension cannot use the shared core. nanobind links
+    # an extension there with -static-libstdc++ -static-libgcc (it looks at AUDITWHEEL_PLAT), and
+    # that is not a style choice: a dynamic libstdc++ loaded together with an extension crashes
+    # on the first C++ exception on musl (seen in CI on cibuildwheel's musllinux_1_2 image: with
+    # MUSL_DYNAMIC_LIBCPP the first exception, even one thrown and caught inside the extension,
+    # segfaulted). So there the extension gets its own copy of the core, linked statically, and
+    # no exception ever crosses from libstb.so into it (two C++ runtimes cannot hand an exception
+    # to each other: that is the other way this crashes). libstb.so is still installed for C++
+    # programs, which load libstdc++ at startup and are fine.
+    set(_libstb_core_for_python libstb::core)
+    if("$ENV{AUDITWHEEL_PLAT}" MATCHES "musllinux")
+        add_library(stb_core_static STATIC ${LIBSTB_CORE_SOURCES})
+        libstb_apply_core_build_settings(stb_core_static)
+        set_target_properties(stb_core_static PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            CXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
+        )
+        target_include_directories(stb_core_static PUBLIC ${PROJECT_SOURCE_DIR}/include)
+        target_compile_definitions(stb_core_static PUBLIC STB_STATIC_DEFINE)   # STB_API is empty
+        set(_libstb_core_for_python stb_core_static)
     endif()
-    nanobind_add_module(libstb_py ${_libstb_nb_options} ${LIBSTB_BINDING_SOURCES})
-    target_link_libraries(libstb_py PRIVATE libstb::core)
+    nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${LIBSTB_BINDING_SOURCES})
+    target_link_libraries(libstb_py PRIVATE ${_libstb_core_for_python})
 
     # libstb.so / libstb.dylib is installed in libstb/lib, next to nothing else but the cmake and
     # include folders: the extension finds it from there. (Windows: stb.dll is installed beside the
@@ -85,7 +97,6 @@ ExternalProject_Add(build_python
     INSTALL_DIR ${PYTHON_INSTALL_DIR}
     CMAKE_ARGS
         -DSKBUILD=2
-        -DSTB_BUILD_SHARED=${STB_BUILD_SHARED}
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX=${PYTHON_INSTALL_DIR}
         -DPython_EXECUTABLE=${Python_EXECUTABLE}
