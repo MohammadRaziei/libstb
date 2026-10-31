@@ -15,6 +15,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "stb/export.hpp"
+
 namespace stb {
 
 struct color_blend;
@@ -25,7 +27,7 @@ struct color_blend;
  * Derives from std::invalid_argument, so `catch (const std::invalid_argument&)` keeps working.
  * In Python it is `libstb.invalid_color_error`, a subclass of `ValueError`.
  */
-class invalid_color_error : public std::invalid_argument {
+class STB_API invalid_color_error : public std::invalid_argument {
 public:
     using std::invalid_argument::invalid_argument;
 };
@@ -44,7 +46,7 @@ public:
  *
  * The alpha channel defaults to 255 (opaque) when not given.
  */
-class color {
+class STB_API color {
 public:
     // ---- Constructors ----
 
@@ -199,7 +201,7 @@ private:
 
 /// The pending result of `color | percentage`: converts to a color (blend with transparent) or
 /// takes part in a longer chain such as `"gray"_c | 50 | "black"_c`.
-struct color_blend {
+struct STB_API color_blend {
     color base_color;
     int percentage;  ///< 0-100
 
@@ -219,8 +221,8 @@ struct color_blend {
 // Defined here because color_blend is incomplete inside class color.
 inline color_blend color::operator|(int percentage) const { return color_blend(*this, percentage); }
 
-std::ostream& operator<<(std::ostream& os, const color& c);
-std::ostream& operator<<(std::ostream& os, const color_blend& blend);
+STB_API std::ostream& operator<<(std::ostream& os, const color& c);
+STB_API std::ostream& operator<<(std::ostream& os, const color_blend& blend);
 
 }  // namespace stb
 

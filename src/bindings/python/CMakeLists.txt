@@ -13,6 +13,15 @@ if(DEFINED SKBUILD)
     nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${LIBSTB_BINDING_SOURCES})
     target_link_libraries(libstb_py PRIVATE libstb::core)
 
+    # libstb.so / libstb.dylib is installed in libstb/lib, next to nothing else but the cmake and
+    # include folders: the extension finds it from there. (Windows: stb.dll is installed beside the
+    # extension, where the loader looks first.)
+    if(APPLE)
+        set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "@loader_path/lib")
+    elseif(UNIX)
+        set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    endif()
+
     # .pyi stubs, generated from the freshly built module.
     add_custom_command(TARGET libstb_py POST_BUILD
         COMMAND ${Python_EXECUTABLE} -m nanobind.stubgen

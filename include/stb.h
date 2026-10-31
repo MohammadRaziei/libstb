@@ -14,6 +14,7 @@
 #define LIBSTB_VERSION_PATCH 0
 
 #ifdef __cplusplus
+#include "stb/export.hpp"
 #include "stb/error.hpp"
 #include "stb/util.hpp"
 #include "stb/color.hpp"

@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "stb/export.hpp"
 #include "stb/color.hpp"
 #include "stb/error.hpp"
 
@@ -48,7 +49,7 @@ constexpr std::string_view pixel_format_name(pixel_format f) noexcept {
     return {};
 }
 // The inverse of pixel_format_name (lower case only). Throws invalid_argument for any other text.
-pixel_format pixel_format_from_name(std::string_view name);
+STB_API pixel_format pixel_format_from_name(std::string_view name);
 
 // How image::blend mixes an overlay pixel (s) into the pixel below it (b), per colour channel,
 // before the overlay's alpha and opacity decide how much of the result shows. These are the
@@ -64,16 +65,16 @@ enum class blend_mode : std::uint8_t {
     difference,  // |b - s|
 };
 // "normal", "multiply", "screen", "overlay", "darken", "lighten", "add" or "difference".
-std::string_view blend_mode_name(blend_mode m) noexcept;
+STB_API std::string_view blend_mode_name(blend_mode m) noexcept;
 // The inverse of blend_mode_name (lower case only). Throws invalid_argument for any other text.
-blend_mode blend_mode_from_name(std::string_view name);
+STB_API blend_mode blend_mode_from_name(std::string_view name);
 
 // Where the shorter images of hstack / vstack sit across the stack: at the start (top or left),
 // in the middle, or at the end (bottom or right).
 enum class align : std::uint8_t { start, center, end };
 
 // Header-only facts about an encoded image (no pixel decoding).
-struct image_info {
+struct STB_API image_info {
     int width = 0;
     int height = 0;
     pixel_format format = pixel_format::gray;  // what the source file holds
@@ -101,7 +102,7 @@ struct load_options {
 // JPEG or PNG, or 1 ("upright") when there is none, the format has none, or the
 // data is not readable. Never throws and never reads out of bounds, so it is safe
 // on untrusted input. Apply it with image::orient().
-int exif_orientation(const void* data, std::size_t size) noexcept;
+STB_API int exif_orientation(const void* data, std::size_t size) noexcept;
 
 // SIMD backends. libstb's own conversion and compositing loops (convert, composite, flatten)
 // exist in up to three builds that give bit-identical results and differ only in speed:
@@ -125,11 +126,11 @@ int exif_orientation(const void* data, std::size_t size) noexcept;
 // thread pool. "auto" means the best backend. The constructor throws std::invalid_argument
 // for an unknown or unavailable name. Create and destroy a scope on the same thread.
 // simd_name() reports what the calling thread uses.
-std::vector<std::string> simd_backends();
-const char* simd_name() noexcept;
-bool set_simd(std::string_view name) noexcept;
+STB_API std::vector<std::string> simd_backends();
+STB_API const char* simd_name() noexcept;
+STB_API bool set_simd(std::string_view name) noexcept;
 
-class simd_scope {
+class STB_API simd_scope {
 public:
     explicit simd_scope(std::string_view name);
     ~simd_scope();
@@ -166,7 +167,7 @@ enum class resize_edge { clamp, reflect, wrap, zero };
 //   "mitchell"                          -> mitchell
 //   "box" "area"                        -> box
 // Throws invalid_argument (listing the valid names) for anything else.
-resize_filter resize_filter_from_name(std::string_view name);
+STB_API resize_filter resize_filter_from_name(std::string_view name);
 
 struct resize_options {
     resize_filter filter = resize_filter::automatic;
@@ -197,7 +198,7 @@ inline constexpr int default_jpg_quality = 90;     // 1..100
 // Thread-safety: like std::vector - const members are safe to call
 // concurrently, mutation needs external synchronisation. The static
 // factories are safe to call from any number of threads.
-class image {
+class STB_API image {
 public:
     image() = default;
 
@@ -407,7 +408,7 @@ private:
 // Resizes 8-bit images of 1..4 channels (2 = gray+alpha, 4 = RGBA; alpha is
 // weighted correctly, so transparent pixels do not bleed colour).
 // Immutable after construction, hence shareable between threads.
-class resizer {
+class STB_API resizer {
 public:
     resizer() = default;
     explicit resizer(const resize_options& options);  // throws invalid_argument on a bad enum value

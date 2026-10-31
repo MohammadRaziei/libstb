@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+#include "stb/export.hpp"
+
 namespace stb {
 
 // Right-to-left text (Persian, Arabic, Urdu, Hebrew) for a renderer that draws glyphs left to
@@ -33,17 +35,17 @@ namespace stb {
 //
 // `has_glyph(cp)` says whether the font can draw a code point (font::has_glyph); it picks
 // between a presentation form and the plain letter. If empty, every form is assumed present.
-std::u32string shape_for_display(std::u32string_view logical, const std::function<bool(char32_t)>& has_glyph = {});
+STB_API std::u32string shape_for_display(std::u32string_view logical, const std::function<bool(char32_t)>& has_glyph = {});
 
 // True if the text has a right-to-left letter or an Arabic-Indic digit, i.e. if shape_for_display
 // would change anything.
-bool has_rtl(std::u32string_view text);
+STB_API bool has_rtl(std::u32string_view text);
 
 // True for the nonspacing marks of the Arabic blocks (harakat, shadda, small signs): the code
 // points font::draw_text puts over or under the letter before them instead of after it.
-bool is_arabic_mark(char32_t cp);
+STB_API bool is_arabic_mark(char32_t cp);
 
 // True if the mark sits below its letter (kasra, kasratan, hamza below, ...); false if above.
-bool is_arabic_mark_below(char32_t cp);
+STB_API bool is_arabic_mark_below(char32_t cp);
 
 }  // namespace stb

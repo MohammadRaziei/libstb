@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "stb/export.hpp"
 #include "stb/color.hpp"
 #include "stb/error.hpp"
 #include "stb/image.hpp"
@@ -68,7 +69,7 @@ struct atlas_glyph {
 };
 
 // A packed glyph sheet: one 1-channel image plus the lookup table.
-class atlas {
+class STB_API atlas {
 public:
     atlas(image bitmap, std::vector<atlas_glyph> glyphs);
 
@@ -88,7 +89,7 @@ private:
 //
 // Text arguments are UTF-8; '\n' starts a new line. Characters the font has
 // no glyph for render as its ".notdef" glyph (check with has_glyph()).
-class font {
+class STB_API font {
 public:
     static constexpr float max_pixel_height = 2048.0f;
 
@@ -171,11 +172,11 @@ enum class font_family { sans, serif, mono };
 
 // Vertical metrics at `pixel_height` (the em height; same meaning as font::metrics).
 // Throws invalid_argument unless 0 < pixel_height <= font::max_pixel_height.
-font_metrics estimate_metrics(float pixel_height, font_family family = font_family::sans);
+STB_API font_metrics estimate_metrics(float pixel_height, font_family family = font_family::sans);
 
 // Same result type and line rules as font::measure ('\n' starts a new line, '\r' is ignored).
 // Throws invalid_argument on malformed UTF-8 or a bad pixel_height.
-text_size estimate_text(std::string_view utf8, float pixel_height,
+STB_API text_size estimate_text(std::string_view utf8, float pixel_height,
                         font_family family = font_family::sans);
 
 }  // namespace stb

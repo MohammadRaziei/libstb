@@ -300,6 +300,14 @@ target_link_libraries(app PRIVATE libstb::core)
 The C++ namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake
 target (`libstb::core`) and the Python package (`libstb`) keep the project name.
 
+`libstb::core` is a shared library (`libstb.so`, `libstb.dylib`, `stb.dll`). The wheel carries
+exactly one copy, in `libstb/lib` (`stb.dll` next to the extension on Windows), and the Python
+extension and your program both load it, so there is one engine per process. Your CMake target
+gets an rpath to it, so the program runs without setting `LD_LIBRARY_PATH`. Only what the public
+headers mark `STB_API` is exported (`stb/export.hpp`: `dllexport`/`dllimport` on Windows, default
+visibility elsewhere); decoders, the font reader and the SIMD kernels stay hidden. For a static
+library build libstb yourself with `-DSTB_BUILD_SHARED=OFF` (`libstb_core.a`, `STB_API` is empty).
+
 ```cpp
 #include <stb.h>
 

@@ -14,6 +14,7 @@
 #include <utility>
 #include <variant>
 
+#include "stb/export.hpp"
 #include "stb/color.hpp"
 #include "stb/font.hpp"
 #include "stb/image.hpp"
@@ -74,7 +75,7 @@ private:
 // Blends `s` onto `dst` in place (fill first, then the border). Parts outside the image are
 // clipped without allocating for them, so a huge shape is cheap. Throws invalid_argument for a
 // negative radius, a stroke width <= 0, or a line without a colour.
-void draw_shape(image& dst, const shape& s);
+STB_API void draw_shape(image& dst, const shape& s);
 
 // Several texts and shapes on ONE copy of an image. font::draw_text copies the image on every
 // call; a canvas copies it once, collects what you add, and draws it all in finish(). The image

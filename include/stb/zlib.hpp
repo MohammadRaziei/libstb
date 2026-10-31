@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "stb/export.hpp"
+
 namespace stb {
 
 // zlib streams (RFC 1950: a 2-byte header, deflate data, an Adler-32 trailer): what PNG, HTTP
@@ -35,8 +37,8 @@ inline constexpr int default_zlib_level = 6;
 // An empty input gives a valid stream. `data` may be null only when `size` is 0.
 // Throws invalid_argument (level outside -1..9, null data), limit_error (input over 2 GiB),
 // encode_error (out of memory).
-std::vector<std::uint8_t> zlib_compress(const void* data, std::size_t size, int level = default_zlib_level);
-std::vector<std::uint8_t> zlib_compress(const std::vector<std::uint8_t>& data, int level = default_zlib_level);
+STB_API std::vector<std::uint8_t> zlib_compress(const void* data, std::size_t size, int level = default_zlib_level);
+STB_API std::vector<std::uint8_t> zlib_compress(const std::vector<std::uint8_t>& data, int level = default_zlib_level);
 
 // Default output ceiling of zlib_decompress, the same 512 MiB as image decoding.
 inline constexpr std::size_t default_zlib_max_bytes = std::size_t(1) << 29;
@@ -51,9 +53,9 @@ inline constexpr std::size_t default_zlib_max_bytes = std::size_t(1) << 29;
 // max_bytes is. Peak memory is below 2 x max_bytes (the buffer, then the copy that is returned).
 // Throws invalid_argument (null data), decode_error, limit_error (also for input over 2 GiB; a
 // max_bytes above 2 GiB - 1 is clamped to it), std::bad_alloc.
-std::vector<std::uint8_t> zlib_decompress(const void* data, std::size_t size,
+STB_API std::vector<std::uint8_t> zlib_decompress(const void* data, std::size_t size,
                                           std::size_t max_bytes = default_zlib_max_bytes);
-std::vector<std::uint8_t> zlib_decompress(const std::vector<std::uint8_t>& data,
+STB_API std::vector<std::uint8_t> zlib_decompress(const std::vector<std::uint8_t>& data,
                                           std::size_t max_bytes = default_zlib_max_bytes);
 
 }  // namespace stb

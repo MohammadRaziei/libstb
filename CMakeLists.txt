@@ -19,6 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(Optimize)
 
+option(STB_BUILD_SHARED "Build the C++ core as a shared library (libstb.so, libstb.dylib, stb.dll) instead of a static one" ON)
 option(STB_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_PYTHON "Build Python bindings" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_EXAMPLES "Build the C++ examples in examples/cpp" OFF)
@@ -27,10 +28,12 @@ option(STB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 # --- libstb C++ core ---
 # There is no stb header in the tree any more: the decoders, encoders, font reader and resizer are
 # libstb's own code derived from stb (see NOTICE.md), and no public include/ header includes any of it.
-# STATIC (unlike httpp's SHARED core): stb is header-only, so there is nothing
-# to gain from a DLL, and each stb header is compiled with STB_*_STATIC so no
-# stbi_* symbol leaks out to consumers.
 # One folder per module (util, image, codec, zlib, font, draw); the bindings live elsewhere.
+#
+# The core is a shared library by default (libstb.so, libstb.dylib, stb.dll): the Python extension
+# and every C++ program link to the same copy, which is what lets a wheel carry one engine instead
+# of two. Only what the public headers mark STB_API is exported (include/stb/export.hpp); the rest
+# is hidden. -DSTB_BUILD_SHARED=OFF gives libstb_core.a / stb_core.lib instead.
 file(GLOB_RECURSE LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/util/*.cpp
     ${PROJECT_SOURCE_DIR}/src/image/*.cpp
@@ -39,26 +42,48 @@ file(GLOB_RECURSE LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/font/*.cpp
     ${PROJECT_SOURCE_DIR}/src/draw/*.cpp)
 
-add_library(stb_core STATIC ${LIBSTB_CORE_SOURCES})
+if(STB_BUILD_SHARED)
+    add_library(stb_core SHARED ${LIBSTB_CORE_SOURCES})
+    target_compile_definitions(stb_core PRIVATE STB_BUILDING_LIBRARY)
+    set(_libstb_output_name stb)            # libstb.so / libstb.dylib / stb.dll
+else()
+    add_library(stb_core STATIC ${LIBSTB_CORE_SOURCES})
+    target_compile_definitions(stb_core PUBLIC STB_STATIC_DEFINE)   # STB_API is empty
+    set(_libstb_output_name stb_core)       # libstb_core.a / stb_core.lib
+endif()
 add_library(libstb::core ALIAS stb_core)
 
 set_target_properties(stb_core PROPERTIES
-    POSITION_INDEPENDENT_CODE ON        # linked into the Python extension
+    POSITION_INDEPENDENT_CODE ON        # the static library is linked into the Python extension too
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     EXPORT_NAME core                    # consumers link libstb::core
-    OUTPUT_NAME stb_core                # libstb_core.a / stb_core.lib
+    OUTPUT_NAME ${_libstb_output_name}
 )
+if(STB_BUILD_SHARED AND NOT DEFINED SKBUILD)
+    # libstb.so -> libstb.so.0.8 -> libstb.so.0.8.0 in a plain install. A wheel carries a single
+    # file (zip has no symlinks), so it gets no version suffix.
+    set_target_properties(stb_core PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    )
+endif()
+# MSVC: the exported classes hold std::string / std::vector members (C4251) and derive from std
+# exceptions (C4275). Both are fine as long as the library and its users use the same compiler and
+# runtime, which a DLL of C++ classes already requires.
+target_compile_options(stb_core PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>)
 
 # Install layout: the wheel carries include/, lib/ and cmake/ inside the
 # `libstb` package (httpp's pattern, see get_cmake_dir() in the Python
 # package); a plain `cmake --install` uses the usual prefix layout.
 if(DEFINED SKBUILD)
     set(_libstb_lib_dest   libstb/lib)
+    set(_libstb_bin_dest   libstb)      # stb.dll sits next to the extension module: Windows looks there
     set(_libstb_inc_dest   libstb/include)
     set(_libstb_cmake_dest libstb/cmake)
 else()
     set(_libstb_lib_dest   lib)
+    set(_libstb_bin_dest   bin)
     set(_libstb_inc_dest   include)
     set(_libstb_cmake_dest lib/cmake/libstb)
 endif()
@@ -74,6 +99,12 @@ target_include_directories(stb_core
 function(libstb_apply_core_build_settings target)
     # Internal headers are included relative to src/ ("image/simd.hpp", "font/shaper/gsub.hpp").
     target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+
+    # A target that compiles the core sources itself (the C++ tests) has no library to import
+    # from: STB_API must be empty there. stb_core sets its own definition.
+    if(NOT target STREQUAL "stb_core")
+        target_compile_definitions(${target} PRIVATE STB_STATIC_DEFINE)
+    endif()
 
     target_compile_options(${target} PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4 /EHsc>
@@ -114,7 +145,11 @@ libstb_apply_core_build_settings(stb_core)
 
 # --- install (find_package(libstb) -> libstb::core) ---
 include(CMakePackageConfigHelpers)
-install(TARGETS stb_core EXPORT libstbTargets ARCHIVE DESTINATION ${_libstb_lib_dest})
+install(TARGETS stb_core EXPORT libstbTargets
+    LIBRARY DESTINATION ${_libstb_lib_dest}     # libstb.so, libstb.dylib
+    RUNTIME DESTINATION ${_libstb_bin_dest}     # stb.dll
+    ARCHIVE DESTINATION ${_libstb_lib_dest}     # stb.lib (the import library) or libstb_core.a
+)
 install(DIRECTORY include/ DESTINATION ${_libstb_inc_dest})
 install(EXPORT libstbTargets FILE libstbTargets.cmake NAMESPACE libstb:: DESTINATION ${_libstb_cmake_dest})
 configure_package_config_file(

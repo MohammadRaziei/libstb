@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "stb/export.hpp"
+
 namespace stb {
 
 // Everything libstb can fail at *at runtime* derives from stb::error, so
@@ -18,27 +20,27 @@ namespace stb {
 // extension, quality outside 1..100 ...) are NOT stb::error: they throw
 // std::invalid_argument, following the std convention that logic errors and
 // runtime errors are different families.
-class error : public std::runtime_error {
+class STB_API error : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
-class decode_error : public error {
+class STB_API decode_error : public error {
 public:
     using error::error;
 };
 
-class encode_error : public error {
+class STB_API encode_error : public error {
 public:
     using error::error;
 };
 
-class limit_error : public error {
+class STB_API limit_error : public error {
 public:
     using error::error;
 };
 
-class io_error : public error {
+class STB_API io_error : public error {
 public:
     explicit io_error(const std::string& what, int code = 0) : error(what), code_(code) {}
     // errno at the failure, 0 if unknown. Lets a binding raise the matching

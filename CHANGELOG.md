@@ -28,6 +28,17 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   stacking and encode.
 
 ### Changed
+- **The C++ core is a shared library** (`libstb.so`, `libstb.dylib`, `stb.dll`) and the Python
+  extension links to it, so a wheel holds one copy of the engine instead of two. The wheel went
+  from 4.3 MB to 0.55 MB (the old one shipped an LTO `libstb_core.a` next to an extension that
+  already contained the same code). `find_package(libstb)` after `pip install libstb` links C++
+  programs to that `libstb.so`, with an rpath, so nothing needs `LD_LIBRARY_PATH`. Linux and
+  macOS set `$ORIGIN/lib` / `@loader_path/lib` on the extension; on Windows `stb.dll` is installed
+  next to it. `-DSTB_BUILD_SHARED=OFF` builds the static library as before.
+- Public headers mark the exported classes and functions with `STB_API` (`include/stb/export.hpp`:
+  `dllexport`/`dllimport` on Windows, default visibility elsewhere, empty for a static build or
+  for sources compiled into a target). The library is built with `-fvisibility=hidden`, so the
+  decoders, the font reader and the kernels are not part of its interface.
 - **Breaking:** `image::composite` and `image::composite_in_place` are gone: `blend` replaces
   both and changes the image it is called on (it returns `*this`, so calls chain, and a
   temporary comes back by value: `base.copy().blend(logo, 16, 16)` is the old `composite`).
