@@ -10,17 +10,36 @@ if(DEFINED SKBUILD)
 
     file(GLOB LIBSTB_BINDING_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/binding.cpp ${CMAKE_CURRENT_SOURCE_DIR}/bind_*.cpp)
-    # musllinux is the one platform where the extension cannot use the shared core. nanobind links
-    # an extension there with -static-libstdc++ -static-libgcc (it looks at AUDITWHEEL_PLAT), and
-    # that is not a style choice: a dynamic libstdc++ loaded together with an extension crashes
-    # on the first C++ exception on musl (seen in CI on cibuildwheel's musllinux_1_2 image: with
-    # MUSL_DYNAMIC_LIBCPP the first exception, even one thrown and caught inside the extension,
-    # segfaulted). So there the extension gets its own copy of the core, linked statically, and
-    # no exception ever crosses from libstb.so into it (two C++ runtimes cannot hand an exception
-    # to each other: that is the other way this crashes). libstb.so is still installed for C++
-    # programs, which load libstdc++ at startup and are fine.
+    # musl (Alpine, musllinux wheels) is the one platform where the extension cannot use the shared
+    # core. A dynamic libstdc++ loaded together with an extension crashes on the first C++
+    # exception there (seen in CI on cibuildwheel's musllinux_1_2 image: with a dynamic libstdc++ the
+    # first exception, even one thrown and caught inside the extension, segfaulted). That is why
+    # nanobind links extensions with -static-libstdc++ -static-libgcc on musllinux. Two C++ runtimes
+    # cannot hand an exception to each other either, so the extension must not call a libstb.so
+    # that has the dynamic one: on musl it gets its own statically linked copy of the core, and no
+    # exception ever crosses a library boundary. libstb.so is still installed for C++ programs,
+    # which load libstdc++ at startup and are fine.
+    #
+    # musl is detected from the C library itself: on Linux, glibc defines __GLIBC__ in <features.h>
+    # and musl defines nothing on purpose. (Not from AUDITWHEEL_PLAT: that is only set inside the
+    # cibuildwheel images, and a build on a plain Alpine needs the same treatment.)
+    set(_libstb_is_musl OFF)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles("
+            #include <features.h>
+            #ifdef __GLIBC__
+            #error glibc
+            #endif
+            int main() {}" LIBSTB_LIBC_IS_NOT_GLIBC)
+        if(LIBSTB_LIBC_IS_NOT_GLIBC)
+            set(_libstb_is_musl ON)
+        endif()
+    endif()
+    message(STATUS "libstb: C library is musl: ${_libstb_is_musl}")
+
     set(_libstb_core_for_python libstb::core)
-    if("$ENV{AUDITWHEEL_PLAT}" MATCHES "musllinux")
+    if(_libstb_is_musl)
         add_library(stb_core_static STATIC ${LIBSTB_CORE_SOURCES})
         libstb_apply_core_build_settings(stb_core_static)
         set_target_properties(stb_core_static PROPERTIES
@@ -34,6 +53,11 @@ if(DEFINED SKBUILD)
     endif()
     nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${LIBSTB_BINDING_SOURCES})
     target_link_libraries(libstb_py PRIVATE ${_libstb_core_for_python})
+    if(_libstb_is_musl)
+        # nanobind adds these itself only when AUDITWHEEL_PLAT says musllinux; here it is our own
+        # decision (see above), so it does not depend on that variable.
+        target_link_options(libstb_py PRIVATE -static-libstdc++ -static-libgcc)
+    endif()
 
     # libstb.so / libstb.dylib is installed in libstb/lib, next to nothing else but the cmake and
     # include folders: the extension finds it from there. (Windows: stb.dll is installed beside the

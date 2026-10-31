@@ -35,7 +35,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   programs to that `libstb.so`, with an rpath, so nothing needs `LD_LIBRARY_PATH`. Linux and
   macOS set `$ORIGIN/lib` / `@loader_path/lib` on the extension; on Windows `stb.dll` is installed
   in `libstb/lib` too and `libstb/__init__.py` registers that folder with `os.add_dll_directory`.
-- musllinux wheels: the extension carries its own statically linked copy of the core instead of
+- musl (musllinux wheels, or a build on Alpine; CMake detects it from the C library): the extension carries its own statically linked copy of the core instead of
   using `libstb.so`. nanobind links extensions there with `-static-libstdc++ -static-libgcc`, and a
   dynamic libstdc++ crashes on the first C++ exception on musl, so the shared core cannot be used
   from Python there; two C++ runtimes (static in the extension, dynamic in `libstb.so`) cannot
