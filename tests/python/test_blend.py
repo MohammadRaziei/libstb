@@ -1,9 +1,10 @@
 """blend (modes, opacity), fill, alpha / with_alpha, hstack / vstack and Canvas.add_image."""
 
-import numpy as np
 import pytest
 
 import libstb as stb
+
+np = pytest.importorskip("numpy")
 
 
 def img(*rows):
