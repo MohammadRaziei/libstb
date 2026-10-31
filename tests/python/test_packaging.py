@@ -2,6 +2,8 @@
 
 import ctypes
 import pathlib
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -38,3 +40,18 @@ def test_the_shared_library_loads_on_its_own_and_exports_the_public_api():
     assert hasattr(lib, "_ZN3stb9simd_nameEv")  # stb::simd_name()
     # What is not part of the headers stays hidden (-fvisibility=hidden): no decoder entry point.
     assert not hasattr(lib, "_ZN3stb5codec6decodeEPKhmib")
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux") or not shutil.which("readelf"), reason="needs Linux and readelf")
+def test_the_extension_uses_the_dynamic_cpp_runtime_the_shared_core_uses():
+    # An extension with its own static libstdc++ next to a libstb.so that uses the dynamic one has two
+    # C++ runtimes in the process: an exception thrown inside libstb.so then crashes the caller
+    # (this is what nanobind does by default on musllinux: -static-libstdc++).
+    def needed(path):
+        out = subprocess.run(["readelf", "-d", str(path)], capture_output=True, text=True).stdout
+        return [line for line in out.splitlines() if "NEEDED" in line]
+
+    core = needed(found(SHARED_NAME)[0])
+    assert any("libstdc++" in line for line in core)
+    extension = next(PACKAGE.glob("libstb_py*.so"))
+    assert any("libstdc++" in line for line in needed(extension)), "the extension has a static libstdc++ of its own"

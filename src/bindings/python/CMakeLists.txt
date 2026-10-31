@@ -10,7 +10,17 @@ if(DEFINED SKBUILD)
 
     file(GLOB LIBSTB_BINDING_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/binding.cpp ${CMAKE_CURRENT_SOURCE_DIR}/bind_*.cpp)
-    nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${LIBSTB_BINDING_SOURCES})
+    # On musllinux nanobind links the extension with -static-libstdc++ -static-libgcc (it looks at
+    # AUDITWHEEL_PLAT). Next to a shared libstb.so, which uses the dynamic libstdc++, that gives the
+    # process two C++ runtimes: an exception thrown inside libstb.so (every invalid_argument and
+    # decode_error) is caught by an extension that has its own typeinfo and unwinder, and the
+    # process segfaults. The extension must use the same libstdc++ as libstb.so, so there the
+    # dynamic one is asked for (auditwheel then grafts a single copy into the wheel).
+    set(_libstb_nb_options STABLE_ABI NB_STATIC)
+    if(STB_BUILD_SHARED)
+        list(APPEND _libstb_nb_options MUSL_DYNAMIC_LIBCPP)
+    endif()
+    nanobind_add_module(libstb_py ${_libstb_nb_options} ${LIBSTB_BINDING_SOURCES})
     target_link_libraries(libstb_py PRIVATE libstb::core)
 
     # libstb.so / libstb.dylib is installed in libstb/lib, next to nothing else but the cmake and
@@ -75,6 +85,7 @@ ExternalProject_Add(build_python
     INSTALL_DIR ${PYTHON_INSTALL_DIR}
     CMAKE_ARGS
         -DSKBUILD=2
+        -DSTB_BUILD_SHARED=${STB_BUILD_SHARED}
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX=${PYTHON_INSTALL_DIR}
         -DPython_EXECUTABLE=${Python_EXECUTABLE}

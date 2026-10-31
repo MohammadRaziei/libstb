@@ -35,6 +35,10 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   programs to that `libstb.so`, with an rpath, so nothing needs `LD_LIBRARY_PATH`. Linux and
   macOS set `$ORIGIN/lib` / `@loader_path/lib` on the extension; on Windows `stb.dll` is installed
   in `libstb/lib` too and `libstb/__init__.py` registers that folder with `os.add_dll_directory`. `-DSTB_BUILD_SHARED=OFF` builds the static library as before.
+- musllinux: the extension uses the dynamic `libstdc++` (nanobind's `MUSL_DYNAMIC_LIBCPP`), the one
+  `libstb.so` uses. nanobind's default there is `-static-libstdc++ -static-libgcc`, which gave the
+  process two C++ runtimes, and the first exception thrown inside `libstb.so` crashed the caller.
+  `test_packaging.py` checks the extension's `NEEDED` entries.
 - Public headers mark the exported classes and functions with `STB_API` (`include/stb/export.hpp`:
   `dllexport`/`dllimport` on Windows, default visibility elsewhere, empty for a static build or
   for sources compiled into a target). The library is built with `-fvisibility=hidden`, so the
