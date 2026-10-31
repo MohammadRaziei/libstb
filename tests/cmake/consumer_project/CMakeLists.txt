@@ -25,3 +25,11 @@ find_package(libstb CONFIG REQUIRED)
 
 add_executable(app main.cpp)
 target_link_libraries(app PRIVATE libstb::core)
+
+# Windows has no rpath: app.exe finds stb.dll only next to itself (or on PATH). Elsewhere the
+# imported target already gives the program an rpath to libstb.so / libstb.dylib.
+if(WIN32)
+    add_custom_command(TARGET app POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:libstb::core> $<TARGET_FILE_DIR:app>
+    )
+endif()

@@ -22,6 +22,18 @@ if(DEFINED SKBUILD)
         set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
     endif()
 
+    # Windows has no rpath: the loader finds stb.dll only next to the extension or in a directory
+    # added with os.add_dll_directory. The installed package does the latter (libstb/__init__.py),
+    # but the stub generator below imports the module straight from the build tree, so the freshly
+    # built DLL is copied beside the freshly built module before anything imports it.
+    if(WIN32)
+        add_custom_command(TARGET libstb_py POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:stb_core> $<TARGET_FILE_DIR:libstb_py>
+            COMMENT "Copying stb.dll next to libstb_py"
+        )
+    endif()
+
     # .pyi stubs, generated from the freshly built module.
     add_custom_command(TARGET libstb_py POST_BUILD
         COMMAND ${Python_EXECUTABLE} -m nanobind.stubgen

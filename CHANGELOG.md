@@ -34,7 +34,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   already contained the same code). `find_package(libstb)` after `pip install libstb` links C++
   programs to that `libstb.so`, with an rpath, so nothing needs `LD_LIBRARY_PATH`. Linux and
   macOS set `$ORIGIN/lib` / `@loader_path/lib` on the extension; on Windows `stb.dll` is installed
-  next to it. `-DSTB_BUILD_SHARED=OFF` builds the static library as before.
+  in `libstb/lib` too and `libstb/__init__.py` registers that folder with `os.add_dll_directory`. `-DSTB_BUILD_SHARED=OFF` builds the static library as before.
 - Public headers mark the exported classes and functions with `STB_API` (`include/stb/export.hpp`:
   `dllexport`/`dllimport` on Windows, default visibility elsewhere, empty for a static build or
   for sources compiled into a target). The library is built with `-fvisibility=hidden`, so the

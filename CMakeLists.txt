@@ -78,7 +78,7 @@ target_compile_options(stb_core PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275
 # package); a plain `cmake --install` uses the usual prefix layout.
 if(DEFINED SKBUILD)
     set(_libstb_lib_dest   libstb/lib)
-    set(_libstb_bin_dest   libstb)      # stb.dll sits next to the extension module: Windows looks there
+    set(_libstb_bin_dest   libstb/lib)  # stb.dll beside stb.lib; libstb/__init__.py adds it with os.add_dll_directory
     set(_libstb_inc_dest   libstb/include)
     set(_libstb_cmake_dest libstb/cmake)
 else()
