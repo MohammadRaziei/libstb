@@ -12,13 +12,13 @@ No system dependencies: `pip install libstb` is all you need.
 """
 
 import os as _os
-import sys as _sys
 
 # The native core is a shared library in libstb/lib (libstb.so, libstb.dylib: found through the
 # extension's rpath). Windows has no rpath and does not search PATH for the DLLs of an extension
 # module, so the directory is added by hand, before the first import of the extension below.
+# os.add_dll_directory exists only there: asking for the function, not the platform, is the check.
 _lib_dir = _os.path.join(_os.path.dirname(__file__), "lib")
-if _sys.platform == "win32" and _os.path.isdir(_lib_dir):  # pragma: no cover (Windows only)
+if hasattr(_os, "add_dll_directory") and _os.path.isdir(_lib_dir):  # pragma: no cover (Windows only)
     _dll_directory = _os.add_dll_directory(_lib_dir)  # kept: it stays registered for the process
 
 try:
