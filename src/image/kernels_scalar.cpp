@@ -14,6 +14,9 @@ void convert_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { con
 template <int SC, int DC>
 void composite_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { composite_row<SC, DC>(s, d, n); }
 
+template <bool Inverse>
+void premultiply_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { premultiply_row<Inverse>(s, d, n); }
+
 #define STB_PICK_SCALAR(FN, SC, DC) (&FN##_scalar<SC, DC>)
 
 }  // namespace
@@ -30,6 +33,10 @@ row_fn pick_composite_scalar(int sc, int dc) {
         STB_COMPOSITE_CASES(STB_PICK_SCALAR)
         default: return &composite_scalar<4, 4>;
     }
+}
+
+row_fn pick_premultiply_scalar(bool inverse) {
+    return inverse ? &premultiply_scalar<true> : &premultiply_scalar<false>;
 }
 
 }  // namespace stb::detail

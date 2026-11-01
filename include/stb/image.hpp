@@ -104,7 +104,8 @@ struct load_options {
 // on untrusted input. Apply it with image::orient().
 STB_API int exif_orientation(const void* data, std::size_t size) noexcept;
 
-// SIMD backends. libstb's own conversion and compositing loops (convert, composite, flatten)
+// SIMD backends. libstb's own conversion and compositing loops (convert, composite, flatten, and
+// the premultiply conversions further down)
 // exist in up to three builds that give bit-identical results and differ only in speed:
 //   "avx2"            AVX2 kernels, picked at run time when the CPU supports them (x86-64,
 //                     GCC or Clang builds)
@@ -142,6 +143,26 @@ public:
 private:
     std::size_t previous_;
 };
+
+// ---- straight RGBA <-> premultiplied ARGB32
+// Rasterizers (novasvg, plutovg, Cairo, Skia, Qt) draw into premultiplied ARGB32, while
+// stb::image holds straight RGBA. These two functions are the conversion at that boundary, on
+// raw buffers (an image's data() / stride(), or any memory), 8-bit, 4 channels, run by the
+// SIMD backend in use (see simd_backends()). Strides are in bytes. Both are bit-exact with
+//   straight -> premultiplied:  c' = c * a / 255, packed as the 32-bit word 0xAARRGGBB
+//   premultiplied -> straight:  c' = c * 255 / a, stored as bytes R, G, B, A
+// (integer divisions truncate; a == 0 gives all zeros). The word is native-endian: on a
+// little-endian machine its bytes are B, G, R, A. A premultiplied colour is never larger than
+// its alpha; for input where it is (c > a) the quotient can exceed 255 and wraps modulo 256, like
+// a plain C store into a byte.
+//
+// dst and src are the same buffer with the same stride (in place), or do not overlap at all;
+// other overlaps are not supported. A width or height of 0 or less does nothing. Neither
+// function allocates or throws.
+STB_API void rgba_to_premultiplied_argb(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
+                                        std::size_t src_stride, int width, int height) noexcept;
+STB_API void premultiplied_argb_to_rgba(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
+                                        std::size_t src_stride, int width, int height) noexcept;
 
 // ---- resizing options (used by image::resize and the resizer class below)
 

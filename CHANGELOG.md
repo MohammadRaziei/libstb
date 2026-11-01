@@ -7,6 +7,16 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Added
+- `stb::rgba_to_premultiplied_argb` and `stb::premultiplied_argb_to_rgba` (issue #1): the conversion
+  between straight RGBA and the premultiplied ARGB32 words (`0xAARRGGBB`) that rasterizers such as
+  novasvg, plutovg, Cairo, Skia and Qt draw into. Free functions on raw buffers (strides in bytes,
+  in place allowed), run by the SIMD backend in use (`avx2`, `sse2` / `neon`, `scalar`), and
+  bit-exact with the plain `c * a / 255` and `c * 255 / a` formulas (a colour above its alpha, which
+  only invalid input has, wraps modulo 256 like a byte store). Blocks of 32 opaque pixels only swap
+  R and B. Tests check every (colour, alpha) pair on every backend; `cmake --build <dir> --target
+  stb_bench_premultiply` times them.
+
 ## [0.9.0] - 2026-11-01
 
 libstb no longer vendors any stb header: the decoders, encoders, resizer and font reader are libstb's

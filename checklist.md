@@ -84,6 +84,18 @@
       رنگ prompt (`>>>`) توی بلوک doctest دارک اسفینکس خوانا شد.
 - [x] README، `docs/guide.md`، `docs/cpp/mainpage.md`، `docs/python/source/font.rst` و
       `examples/python/05_font_render.py` آپدیت شدن.
+- [x] **تبدیل RGBA مستقیم ↔ ARGB32 premultiplied (issue #1).** دو تابع آزاد `rgba_to_premultiplied_argb` و
+      `premultiplied_argb_to_rgba` توی `include/stb/image.hpp`، با همون امضای issue (`dst, dst_stride, src,
+      src_stride, width, height`؛ strideها بایتی؛ درجا مجازه). کرنل‌ها توی `kernels.hpp` (`premultiply_row`) و
+      با همون dispatch فعلی (avx2 / sse2 یا neon / scalar). بدون شاخه: ضرب و تقسیم بر ۲۵۵ با
+      `(v + 1 + (v >> 8)) >> 8`، جهت معکوس با تقسیم float (دقیقه چون `c*255 < 2^24`). بلوک‌های ۳۲پیکسلیِ
+      کاملاً مات فقط R و B رو جابه‌جا می‌کنن. مقدار بالای ۲۵۵ (فقط ورودی نامعتبر `c > a`) مثل ذخیره‌ی
+      `uint8_t` wrap می‌شه؛ **فرضِ من اینه که مرجع novasvg هم همینه و تأیید نشده**.
+      تست: `tests/cpp/test_premultiply.cpp` (همه‌ی ۶۵۵۳۶ جفت (c, a) روی هر backend، درجا و غیردرجا، با
+      padding و آدرس نامرتب؛ با دو جهش عمدی در کرنل هم چک شد که تست خراب‌کاری رو می‌گیره).
+      بنچمارک: `cmake --build <build> --target stb_bench_premultiply` (۴۰۹۶×۴۰۹۶، سه ترکیب آلفا، با سطر
+      memcpy به‌عنوان سقف). روی این ماشین (یک هسته، نویزی) avx2 حدود ۱٫۸ تا ۶٫۵ برابر حلقه‌ی مرجع و sse2
+      حدود ۱٫۳ تا ۴٫۶ برابر؛ روی ورودی مات نزدیک سقف حافظه.
 - [x] تست: ۲۲۱ تست C++ پاس. Python: ۱۱۹۴ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
 - [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
       اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
@@ -98,6 +110,11 @@
 
 ## قابلیت‌ها
 
+- [ ] `premultiply`: backend sse2 دستی نوشته نشده (فقط vectorize خودکار؛ روی ورودی نیمه‌شفاف جهت مستقیم
+      حدود ۱٫۳ برابر مرجعه). NEON، arm64، MSVC و ویندوز اجرا/اندازه‌گیری نشدن.
+- [ ] فرمت اختیاریِ premultiplied توی `pixel_format` (رندر مستقیم novasvg توی حافظه‌ی `image` بدون تبدیل) فقط
+      اگه بنچمارک واقعیِ novasvg نشون داد این مرز هنوز مهمه؛ تصمیم گرفتیم ذخیره‌ی پیش‌فرض `image` همون
+      straight RGBA بمونه.
 - [ ] اگه گزینه‌ها زیاد شدن (فاصله‌ی خطوط، حداکثر عرض با شکستن خط، سایه، outline، anchor عمودی): یه struct گزینه
       با مقدار پیش‌فرض (`{.color = ..., .align = ...}` توی C++ و kwargs توی Python)، نه بیلدر.
 - [ ] `color` توی Python فقط رشته/عدد/tuple قبول می‌کنه و کلاس مستقل نیست. اگه لازم شد expose بشه.

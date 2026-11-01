@@ -107,12 +107,16 @@ template <int SC, int DC>
 void convert_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { convert_row<SC, DC>(s, d, n); }
 template <int SC, int DC>
 void composite_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { composite_row<SC, DC>(s, d, n); }
+template <bool Inverse>
+void premultiply_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { detail::premultiply_row<Inverse>(s, d, n); }
 
 #ifdef STB_HAVE_AVX2_DISPATCH
 template <int SC, int DC>
 STB_TARGET_AVX2 void convert_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { convert_row<SC, DC>(s, d, n); }
 template <int SC, int DC>
 STB_TARGET_AVX2 void composite_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { composite_row<SC, DC>(s, d, n); }
+template <bool Inverse>
+STB_TARGET_AVX2 void premultiply_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { detail::premultiply_row<Inverse>(s, d, n); }
 #define STB_PICK(FN, SC, DC) (avx ? &FN##_avx2<SC, DC> : &FN##_base<SC, DC>)
 #else
 #define STB_PICK(FN, SC, DC) (&FN##_base<SC, DC>)
@@ -140,6 +144,28 @@ row_fn pick_composite(int sc, int dc, backend be) {  // sc is 2 or 4
         STB_COMPOSITE_CASES(STB_PICK)
         default: return STB_PICK(composite, 4, 4);
     }
+}
+
+row_fn pick_premultiply(bool inverse, backend be) {
+    if (be == backend::scalar) return detail::pick_premultiply_scalar(inverse);
+#ifdef STB_HAVE_AVX2_DISPATCH
+    if (be == backend::avx2) return inverse ? &premultiply_avx2<true> : &premultiply_avx2<false>;
+#endif
+    return inverse ? &premultiply_base<true> : &premultiply_base<false>;
+}
+
+// Runs one of the row kernels over a width x height block whose rows are `*_stride` bytes
+// apart. Rows that are packed back to back (and equal strides) are one call.
+void premultiply_rows(bool inverse, std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
+                      std::size_t src_stride, int width, int height) noexcept {
+    if (width <= 0 || height <= 0) return;
+    const row_fn fn = pick_premultiply(inverse, detail::current_backend());
+    const std::size_t w = std::size_t(width), h = std::size_t(height);
+    if (dst_stride == 4 * w && src_stride == 4 * w) {
+        fn(src, dst, w * h);
+        return;
+    }
+    for (std::size_t y = 0; y < h; ++y) fn(src + y * src_stride, dst + y * dst_stride, w);
 }
 
 // The size that fits inside (mw, mh) with the aspect ratio of (w, h); one side is
@@ -386,6 +412,16 @@ image image::flatten(std::array<std::uint8_t, 3> background) const& {
                                 background[1], background[2]};
     fill_run(base.data(), std::size_t(width_) * std::size_t(height_), px, dc);
     return std::move(base).blend(*this);
+}
+
+void rgba_to_premultiplied_argb(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
+                                std::size_t src_stride, int width, int height) noexcept {
+    premultiply_rows(false, dst, dst_stride, src, src_stride, width, height);
+}
+
+void premultiplied_argb_to_rgba(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
+                                std::size_t src_stride, int width, int height) noexcept {
+    premultiply_rows(true, dst, dst_stride, src, src_stride, width, height);
 }
 
 }  // namespace stb

@@ -36,6 +36,18 @@ add_custom_target(stb_test_cpp
 add_dependencies(stb_test_cpp test_stb_cpp)
 add_dependencies(stb_test stb_test_cpp)
 
+# ── Benchmark of the premultiply conversions ─────────────────────────────────
+# Not a test: bench_premultiply.cpp does not match the test_*.cpp glob, and the target is left out
+# of "all". It links the shipped library (stb_core), so it measures what users get:
+#   cmake --build <build dir> --target stb_bench_premultiply
+add_executable(bench_stb_premultiply EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/bench_premultiply.cpp)
+target_link_libraries(bench_stb_premultiply PRIVATE stb_core)
+add_custom_target(stb_bench_premultiply
+    COMMAND $<TARGET_FILE:bench_stb_premultiply>
+    DEPENDS bench_stb_premultiply
+    USES_TERMINAL
+)
+
 # ── Coverage (lcov + genhtml) ─────────────────────────────────────────────────
 # The test executable above is also the coverage one: with lcov and genhtml available it is
 # built with coverage instrumentation (-O0 so lines map 1:1), and stb_coverage_cpp runs it.

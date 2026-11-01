@@ -1,6 +1,6 @@
 #pragma once
 
-// Internal: the per-row pixel kernels (channel conversion, alpha blending). Written once as
+// Internal: the per-row pixel kernels (channel conversion, alpha blending, premultiplying). Written once as
 // always-inline templates; image_ops.cpp instantiates them as plain code and with the AVX2
 // target attribute, kernels_scalar.cpp with auto-vectorisation off. They are
 // branchless on purpose: a data-dependent branch is what stops the vectoriser. Every
@@ -113,6 +113,87 @@ STB_INLINE void composite_row(const std::uint8_t* s, std::uint8_t* d, std::size_
     }
 }
 
+// Straight RGBA bytes <-> premultiplied ARGB32 (the 32-bit word 0xAARRGGBB, native-endian),
+// the layout rasterizers draw into. Like composite_rgba_row, a pixel is handled as one 32-bit
+// word, which assumes a little-endian host: an RGBA pixel read as a word is A<<24 | B<<16 |
+// G<<8 | R. The integers are exactly the reference formulas:
+//
+//   premultiply:    c' = c * a / 255                  (a == 0 gives 0, a == 255 gives c)
+//   unpremultiply:  c' = c * 255 / a, a == 0 gives 0  (stored in a byte: a value above 255,
+//                   which only invalid input (c > a) can give, wraps modulo 256)
+//
+// premultiply needs no special case: floor(v / 255) == (v + 1 + (v >> 8)) >> 8 for every v up
+// to 65025 (c * a), and it maps v = 0 to 0 and v = 255 * c to c. unpremultiply divides in
+// float: c * 255 is at most 65025, below 2^24, so the correctly rounded quotient truncates to
+// exactly floor(c * 255 / a) (checked for every (c, a) in the tests). a == 0 divides by 1 and
+// the result is masked to 0.
+
+STB_INLINE std::uint32_t rgba_word_to_premultiplied_argb(std::uint32_t w) {
+    const std::uint32_t a = w >> 24;
+    const std::uint32_t r = (w & 255) * a, g = ((w >> 8) & 255) * a, b = ((w >> 16) & 255) * a;
+    return (a << 24) | (((r + 1 + (r >> 8)) >> 8) << 16) | (((g + 1 + (g >> 8)) >> 8) << 8) | ((b + 1 + (b >> 8)) >> 8);
+}
+
+STB_INLINE std::uint32_t premultiplied_argb_to_rgba_word(std::uint32_t v) {
+    const std::uint32_t a = v >> 24;
+    const float fa = float(a + std::uint32_t(a == 0));
+    const std::uint32_t r = std::uint32_t(int(float(int((v >> 16) & 255) * 255) / fa)) & 255;
+    const std::uint32_t g = std::uint32_t(int(float(int((v >> 8) & 255) * 255) / fa)) & 255;
+    const std::uint32_t b = std::uint32_t(int(float(int(v & 255) * 255) / fa)) & 255;
+    return ((a << 24) | (b << 16) | (g << 8) | r) & (0u - std::uint32_t(a != 0));
+}
+
+// With alpha 255 both conversions only swap R and B (c * 255 / 255 == c), in either direction.
+STB_INLINE std::uint32_t swap_red_blue(std::uint32_t w) {
+    return (w & 0xFF00FF00u) | ((w & 0xFFu) << 16) | ((w >> 16) & 0xFFu);
+}
+
+// One row of n pixels: straight RGBA -> premultiplied ARGB32, or (Inverse) the other way.
+// s == d is fine (each pixel is read before it is written); other overlaps are not.
+//
+// Rasterized images are mostly opaque, and for alpha 255 the arithmetic is wasted, so the row is
+// taken 32 pixels at a time: a block whose alphas are all 255 (an AND over the 32 words) only
+// swaps R and B, any other block runs the arithmetic. Both are plain constant-length loops, which
+// is what the vectoriser wants; the arithmetic is branchless, so its speed does not depend on
+// the alpha values. Same integers as the one-pixel-at-a-time loop.
+template <bool Inverse>
+STB_INLINE void premultiply_pixels(const std::uint8_t* s, std::uint8_t* d, std::size_t n) {
+    for (std::size_t i = 0; i < n; ++i) {
+        std::uint32_t w;
+        std::memcpy(&w, s + 4 * i, 4);
+        w = Inverse ? premultiplied_argb_to_rgba_word(w) : rgba_word_to_premultiplied_argb(w);
+        std::memcpy(d + 4 * i, &w, 4);
+    }
+}
+
+STB_INLINE void swap_red_blue_pixels(const std::uint8_t* s, std::uint8_t* d, std::size_t n) {
+    for (std::size_t i = 0; i < n; ++i) {
+        std::uint32_t w;
+        std::memcpy(&w, s + 4 * i, 4);
+        w = swap_red_blue(w);
+        std::memcpy(d + 4 * i, &w, 4);
+    }
+}
+
+template <bool Inverse>
+STB_INLINE void premultiply_row(const std::uint8_t* s, std::uint8_t* d, std::size_t n) {
+    constexpr std::size_t block = 32;
+    std::size_t i = 0;
+    for (; i + block <= n; i += block) {
+        const std::uint8_t* sp = s + 4 * i;
+        std::uint32_t all = ~0u;
+        for (std::size_t k = 0; k < block; ++k) {
+            std::uint32_t w;
+            std::memcpy(&w, sp + 4 * k, 4);
+            all &= w;
+        }
+        if ((all >> 24) == 255u)
+            swap_red_blue_pixels(sp, d + 4 * i, block);
+        else
+            premultiply_pixels<Inverse>(sp, d + 4 * i, block);
+    }
+    premultiply_pixels<Inverse>(s + 4 * i, d + 4 * i, n - i);
+}
 
 // The (source channels, destination channels) pairs the pickers dispatch on, as case labels.
 // PICK(FN, SC, DC) names the instantiation to return for FN in {convert, composite}.
@@ -142,6 +223,7 @@ STB_INLINE void composite_row(const std::uint8_t* s, std::uint8_t* d, std::size_
 // The same kernels compiled with auto-vectorisation off (kernels_scalar.cpp).
 row_fn pick_convert_scalar(int sc, int dc);
 row_fn pick_composite_scalar(int sc, int dc);  // sc is 2 or 4
+row_fn pick_premultiply_scalar(bool inverse);
 
 // Hand-written SSE2 kernels (kernels_sse2.cpp) for the pairs the compiler does not
 // vectorise well; nullptr when there is none for the pair (or no SSE2 in this build), and
