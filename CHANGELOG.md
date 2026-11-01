@@ -8,6 +8,10 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- Command line: `libstb` and `python -m libstb` (argparse, no dependencies). `--version`,
+  `--cmake-dir`, `--include-dir`, `--lib-dir`; `info FILE... [--json]`; `convert SRC DST` (format
+  from the extension, `--resize WxH|Wx|xH`, `--filter`, `--pixel-format`, `--orient`, `--quality`,
+  `--compression`, `--no-rle`); `zlib compress|decompress SRC DST` (`-` is stdin or stdout).
 - `image::blend(overlay, x, y, mode, opacity)`: blend modes `normal`, `multiply`, `screen`,
   `overlay`, `darken`, `lighten`, `add` and `difference` (`enum class blend_mode`, Python
   `BlendMode` or the lower case name), and an `opacity` between 0 and 1 that scales the overlay's
@@ -28,6 +32,8 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   stacking and encode.
 
 ### Changed
+- The CMake target is now `libstb::libstb` (was `libstb::core`), both in the build tree (alias of
+  `stb_core`) and in the installed `find_package(libstb)` package.
 - **The C++ core is a shared library** (`libstb.so`, `libstb.dylib`, `stb.dll`) and the Python
   extension links to it, so a wheel holds one copy of the engine instead of two. The wheel went
   from 4.3 MB to 0.55 MB (the old one shipped an LTO `libstb_core.a` next to an extension that

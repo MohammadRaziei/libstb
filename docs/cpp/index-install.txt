@@ -7,5 +7,5 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libstb)
 
-target_link_libraries(my_app PRIVATE libstb::core)</pre>
-<p class="install-note">CMake 3.21+ and a C++17 compiler. Include <code>&lt;stb.h&gt;</code> and link <code>libstb::core</code> (a static library; the stb headers are never exposed). Also available through <code>find_package(libstb CONFIG)</code> after <code>cmake --install</code>.</p>
+target_link_libraries(my_app PRIVATE libstb::libstb)</pre>
+<p class="install-note">CMake 3.21+ and a C++17 compiler. Include <code>&lt;stb.h&gt;</code> and link <code>libstb::libstb</code> (a shared library; the stb headers are never exposed). Also available through <code>find_package(libstb CONFIG)</code> after <code>cmake --install</code>.</p>

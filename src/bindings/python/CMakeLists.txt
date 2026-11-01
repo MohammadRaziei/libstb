@@ -38,7 +38,7 @@ if(DEFINED SKBUILD)
     endif()
     message(STATUS "libstb: C library is musl: ${_libstb_is_musl}")
 
-    set(_libstb_core_for_python libstb::core)
+    set(_libstb_core_for_python libstb::libstb)
     if(_libstb_is_musl)
         add_library(stb_core_static STATIC ${LIBSTB_CORE_SOURCES})
         libstb_apply_core_build_settings(stb_core_static)

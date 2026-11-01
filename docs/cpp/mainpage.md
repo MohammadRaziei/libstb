@@ -21,11 +21,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libstb)
 
-target_link_libraries(my_app PRIVATE libstb::core)
+target_link_libraries(my_app PRIVATE libstb::libstb)
 ```
 
 Requires CMake 3.21+ and a C++17 compiler. The namespace and the headers are
-`stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target (`libstb::core`) keeps the
+`stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target (`libstb::libstb`) keeps the
 project name. After a `cmake --install`, `find_package(libstb CONFIG REQUIRED)`
 works the same way.
 

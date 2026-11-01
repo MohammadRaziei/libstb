@@ -287,26 +287,43 @@ copied. `Image.open` takes ownership of stb's own buffer, no copy either. When
 you want an independent image, say so: `img.copy()` (also `copy.copy` and
 `copy.deepcopy`).
 
+## Command line
+
+```
+libstb --version
+libstb --cmake-dir                 # also --include-dir, --lib-dir
+libstb info photo.jpg more.png [--json]
+libstb convert photo.jpg out.png --resize 320x     # a missing side keeps the aspect ratio
+libstb convert in.png out.jpg --quality 85 --pixel-format gray --orient
+libstb zlib compress data.bin data.bin.z -l 9
+libstb zlib decompress data.bin.z -          # "-" is stdin or stdout
+```
+
+`python -m libstb` does the same. The output format of `convert` comes from the extension of the
+destination (`.png .jpg .jpeg .bmp .tga`); an option the format does not have is an error, and an
+existing destination is overwritten. Exit status: 0 success, 1 a file could not be read or written,
+2 a usage error.
+
 ## C++ / CMake
 
 ```cmake
 # after `pip install libstb`
-execute_process(COMMAND ${Python3_EXECUTABLE} -c "import libstb as stb; print(stb.get_cmake_dir())"
+execute_process(COMMAND ${Python3_EXECUTABLE} -m libstb --cmake-dir
     OUTPUT_VARIABLE libstb_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
 find_package(libstb CONFIG REQUIRED)
-target_link_libraries(app PRIVATE libstb::core)
+target_link_libraries(app PRIVATE libstb::libstb)
 ```
 
 The C++ namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake
-target (`libstb::core`) and the Python package (`libstb`) keep the project name.
+target (`libstb::libstb`) and the Python package (`libstb`) keep the project name.
 
-`libstb::core` is a shared library (`libstb.so`, `libstb.dylib`, `stb.dll`). The wheel carries
+`libstb::libstb` is a shared library (`libstb.so`, `libstb.dylib`, `stb.dll`). The wheel carries
 exactly one copy, in `libstb/lib` (on Windows `libstb/__init__.py` registers that folder with
 `os.add_dll_directory` before loading the extension), and the Python extension and your program
 both load it, so there is one engine per process (on musllinux the Python extension has its own
 static copy of the core instead: a dynamic libstdc++ crashes on C++ exceptions there). Your CMake target
 gets an rpath to it, so the program runs without setting `LD_LIBRARY_PATH`. Windows has no rpath:
-copy `stb.dll` next to your executable (`$<TARGET_FILE:libstb::core>` in a post-build step) or put
+copy `stb.dll` next to your executable (`$<TARGET_FILE:libstb::libstb>` in a post-build step) or put
 its folder on `PATH`. Only what the public
 headers mark `STB_API` is exported (`stb/export.hpp`: `dllexport`/`dllimport` on Windows, default
 visibility elsewhere); decoders, the font reader and the SIMD kernels stay hidden.

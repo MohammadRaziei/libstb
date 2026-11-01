@@ -43,12 +43,12 @@ file(GLOB_RECURSE LIBSTB_CORE_SOURCES CONFIGURE_DEPENDS
 
 add_library(stb_core SHARED ${LIBSTB_CORE_SOURCES})
 target_compile_definitions(stb_core PRIVATE STB_BUILDING_LIBRARY)
-add_library(libstb::core ALIAS stb_core)
+add_library(libstb::libstb ALIAS stb_core)
 
 set_target_properties(stb_core PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
-    EXPORT_NAME core                    # consumers link libstb::core
+    EXPORT_NAME libstb                  # consumers link libstb::libstb
     OUTPUT_NAME stb                     # libstb.so / libstb.dylib / stb.dll
 )
 if(NOT DEFINED SKBUILD)
@@ -134,7 +134,7 @@ endfunction()
 
 libstb_apply_core_build_settings(stb_core)
 
-# --- install (find_package(libstb) -> libstb::core) ---
+# --- install (find_package(libstb) -> libstb::libstb) ---
 include(CMakePackageConfigHelpers)
 install(TARGETS stb_core EXPORT libstbTargets
     LIBRARY DESTINATION ${_libstb_lib_dest}     # libstb.so, libstb.dylib

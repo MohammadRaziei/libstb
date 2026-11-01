@@ -134,7 +134,7 @@ def get_include_dir():
 
 
 def get_lib_dir():
-    """Directory containing the static C++ library (stb_core)."""
+    """Directory containing the shared C++ library (libstb.so, libstb.dylib or stb.dll)."""
     return _os.path.join(_pkg_dir, "lib")
 
 

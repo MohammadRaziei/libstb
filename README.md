@@ -49,7 +49,7 @@ include(FetchContent)
 FetchContent_Declare(libstb GIT_REPOSITORY https://github.com/MohammadRaziei/libstb.git GIT_TAG master)
 FetchContent_MakeAvailable(libstb)
 
-target_link_libraries(my_app PRIVATE libstb::core)    # CMake 3.21+, C++17
+target_link_libraries(my_app PRIVATE libstb::libstb)    # CMake 3.21+, C++17
 ```
 
 `find_package(libstb CONFIG)` works too, after `cmake --install` or after `pip install libstb`
@@ -76,7 +76,7 @@ std::vector<std::uint8_t> back = stb::zlib_decompress(z, 64u << 20);     // thro
 ```
 
 The namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target
-(`libstb::core`) and the Python package (`libstb`) keep the project name. No stb header is
+(`libstb::libstb`) and the Python package (`libstb`) keep the project name. No stb header is
 ever included from a public header, and stb symbols do not leak from the library, so it links
 next to your own copy of stb.
 

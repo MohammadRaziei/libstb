@@ -25,6 +25,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+libstb = "libstb.__main__:main"
+
 [project.optional-dependencies]
 numpy = ["numpy"]
 pillow = ["pillow"]

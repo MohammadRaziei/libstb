@@ -1,7 +1,7 @@
 file(GLOB LIBSTB_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp)
 
 # The core sources are compiled into the test executable (like ctoon's tests do with ctoon.c)
-# instead of linking libstb::core: the --coverage flags below then reach their object files,
+# instead of linking libstb::libstb: the --coverage flags below then reach their object files,
 # and the shipped library target stays untouched. libstb_apply_core_build_settings() gives
 # them the same flags stb_core is built with.
 add_executable(test_stb_cpp
