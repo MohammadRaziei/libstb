@@ -7,6 +7,35 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-01
+
+libstb no longer vendors any stb header: the decoders, encoders, resizer and font reader are libstb's
+own code, derived from stb's algorithms (see `NOTICE.md`). The C++ core is now a shared library, so
+the wheel is 0.55 MB instead of 4.3 MB, there is a `libstb` command line, and the image API gained
+blend modes, fills, masks and stacking. Several names changed on the way (see Breaking).
+
+### Breaking
+- `image::composite` and `image::composite_in_place` are gone: `blend` replaces
+  both and changes the image it is called on (it returns `*this`, so calls chain, and a
+  temporary comes back by value: `base.copy().blend(logo, 16, 16)` is the old `composite`).
+  In Python `Image.composite` is `Image.blend` and still returns a new image. `blend_mode::normal`
+  at opacity 1 runs the same integer kernels as before, so its output is byte for byte the old
+  one (the 533-case snapshot of the whole library shows 0 differences).
+- the channel count is no longer a bare number anywhere in the public API. A new
+  `enum class pixel_format { gray, gray_alpha, rgb, rgba }` (Python: `PixelFormat.GRAY`,
+  `GRAY_ALPHA`, `RGB`, `RGBA`) replaces it: `image(w, h, format)`, `image::wrap`,
+  `convert(format)`, `load_options::format` (an empty `std::optional` keeps the file's format),
+  `image_info::format`, and in Python `Image.open(..., format=)`, `imread(..., format=)`,
+  `Image.convert(format)`, `ImageInfo.format`. Python also takes the lower case name
+  (`"gray"`, `"gray_alpha"`, `"rgb"`, `"rgba"`); a bare number is a `TypeError`. `channels()` /
+  `.channels` stay as the plain count. `iminfo()` now returns `(width, height, format)`, and
+  `ImageInfo.channels` is a property.
+- the CMake target is `libstb::libstb` (was `libstb::core`), both in the build tree
+  (an alias of `stb_core`) and in the installed `find_package(libstb)` package.
+- public headers merged by cohesion: `stb/resizer.hpp` is part of `stb/image.hpp`,
+  `stb/shape.hpp` and `stb/canvas.hpp` became `stb/draw.hpp`, `stb/env.hpp` and `stb/utf8.hpp`
+  became `stb/util.hpp`. `<stb.h>` still includes everything.
+
 ### Added
 - Command line: `libstb` and `python -m libstb` (argparse, no dependencies). `--version`,
   `--cmake-dir`, `--include-dir`, `--lib-dir`; `info FILE... [--json]`; `convert SRC DST` (format
@@ -27,13 +56,20 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   Python `Align` or `"start"`, `"center"`, `"end"`). The result has colour and alpha if any
   input has.
 - `canvas::add_image(image, x, y)` with `.blend(mode)` and `.opacity(o)` on the returned
-  `image_item` (Python `Canvas.add_image`, `CanvasImage`). The canvas keeps its own copy.
-- `examples/cpp/tour.cpp`: one walk through load, inspect, geometry, resize, canvas, masks,
-  stacking and encode.
+  `image_item` (Python `Canvas.add_image`, `CanvasImage`). The canvas keeps its own copy, and its
+  items (images, texts, shapes) are drawn in the order they were added.
+- `pixel_format` helpers: `image::format()`, `Image.format`, `channel_count`, `has_alpha`,
+  `pixel_format_name`, `pixel_format_from_name`, `pixel_format_from_channels` (the one place a
+  number becomes a format).
+- `&&` overloads of `image::convert`, `flatten`, `orient`, `rotate90` and `pad`. When the call
+  changes nothing (same channel count, no alpha to flatten, orientation 1, whole turns, no border)
+  a temporary or `std::move(img)` hands its pixels back instead of copying them; every other case
+  and every error is the same as the `const&` version. The `const&` overloads still copy.
+- `include/stb/export.hpp` with the `STB_API` macro (see Changed), the `STB_BUILD_EXAMPLES` CMake
+  option (off by default) and `examples/cpp/tour.cpp`: one walk through load, inspect, geometry,
+  resize, canvas, masks, stacking and encode.
 
 ### Changed
-- The CMake target is now `libstb::libstb` (was `libstb::core`), both in the build tree (alias of
-  `stb_core`) and in the installed `find_package(libstb)` package.
 - **The C++ core is a shared library** (`libstb.so`, `libstb.dylib`, `stb.dll`) and the Python
   extension links to it, so a wheel holds one copy of the engine instead of two. The wheel went
   from 4.3 MB to 0.55 MB (the old one shipped an LTO `libstb_core.a` next to an extension that
@@ -41,112 +77,97 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   programs to that `libstb.so`, with an rpath, so nothing needs `LD_LIBRARY_PATH`. Linux and
   macOS set `$ORIGIN/lib` / `@loader_path/lib` on the extension; on Windows `stb.dll` is installed
   in `libstb/lib` too and `libstb/__init__.py` registers that folder with `os.add_dll_directory`.
-- musl (musllinux wheels, or a build on Alpine; CMake detects it from the C library): the extension carries its own statically linked copy of the core instead of
-  using `libstb.so`. nanobind links extensions there with `-static-libstdc++ -static-libgcc`, and a
-  dynamic libstdc++ crashes on the first C++ exception on musl, so the shared core cannot be used
-  from Python there; two C++ runtimes (static in the extension, dynamic in `libstb.so`) cannot
-  pass an exception to each other either. `libstb.so` is still installed for C++ programs.
-  `test_packaging.py` checks that an extension never mixes the two.
-- Public headers mark the exported classes and functions with `STB_API` (`include/stb/export.hpp`:
-  `dllexport`/`dllimport` on Windows, default visibility elsewhere, empty for a static build or
-  for sources compiled into a target). The library is built with `-fvisibility=hidden`, so the
-  decoders, the font reader and the kernels are not part of its interface.
-- **Breaking:** `image::composite` and `image::composite_in_place` are gone: `blend` replaces
-  both and changes the image it is called on (it returns `*this`, so calls chain, and a
-  temporary comes back by value: `base.copy().blend(logo, 16, 16)` is the old `composite`).
-  In Python `Image.composite` is `Image.blend` and still returns a new image. `blend_mode::normal`
-  at opacity 1 runs the same integer kernels as before, so its output is byte for byte the old
-  one (the 533-case snapshot of the whole library shows 0 differences).
-- `canvas` can now hold images next to texts and shapes; its items are drawn in the order they
-  were added.
-- **Breaking:** the channel count is no longer a bare number anywhere in the public API. A new
-  `enum class pixel_format { gray, gray_alpha, rgb, rgba }` (Python: `PixelFormat.GRAY`,
-  `GRAY_ALPHA`, `RGB`, `RGBA`) replaces it: `image(w, h, format)`, `image::wrap`,
-  `convert(format)`, `load_options::format` (an empty `std::optional` keeps the file's format),
-  `image_info::format`, and in Python `Image.open(..., format=)`, `imread(..., format=)`,
-  `Image.convert(format)`, `ImageInfo.format`. Python also takes the lower case name
-  (`"gray"`, `"gray_alpha"`, `"rgb"`, `"rgba"`); a bare number is a `TypeError`. New:
-  `image::format()`, `Image.format`, `channel_count`, `has_alpha`, `pixel_format_name`,
-  `pixel_format_from_name`, `pixel_format_from_channels` (the one place a number becomes a
-  format). `channels()` / `.channels` stay as the plain count. `iminfo()` now returns
-  `(width, height, format)`, and `ImageInfo.channels` is a property. A bad channel count can no
-  longer be spelled, so those tests became tests of the enum helpers and of bad names.
-- `include/stb/color.hpp` went from 1051 to 240 lines: string parsing (`from_string`, `from_hash`,
-  `from_name`), `to_string`, `blend` and the stream operators moved to `src/draw/color.cpp`, and
-  `from_name` looks names up in one table (values still come from the named factories, so each color
-  is defined once). Behavior is unchanged: 40,000 parse, error-message and blend outputs match the
-  previous header byte for byte.
-- Decoder cleanup: redundant `this->` and local `stream *s` aliases are gone from the JPEG and PNG
-  decoders, local macros became `constexpr` values and inline functions (`zfast_bits`, `fast_bits`,
-  `marker_none`, `is_restart`, `is_sof`, `png_type`, `div4`, `float2fixed`, `hdr_buflen`, ...), and
-  `typedef` became `using` or a plain `struct`. Decoded output is unchanged (23,680 decoder cases).
-- Shaper complexity (clang-tidy `readability-function-cognitive-complexity`, no warnings left in
-  `src/font/shaper`): `bidi::classify_wide` reads an ordered range table, `arabic::joining_forms` uses
-  small join helpers, and the GSUB context engine splits `try_rule` into `match_input`, `match_side`
-  and `run_records`, with one `read_rule` instead of two copies of the rule layout code. Verified over
-  every code point (classification, mirroring, joining type), 200,000 random Arabic strings
-  (forms, bidi order and levels) and new format 2 GSUB tests that also pass on the old code.
-- Move semantics and special members reviewed (clang-tidy `performance-*`, `bugprone-use-after-move`,
-  `cppcoreguidelines-special-member-functions`): no use-after-move and no avoidable by-value copies
-  were found. `canvas`, `simd_scope` and `font_bytes` now say explicitly that they are neither copied
-  nor moved, the polymorphic bases `glyph_source` and `subtable` cannot be sliced, and two no-op
-  `std::move` calls (on the trivially copyable `shape`, and in the C++17 aliasing `shared_ptr`
-  constructor, which has no moving form) are gone. No behavior change.
-- Naming: data members of the stateful decoder classes (`jpeg_decoder`, `png_decoder`, `gif_decoder`,
-  `inflater`) end in an underscore like the rest of the project (`stream_`, `out_`, `code_bits_`), so a member
-  is visible without `this->`. `huffman_table` and `zhuffman` are plain structs. The renames were made
-  with libclang (every use of the field, nothing by text search); 23,680 decoder cases are unchanged.
-  One-letter and cryptic members got real names: `s_` became `stream_`, and in the GIF decoder `w_`,
-  `h_`, `pal_` and `lpal_` became `width_`, `height_`, `palette_` and `local_palette_`.
-- API: `image::convert`, `flatten`, `orient`, `rotate90` and `pad` have `&&` overloads. When the call
-  changes nothing (same channel count, no alpha to flatten, orientation 1, whole turns, no border) a
-  temporary or `std::move(img)` hands its pixels back instead of copying them; every other case and
-  every error is the same as the `const&` version. The `const&` overloads still copy.
+- Public headers mark the exported classes and functions with `STB_API` (`dllexport`/`dllimport` on
+  Windows, default visibility elsewhere, empty for a static build or for sources compiled into a
+  target). The library is built with `-fvisibility=hidden`, so the decoders, the font reader and
+  the kernels are not part of its interface.
+- musl (musllinux wheels, or a build on Alpine; CMake detects it from the C library): the Python
+  extension carries its own statically linked copy of the core instead of using `libstb.so`.
+  nanobind links extensions there with `-static-libstdc++ -static-libgcc`, and a dynamic libstdc++
+  crashes on the first C++ exception on musl, so the shared core cannot be used from Python there;
+  two C++ runtimes (static in the extension, dynamic in `libstb.so`) cannot pass an exception to
+  each other either. `libstb.so` is still installed for C++ programs.
 - PNG encoder: the best filtered row is kept while the five filters are tried, instead of filtering
-  it a second time (one pass less per row, 216 encodes byte for byte identical).
-- Tests: files go through `open`, `write` and `open` for png, bmp, tga and jpeg, in a chain of formats,
-  and from a loaded ppm; new tests for the `&&` overloads and their errors.
-- resize: declarations of functions that no longer exist (`stbir_set_pixel_callbacks`,
+  it a second time (one pass less per row, 216 encodes byte for byte identical). BMP and TGA
+  encoding is faster.
+
+### Fixed
+- musllinux wheels crashed on the first C++ exception (see the musl entry above).
+- Windows: `stb.dll` is found when the extension is imported (copied next to the extension in the
+  build tree, `os.add_dll_directory` in the installed package).
+- A typo in an `assert` and a stream reference in the JPEG and PNG decoders.
+
+### Removed
+- `image::composite` and `image::composite_in_place` (use `blend`).
+- `src/third_party/`: no stb header is vendored any more. `NOTICE.md` records the lineage and the
+  license.
+
+### Internal (refactor, no behaviour change)
+- **Decoders:** `stb_image.h` is split into `src/codec/decode/`, one file per format, with `stream`,
+  `inflater`, `jpeg_decoder`, `png_decoder` and `gif_decoder` classes; the callback IO, 16-bit and
+  linear loaders and unused setters are removed. 23,680 decodes (every format, damaged files too)
+  give the same pixels or the same error as the stb build.
+- **Encoders and zlib compressor:** libstb's own code in `src/codec/` (`png.cpp`, `jpeg.cpp`,
+  `bmp_tga.cpp`, `deflate.cpp`), written as classes with no global state (the old mutex around
+  `stb_image_write`'s globals is gone). Output bytes are unchanged (PNG at every level, JPEG, BMP,
+  TGA, zlib), and the JPEG encoder still writes the same bytes as upstream `stb_image_write` v1.16
+  built with the same compiler.
+- **Resizer:** `stb_image_resize2.h` is split by topic into `src/image/resize/` (api, config, srgb,
+  simd, filters, coefficients, coders, decode, horizontal, vertical, scanline, sampler, engine, and
+  the three template `.inl` files that upstream produced by including its own header again).
+  Declarations of functions that no longer exist (`stbir_set_pixel_callbacks`,
   `stbir_set_user_data`, `stbir_set_pixel_layouts`, the subrect setters), the unused
   `stbir_quick_resize_helper` and the documentation of the removed setters are deleted, which also
   silences the matching `-Wunused-function` warnings.
-- Source layout: `src/core/` is gone. One folder per module: `src/util`, `src/image`, `src/codec`,
-  `src/zlib`, `src/font` (with `shaper/`), `src/draw`. Internal headers are included relative to
-  `src/` (`"image/simd.hpp"`).
-- Public headers merged by cohesion: `stb/resizer.hpp` is part of `stb/image.hpp` (which removes the
-  opaque forward declaration between the two), `stb/shape.hpp` and `stb/canvas.hpp` became
-  `stb/draw.hpp`, `stb/env.hpp` and `stb/utf8.hpp` became `stb/util.hpp`. `stb.h` still includes
-  everything.
-- The encoders and the zlib compressor are libstb's own code in `src/codec/` (`png.cpp`,
-  `jpeg.cpp`, `bmp_tga.cpp`, `deflate.cpp`), written as classes with no global state (the old
-  mutex around `stb_image_write`'s globals is gone). `stb_image_write.h` is no longer vendored: the
-  four remaining stb headers are byte-for-byte upstream. Output bytes are unchanged (PNG at every
-  level, JPEG, BMP, TGA, zlib), and the JPEG encoder still writes the same bytes as upstream
-  `stb_image_write` v1.16 built with the same compiler. BMP and TGA encoding is faster.
-- `bidi::resolve` is a class with one method per UAX #9 rule, `text_shaper::shape_line` and
-  `gsub_table::make_plan` are split into steps, the three `thumbnail` overloads and the two
-  `Resizer` constructors share their code, constants are snake_case.
+- **Font reader:** `src/font/truetype/` replaces `stb_truetype.h` and `stb_rect_pack.h` (font file,
+  cmap, GPOS / kern kerning, TrueType and CFF outlines, the anti-aliasing rasterizer and the atlas
+  packer). Every read is bounds-checked and composite glyphs have a recursion limit. Glyph bitmaps,
+  metrics, kerning and atlases are byte-for-byte what stb produced on 150 real fonts (TrueType,
+  CFF, collections).
+- **Source layout:** `src/core/` is gone. One folder per module: `src/util`, `src/image`,
+  `src/codec`, `src/zlib`, `src/font` (with `shaper/`), `src/draw`. Internal headers are included
+  relative to `src/` (`"image/simd.hpp"`).
+- `include/stb/color.hpp` went from 1051 to 240 lines: string parsing (`from_string`, `from_hash`,
+  `from_name`), `to_string`, `blend` and the stream operators moved to `src/draw/color.cpp`, and
+  `from_name` looks names up in one table (values still come from the named factories, so each
+  color is defined once). 40,000 parse, error-message and blend outputs match the previous header
+  byte for byte.
+- Decoder cleanup: redundant `this->` and local `stream *s` aliases are gone from the JPEG and PNG
+  decoders, local macros became `constexpr` values and inline functions (`zfast_bits`, `fast_bits`,
+  `marker_none`, `is_restart`, `is_sof`, `png_type`, `div4`, `float2fixed`, `hdr_buflen`, ...), and
+  `typedef` became `using` or a plain `struct`. Data members of the stateful decoder classes
+  (`jpeg_decoder`, `png_decoder`, `gif_decoder`, `inflater`) end in an underscore like the rest of
+  the project, and cryptic ones got real names (`s_` became `stream_`; in the GIF decoder `w_`,
+  `h_`, `pal_` and `lpal_` became `width_`, `height_`, `palette_` and `local_palette_`). The renames
+  were made with libclang; 23,680 decoder cases are unchanged.
+- Shaper complexity (clang-tidy `readability-function-cognitive-complexity`, no warnings left in
+  `src/font/shaper`): `bidi::classify_wide` reads an ordered range table, `arabic::joining_forms`
+  uses small join helpers, and the GSUB context engine splits `try_rule` into `match_input`,
+  `match_side` and `run_records`, with one `read_rule` instead of two copies of the rule layout
+  code. `bidi::resolve` is a class with one method per UAX #9 rule, and `text_shaper::shape_line`
+  and `gsub_table::make_plan` are split into steps. Verified over every code point (classification,
+  mirroring, joining type), 200,000 random Arabic strings (forms, bidi order and levels) and new
+  format 2 GSUB tests that also pass on the old code.
+- Move semantics and special members reviewed (clang-tidy `performance-*`,
+  `bugprone-use-after-move`, `cppcoreguidelines-special-member-functions`): no use-after-move and no
+  avoidable by-value copies were found. `canvas`, `simd_scope` and `font_bytes` now say explicitly
+  that they are neither copied nor moved, the polymorphic bases `glyph_source` and `subtable`
+  cannot be sliced, and two no-op `std::move` calls are gone.
+- The three `thumbnail` overloads and the two `Resizer` constructors share their code, constants
+  are snake_case.
 
-- The font stack is libstb's own code too: `src/font/truetype/` replaces `stb_truetype.h` and
-  `stb_rect_pack.h` (font file, cmap, GPOS / kern kerning, TrueType and CFF outlines, the
-  anti-aliasing rasterizer and the atlas packer). Every read is bounds-checked and composite glyphs
-  have a recursion limit. Glyph bitmaps, metrics, kerning and atlases are byte-for-byte what stb
-  produced on 150 real fonts (TrueType, CFF, collections).
-
-- The decoders are libstb's own code as well: `stb_image.h` is split into `src/codec/decode/`, one file per
-  format, with `stream`, `inflater`, `jpeg_decoder`, `png_decoder` and `gif_decoder` classes; the callback
-  IO, 16-bit/linear loaders and unused setters are removed. 23680 decodes (every format, damaged files too)
-  give the same pixels or the same error as the stb build.
-
-- `stb_image_resize2.h` is split by topic into `src/image/resize/` (api, config, srgb, simd, filters,
-  coefficients, coders, decode, horizontal, vertical, scanline, sampler, engine, and the three template
-  `.inl` files that upstream produced by including its own header again). `src/third_party/` is gone: no
-  stb header is vendored any more, and `NOTICE.md` records the lineage and the license.
-
-### Added
-- Round-trip tests (`tests/python/test_roundtrip.py`, `tests/cpp/test_codec.cpp`) and two
-  development checks that are not tests: `tests/tools/snapshot.py` (byte-for-byte comparison of
-  two builds) and an updated `tests/tools/jpeg_vs_upstream.py` / `zlib_fuzz.py`.
+### Tests and tooling
+- `tests/cpp/test_blend.cpp` and `tests/python/test_blend.py` (blend, fill, masks, stacking),
+  `tests/python/test_packaging.py` (one `libstb.so` in the wheel, no `.a`, public symbols exported
+  and internal ones hidden, an extension never mixes the two C++ runtimes) and
+  `tests/python/test_cli.py`.
+- Round-trip tests (`tests/python/test_roundtrip.py`, `tests/cpp/test_codec.cpp`): files go through
+  `open`, `write` and `open` for png, bmp, tga and jpeg, in a chain of formats and from a loaded
+  ppm; new tests for the `&&` overloads and their errors.
+- Development checks that are not tests: `tests/tools/snapshot.py` (byte-for-byte comparison of two
+  builds), `tests/tools/decode_snapshot.py` (the decoder corpus), and updated
+  `tests/tools/jpeg_vs_upstream.py` and `zlib_fuzz.py`.
+- The CI consumer test builds a C++ program against the installed package with `find_package`.
 
 ## [0.8.0] - 2026-10-22
 
@@ -385,7 +406,11 @@ First state: C++17 core over the stb single-header libraries with image decoding
 encoding (PNG, JPEG, BMP, TGA), resizing with selectable filters, TrueType font rendering, and a
 nanobind Python binding.
 
-[Unreleased]: https://github.com/mohammadraziei/libstb/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mohammadraziei/libstb/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mohammadraziei/libstb/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/mohammadraziei/libstb/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/mohammadraziei/libstb/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/mohammadraziei/libstb/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mohammadraziei/libstb/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mohammadraziei/libstb/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mohammadraziei/libstb/compare/__beta__...v0.3.0
