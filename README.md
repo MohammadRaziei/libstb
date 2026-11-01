@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/MohammadRaziei/libstb/master/docs/images/libstb-logo.png" width="160" alt="libstb logo"/>
+<img src="https://raw.githubusercontent.com/MohammadRaziei/libstb/master/docs/images/libstb-sq.svg" width="96" alt="libstb logo"/>
 
 # libstb
 
