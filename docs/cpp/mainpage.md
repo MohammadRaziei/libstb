@@ -24,10 +24,22 @@ FetchContent_MakeAvailable(libstb)
 target_link_libraries(my_app PRIVATE libstb::libstb)
 ```
 
+```cmake
+# CMakeLists.txt
+# or, with the prebuilt library from `pip install libstb`
+execute_process(COMMAND libstb --cmake-dir
+                OUTPUT_VARIABLE libstb_DIR OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)
+find_package(libstb CONFIG REQUIRED)
+
+target_link_libraries(my_app PRIVATE libstb::libstb)
+```
+
 Requires CMake 3.21+ and a C++17 compiler. The namespace and the headers are
 `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target (`libstb::libstb`) keeps the
 project name. After a `cmake --install`, `find_package(libstb CONFIG REQUIRED)`
-works the same way.
+works the same way. `libstb` must be on the `PATH` for the pip variant (or use
+`python -m libstb --cmake-dir`).
 
 ## Quick example
 

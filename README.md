@@ -52,8 +52,18 @@ FetchContent_MakeAvailable(libstb)
 target_link_libraries(my_app PRIVATE libstb::libstb)    # CMake 3.21+, C++17
 ```
 
-`find_package(libstb CONFIG)` works too, after `cmake --install` or after `pip install libstb`
-(`stb.get_cmake_dir()` gives the config directory).
+```cmake
+# or, with the prebuilt library from `pip install libstb`
+execute_process(COMMAND libstb --cmake-dir
+                OUTPUT_VARIABLE libstb_DIR OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)
+find_package(libstb CONFIG REQUIRED)
+
+target_link_libraries(my_app PRIVATE libstb::libstb)
+```
+
+`libstb` must be on the `PATH` (the Python environment where you ran `pip install`); otherwise use
+`python -m libstb --cmake-dir`. `find_package(libstb CONFIG)` also works after `cmake --install`.
 
 ```cpp
 #include <stb.h>
