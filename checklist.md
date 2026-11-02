@@ -106,6 +106,14 @@
       حدود ۱٫۲ تا ۲٫۹ ns به‌ازای هر نمونه؛ در کد کف محافظه‌کارانه‌ی ۱٫۰ (و ۰٫۳ برای nearest) گذاشتم.
       **اثر واقعی چندهسته‌ای اندازه‌گیری نشده** (ماشین من یک هسته داره): ثابت‌ها بعداً روی ماشین چندهسته‌ای
       تنظیم بشن.
+- [x] **API گلیف-ایندکس برای رندر وکتور (گام الف درخواست novasvg).** `font::outline(g)` (و فرم بافر
+      `outline(g, out)`) به‌صورت `path_command` در واحد فونت (`quad_to` برای TrueType، `cubic_to` برای CFF،
+      `close` ساخته‌شده؛ y رو به بالا)، `glyph_index`، `glyph_count`، `glyph_info`، `design_metrics`،
+      `glyph_kerning(l, r, kerning_mode)` و `font::face_count`. روی `truetype::face` ساخته شد (فقط
+      `units_per_em`، bbox فونت، `num_glyphs`، `kern_table_advance`، `font_count` اضافه شد). اندیس بیرون از
+      بازه exception نمی‌ده. تست: `tests/cpp/test_font_outline.cpp` (۱۷ تست، با فونت‌های مصنوعی جدید: منحنی +
+      composite + GPOS/kern، CFF و `.ttc`؛ دو جهش عمدی گرفته شد). **باز: بخش ب (shape با cluster و
+      `shape_options`) و WOFF.**
 - [x] تست: ۲۲۱ تست C++ پاس. Python: ۱۱۹۴ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
 - [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
       اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
@@ -120,6 +128,11 @@
 
 ## قابلیت‌ها
 
+- [ ] shaping با cluster: `font::shape(utf8, shape_options)` → گلیف + cluster (آفست بایت) + x_advance/offset،
+      با direction و سوئیچ‌های kerning/ligatures (liga/clig خاموش بشه، rlig و joining عربی نه). خط لوله الان
+      روی کدپوینت کار می‌کنه و باید منبع هر گلیف رو از bidi، mirror، joining و ligatureها عبور بده.
+      GPOS الان فقط pair adjustment داره (mark positioning نه).
+- [ ] WOFF1 (ارزان: zlib خودمون هست) و WOFF2 (Brotli لازم؛ احتمالاً نه) فقط اگه novasvg خودش decode نکنه.
 - [ ] thread برای کارهای دیگه (blend با حالت‌های float، کدگذاری JPEG) فقط بعد از اندازه‌گیری روی ماشین
       چندهسته‌ای؛ کارهای حافظه‌محور (premultiply، flip، convert) عمداً بدون thread‌ن. بایندینگ‌های تصویر پایتون
       هنوز GIL رو موقع کار سنگین آزاد نمی‌کنن (فقط فونت‌ها می‌کنن).
@@ -167,3 +180,12 @@
   می‌ده. `canvas` همیشه روی یه کپی کار می‌کنه، پس امنه.
 - `draw_text` فونت ناشناس رو لود نکن: stb_truetype بررسی مرز نداره (فقط فونت مورد اعتماد).
 - گزارش بنچمارک تک‌فایله‌ست و بعد از هر تغییر قالب باید دوباره ساخته بشه (دستورش توی هندآف قبلی).
+
+## issue #2: rasterizer و stroker برداری (novasvg)
+
+- [x] گام ۱: `stb/path.hpp` (`matrix`, `path`, جابه‌جایی `point`/`path_command` از `font.hpp`)، `src/draw/path.cpp`،
+      `tests/cpp/test_path.cpp`.
+- [ ] گام ۲: rasterizer پر کردن (پورت الگوریتم `ftgrays` از plutovg به کلاس‌های خودمان)، `span`/`span_view`،
+      `fill_rule`، `fill(image&, ...)`؛ تست دقیق در برابر خروجی مرجع plutovg.
+- [ ] گام ۳: stroker (`line_cap`, `line_join`, `miter_limit`) و dash.
+- [ ] گام ۴: `canvas::add_path` و بایندینگ پایتون (همان نام‌ها)، مثال‌ها، `NOTICE.md` (FTL/plutovg)، مستندات.

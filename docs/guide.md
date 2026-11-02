@@ -403,9 +403,44 @@ stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file: fixed sans / serif / mono tables
 ```
 
+**Glyph outlines (vector rendering).** `font` also gives the outline of any glyph as path commands, in
+font units, so a vector renderer can draw text without rasterising it first. The glyph indices are the
+font's own, the ones `shape_glyphs` returns; an index past `glyph_count()` is an empty glyph, not an
+error. TrueType outlines come as `quad_to`, CFF ones as `cubic_to` (they are never converted), every
+contour is `move_to ... close`, and `y` points up like the font.
+
+```cpp
+const stb::font_design_metrics dm = f.design_metrics();      // units_per_em, ascent, descent, line_gap, bbox
+const float scale = font_size / float(dm.units_per_em);       // font units -> output units
+std::vector<stb::path_command> cmds;                          // reused: outline() clears it, keeps its capacity
+float pen = 0;
+std::uint32_t prev = 0;
+for (char32_t cp : codepoints) {
+    const std::uint32_t g = f.glyph_index(cp);                // 0 = .notdef
+    if (prev) pen += f.glyph_kerning(prev, g, stb::kerning_mode::kern_table) * scale;
+    f.outline(g, cmds);
+    for (const stb::path_command& c : cmds) {                 // c.p[0 .. stb::point_count(c.op) - 1] are used
+        switch (c.op) {
+            case stb::path_op::move_to:  /* c.p[0] */ break;
+            case stb::path_op::line_to:  /* c.p[0] */ break;
+            case stb::path_op::quad_to:  /* control c.p[0], end c.p[1] */ break;
+            case stb::path_op::cubic_to: /* controls c.p[0], c.p[1], end c.p[2] */ break;
+            case stb::path_op::close:    break;
+        }
+    }
+    pen += f.glyph_info(g).advance * scale;                   // advance, lsb and the ink box, in font units
+    prev = g;
+}
+const int faces = stb::font::face_count("fonts.ttc");        // 1 for a .ttf, the number of faces for a .ttc
+```
+
+`kerning_mode::automatic` (the default) is what `kerning()` and text rendering use: GPOS pair
+adjustment if the font has GPOS, else the legacy `kern` table. `kern_table` looks at the `kern` table
+alone, for code that must match a renderer that ignores GPOS; `none` is no kerning.
+
 Design: stb never appears in a public header. Where a class would hold stb
 state, it is hidden behind a pimpl: `font` keeps the font bytes and the
-`stbtt_fontinfo` in an opaque `font::impl` (shared and immutable, so copies are
+parsed face in an opaque `font::impl` (shared and immutable, so copies are
 cheap and threads can share one). `image` and `resizer` carry no stb state at
 all (plain ints/enums), so a pimpl there would only add indirection. `image` is
 move-only: its pixels are a `shared_ptr<uint8_t>` whose deleter (or aliased

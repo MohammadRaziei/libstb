@@ -64,6 +64,18 @@ int face::offset_for_index(byte_view file, int index) {
     return -1;
 }
 
+int face::font_count(byte_view file) {
+    if (is_font_header(file)) return 1;
+    if (file.u32(0) == make_tag('t', 't', 'c', 'f')) {
+        const std::uint32_t version = file.u32(4);
+        if (version == 0x00010000u || version == 0x00020000u) {
+            const std::int32_t n = static_cast<std::int32_t>(file.u32(8));
+            return n > 0 ? n : 0;
+        }
+    }
+    return 0;
+}
+
 bool face::init(byte_view file, int font_start) {
     *this = face();
     file_ = file;
@@ -181,6 +193,10 @@ void face::h_metrics(int glyph, int& advance, int& left_bearing) const {
     }
 }
 
+int face::units_per_em() const { return head_.u16(18); }
+
+box face::font_box() const { return box{head_.i16(36), head_.i16(38), head_.i16(40), head_.i16(42)}; }
+
 float face::scale_for_pixel_height(float height) const {
     const int font_height = hhea_.i16(4) - hhea_.i16(6);
     return height / static_cast<float>(font_height);
@@ -247,6 +263,8 @@ int face::gpos_pair_advance(int left, int right) const {
     }
     return 0;
 }
+
+int face::kern_table_advance(int left, int right) const { return kern_.empty() ? 0 : kern_pair_advance(left, right); }
 
 int face::kern_advance(int left, int right) const {
     if (!gpos_.empty()) return gpos_pair_advance(left, right);

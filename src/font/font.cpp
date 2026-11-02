@@ -278,6 +278,91 @@ float font::kerning(char32_t left, char32_t right, float px) const {
     return face.kern_advance(face.glyph_index(check_cp(left)), face.glyph_index(check_cp(right))) * impl_->scale(px);
 }
 
+// ------------------------------------------------------------ glyph-index API (font units)
+
+std::uint32_t font::glyph_index(char32_t cp) const { return std::uint32_t(impl_->face.glyph_index(check_cp(cp))); }
+
+std::uint32_t font::glyph_count() const noexcept { return std::uint32_t(impl_->face.num_glyphs()); }
+
+glyph_metrics font::glyph_info(std::uint32_t g) const {
+    glyph_metrics m;
+    if (g >= glyph_count()) return m;
+    const truetype::face& face = impl_->face;
+    int advance = 0, lsb = 0;
+    face.h_metrics(int(g), advance, lsb);
+    m.advance = float(advance);
+    m.lsb = float(lsb);
+    truetype::box b;
+    if (face.glyph_box(int(g), b) && (b.x1 > b.x0 || b.y1 > b.y0)) {
+        m.x_min = float(b.x0), m.y_min = float(b.y0), m.x_max = float(b.x1), m.y_max = float(b.y1);
+        m.has_outline = true;
+    }
+    return m;
+}
+
+font_design_metrics font::design_metrics() const noexcept {
+    const truetype::face& face = impl_->face;
+    font_design_metrics d;
+    d.units_per_em = face.units_per_em();
+    face.v_metrics(d.ascent, d.descent, d.line_gap);
+    const truetype::box b = face.font_box();
+    d.x_min = b.x0, d.y_min = b.y0, d.x_max = b.x1, d.y_max = b.y1;
+    return d;
+}
+
+void font::outline(std::uint32_t g, std::vector<path_command>& out) const {
+    out.clear();
+    if (g >= glyph_count()) return;
+    const std::vector<truetype::vertex> vertices = impl_->face.outline(int(g));
+    const auto at = [](int x, int y) { return point{float(x), float(y)}; };
+    const auto command = [](path_op op, point a = {}, point b = {}, point c = {}) {
+        path_command cmd;
+        cmd.op = op, cmd.p[0] = a, cmd.p[1] = b, cmd.p[2] = c;
+        return cmd;
+    };
+    out.reserve(vertices.size() + 4);
+    bool open = false;  // the engine marks a contour only by where the next one starts
+    for (const truetype::vertex& v : vertices) {
+        switch (v.type) {
+            case truetype::vertex::move:
+                if (open) out.push_back(command(path_op::close));
+                out.push_back(command(path_op::move_to, at(v.x, v.y)));
+                open = true;
+                break;
+            case truetype::vertex::line: out.push_back(command(path_op::line_to, at(v.x, v.y))); break;
+            case truetype::vertex::curve:
+                out.push_back(command(path_op::quad_to, at(v.cx, v.cy), at(v.x, v.y)));
+                break;
+            case truetype::vertex::cubic:
+                out.push_back(command(path_op::cubic_to, at(v.cx, v.cy), at(v.cx1, v.cy1), at(v.x, v.y)));
+                break;
+            default: break;
+        }
+    }
+    if (open) out.push_back(command(path_op::close));
+}
+
+std::vector<path_command> font::outline(std::uint32_t g) const {
+    std::vector<path_command> out;
+    outline(g, out);
+    return out;
+}
+
+float font::glyph_kerning(std::uint32_t left, std::uint32_t right, kerning_mode mode) const noexcept {
+    if (mode == kerning_mode::none || left >= glyph_count() || right >= glyph_count()) return 0.0f;
+    const truetype::face& face = impl_->face;
+    return float(mode == kerning_mode::kern_table ? face.kern_table_advance(int(left), int(right))
+                                                  : face.kern_advance(int(left), int(right)));
+}
+
+int font::face_count(const std::vector<std::uint8_t>& data) {
+    const int n = truetype::face::font_count(otl::byte_view(data.data(), data.size()));
+    if (n < 1) throw decode_error("not a TrueType/OpenType font or collection");
+    return n;
+}
+
+int font::face_count(const std::filesystem::path& path) { return face_count(detail::read_file(path)); }
+
 namespace {
 
 // Rasterises one glyph of the font by glyph index.

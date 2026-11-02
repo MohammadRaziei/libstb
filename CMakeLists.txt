@@ -114,11 +114,13 @@ function(libstb_apply_core_build_settings target)
     )
     apply_optimization_flags(${target})
 
-    # shape.cpp draws with floating point and the result must be the same on every platform
-    # (the C++ and Python canvas tests compare against one fixed hash), so no fused multiply-add
-    # contraction: GCC and Clang would otherwise use FMA on ARM and give last-bit differences.
+    # Everything under src/draw (shapes, paths, the rasterizer) does floating point and must give
+    # the same pixels on every platform (the C++ and Python canvas tests compare against fixed
+    # hashes), so no fused multiply-add contraction: GCC and Clang would otherwise use FMA on ARM
+    # and give last-bit differences.
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/draw/shape.cpp
+        file(GLOB_RECURSE LIBSTB_DRAW_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/draw/*.cpp)
+        set_source_files_properties(${LIBSTB_DRAW_SOURCES}
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
     endif()

@@ -8,6 +8,23 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- `stb/path.hpp`, the geometry half of the vector-drawing layer (issue #2): `stb::path` (builder calls
+  `move_to`, `line_to`, `quad_to`, `cubic_to`, `close`; whole shapes `add_rect`, `add_rounded_rect`,
+  `add_ellipse`, `add_circle`; `add_path` / `add_commands` with an optional matrix, `transform`,
+  `current_point`, `bounds`) and `stb::matrix` (SVG convention, fluent `translate` / `scale` / `rotate` /
+  `shear`, `then`, `map`, `inverse`). A glyph outline from `font::outline` goes straight into a path.
+  `point`, `path_op` and `path_command` moved from `stb/font.hpp` to this header (same names, `font.hpp`
+  includes it). Everything under `src/draw` is now built without FMA contraction, not only `shape.cpp`.
+- Glyph-index API of `stb::font`, for vector renderers: `outline(glyph)` (also `outline(glyph, out)` to
+  reuse a buffer) as `path_command`s in font units (`move_to`, `line_to`, `quad_to` for TrueType,
+  `cubic_to` for CFF, `close`; y up), `glyph_index(codepoint)`, `glyph_count()`, `glyph_info(glyph)`
+  (`glyph_metrics`: advance, lsb, ink box, `has_outline`), `design_metrics()` (`font_design_metrics`:
+  `units_per_em`, ascent, descent, line gap, font bounding box), `glyph_kerning(left, right, mode)` with
+  `kerning_mode::{none, kern_table, automatic}` (`kern_table` ignores GPOS, `automatic` is what `kerning()`
+  uses), and `font::face_count(data | path)` for `.ttc` collections. An index past `glyph_count()` gives an
+  empty outline and zero metrics, never an exception. New types `point`, `path_op`, `path_command`
+  (with `point_count(op)` and `==`). Tests use new synthetic fonts: a TrueType one with curves, a
+  composite and GPOS plus `kern`, a CFF one, and a `.ttc` (`tests/data/make_outline_test_fonts.py`).
 - `stb::sformat`, `stb::vsformat` and `stb::sformat_to` (`stb/util.hpp`): printf for `std::string`.
   One `vsnprintf` into a 256 byte stack buffer in the common case (one allocation, none for a short
   result), a second exactly-sized one for a longer text; `sformat_to` appends to an existing string

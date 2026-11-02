@@ -48,6 +48,9 @@ public:
     // The offset of font `index` in `file`: a plain .ttf / .otf holds one font (index 0 at offset
     // 0), a .ttc collection several. -1 if there is no such font.
     static int offset_for_index(otl::byte_view file, int index);
+    // How many fonts `file` holds: 1 for a plain .ttf / .otf, the number of fonts for a .ttc, 0 if it
+    // is neither. (It does not check that each of them can be read: that is init's answer.)
+    static int font_count(otl::byte_view file);
 
     face() = default;
 
@@ -64,9 +67,19 @@ public:
     void v_metrics(int& ascent, int& descent, int& line_gap) const;
     // Advance width and left side bearing of a glyph, in font units.
     void h_metrics(int glyph, int& advance, int& left_bearing) const;
+
+    // The font's design grid: units per em (`head`), 0 if the table is damaged.
+    int units_per_em() const;
+    // The bounding box of all the glyphs, in font units (`head`).
+    box font_box() const;
+    // The number of glyphs (`maxp`); a glyph index at or past it is not a glyph of this font.
+    int num_glyphs() const { return num_glyphs_; }
     // Kerning between two glyphs in font units: GPOS pair adjustment if the font has it, else the
     // `kern` table.
     int kern_advance(int left, int right) const;
+    // Kerning from the legacy `kern` table alone, whether or not the font also has GPOS; 0 if it has
+    // no `kern` table.
+    int kern_table_advance(int left, int right) const;
 
     // The scale that makes (ascent - descent) `height` pixels tall.
     float scale_for_pixel_height(float height) const;

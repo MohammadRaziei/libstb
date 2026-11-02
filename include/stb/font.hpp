@@ -19,6 +19,7 @@
 #include "stb/color.hpp"
 #include "stb/error.hpp"
 #include "stb/image.hpp"
+#include "stb/path.hpp"
 
 namespace stb {
 
@@ -84,6 +85,41 @@ private:
     std::unordered_map<char32_t, std::size_t> index_;
 };
 
+// ------------------------------------------------------ outlines and font-unit metrics
+//
+// Everything below is in FONT UNITS, the font's own design grid (font::design_metrics().units_per_em
+// per em, 1000 or 2048 usually), with y pointing UP like the font itself and no scaling or hinting
+// applied: what a vector renderer needs. To draw at `size` (the em in output units) multiply by
+// size / units_per_em, and flip y if the output grows downwards.
+
+// Outlines use stb::point and stb::path_command from stb/path.hpp, so a glyph outline goes
+// straight into a stb::path (path::add_commands) and from there to the rasterizer.
+
+// One glyph's horizontal metrics and ink box.
+struct glyph_metrics {
+    float advance = 0;       // how far the pen moves after the glyph
+    float lsb = 0;           // left side bearing: pen -> the glyph's left edge (hmtx)
+    float x_min = 0, y_min = 0, x_max = 0, y_max = 0;  // the ink box; all 0 when has_outline is false
+    bool has_outline = false;                          // false for a glyph with nothing to draw, e.g. space
+};
+
+// The font's vertical metrics and bounding box in font units (font::metrics gives the same
+// vertical numbers scaled to pixels).
+struct font_design_metrics {
+    int units_per_em = 0;
+    int ascent = 0;    // above the baseline (positive), hhea
+    int descent = 0;   // below the baseline (negative), hhea
+    int line_gap = 0;  // hhea
+    int x_min = 0, y_min = 0, x_max = 0, y_max = 0;  // the box that holds every glyph (head)
+};
+
+// Which kerning a glyph pair gets (font::glyph_kerning).
+//   none        no kerning
+//   kern_table  the legacy `kern` table only, even when the font also has GPOS
+//   automatic   GPOS pair adjustment if the font has GPOS, else the `kern` table (what kerning() and
+//               text rendering use)
+enum class kerning_mode { none, kern_table, automatic };
+
 // A TrueType/OpenType font. Cheap to copy (copies share one immutable
 // parsed font) and safe to use from many threads at once.
 //
@@ -108,6 +144,35 @@ public:
     float kerning(char32_t left, char32_t right, float pixel_height) const;
 
     glyph render_glyph(char32_t codepoint, float pixel_height) const;
+
+    // ---- glyph-index API: outlines and metrics in font units (see the section above the class).
+    // The glyph indices are the font's own, the ones shape_glyphs() returns. An index at or past
+    // glyph_count() is not a glyph: these functions give an empty outline, zero metrics and no
+    // kerning for it instead of throwing, so they are safe in a loop over untrusted indices.
+
+    // The glyph of a character; 0 (".notdef") if the font has none (has_glyph() tells). Throws
+    // invalid_argument for a code point above U+10FFFF.
+    std::uint32_t glyph_index(char32_t codepoint) const;
+    std::uint32_t glyph_count() const noexcept;
+    glyph_metrics glyph_info(std::uint32_t glyph) const;
+    font_design_metrics design_metrics() const noexcept;
+
+    // The outline of a glyph: every contour is move_to ... close, in the font's own point order and
+    // curve types (quad_to for TrueType, cubic_to for CFF). Empty for a glyph with no outline. The
+    // second form fills `out` (cleared first, its capacity kept), for drawing many glyphs without an
+    // allocation each.
+    std::vector<path_command> outline(std::uint32_t glyph) const;
+    void outline(std::uint32_t glyph, std::vector<path_command>& out) const;
+
+    // Kerning between two glyphs, in font units (usually <= 0). kerning() is the same for characters
+    // and in pixels, always in automatic mode.
+    float glyph_kerning(std::uint32_t left, std::uint32_t right, kerning_mode mode = kerning_mode::automatic) const noexcept;
+
+    // How many fonts a file holds: 1 for a .ttf / .otf, the number of faces for a .ttc collection
+    // (font::from_memory / open take an index below it). It does not check that every face is
+    // usable. Throws decode_error if the data is neither, io_error / limit_error for a path.
+    static int face_count(const std::vector<std::uint8_t>& data);
+    static int face_count(const std::filesystem::path& path);
 
     // Throws invalid_argument on malformed UTF-8.
     text_size measure(std::string_view utf8, float pixel_height) const;

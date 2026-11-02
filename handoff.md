@@ -1,0 +1,86 @@
+# handoff.md (وضعیت پروژه برای ادامه‌ی کار در سشن بعدی)
+
+تاریخ: 2026-11-02. ریپو: mohammadraziei/libstb (از 0.9.0، کامیت `48bfda8`). این فایل untracked است
+(قبل از push حذفش کن). همه‌ی کارهای زیر commit شده‌اند و working tree تمیز است.
+
+## کامیت‌های این سشن (به ترتیب)
+
+| کامیت | چه شد |
+|---|---|
+| `0f3c5d0` | issue #1: `stb::rgba_to_premultiplied_argb` / `premultiplied_argb_to_rgba` (کرنل‌های SIMD، `src/image/kernels.hpp`، `ops.cpp`) |
+| `685f126` | threading هوشمند: `stb::thread_count / set_threads / thread_scope`، پایتون `threads(n)`، env `LIBSTB_THREADS`، `src/util/parallel.hpp`، `src/util/threads.cpp`؛ فقط `resize` ازش استفاده می‌کند |
+| `8e76e18` | `stb::sformat / vsformat / sformat_to` در `include/stb/util.hpp`؛ پیام‌های خطای دستی به آن‌ها تبدیل شدند |
+| `657ae77` | API گلیف-ایندکس `stb::font` (بخش الف درخواست novasvg) |
+
+## کار با build و تست (همه با CMake، طبق قاعده‌ی کاربر)
+
+```
+pip install cmake ninja nanobind pytest numpy pillow fonttools --break-system-packages
+cmake -S . -B /tmp/b -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=OFF
+cmake --build /tmp/b --target stb_test_cpp                 # تست C++ (utest)
+cmake --build /tmp/b --target stb_bench_premultiply        # بنچمارک premultiply (آرگومان اول = اندازه، مثل 512)
+# بدون dispatch AVX2:  -DCMAKE_CXX_FLAGS=-DSTB_NO_SIMD_DISPATCH
+# پایتون:  cmake -S . -B /tmp/b3 -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=ON
+#          cmake --build /tmp/b3 --target stb_test_python
+# TSan:    -DCMAKE_CXX_FLAGS="-fsanitize=thread -g" (و linker flags) سپس test_stb_cpp --filter=libstb_threads_tests.*
+```
+
+آخرین نتیجه‌ها: C++ حدود 314 تست پاس (هر دو حالت dispatch)، پایتون 1366 پاس و 4 skip (قبل از
+افزودن API فونت؛ API فونت بایندینگ پایتون ندارد). TSan روی تست‌های thread بدون هشدار.
+`nproc` ماشین قبلی 1 بود، پس سرعت واقعی چندهسته‌ای اندازه‌گیری نشده.
+
+## تصمیم‌ها و قواعد کاربر
+
+- در پایان هر کار کل پروژه zip شود (نه patch). em dash (U+2014) ممنوع (در کد، متن، مستندات). فقط با CMake build/تست شود
+  (نه g++ مستقیم). قبل از پیاده‌سازی هر API جدید، API پیشنهادی توضیح داده شود و تأیید گرفته شود.
+- ذخیره‌ی پیش‌فرض `stb::image` همیشه straight RGBA می‌ماند (نه permuted/premultiplied). فرمت opt-in premultiplied
+  فقط اگر بنچمارک واقعی novasvg لازمش کرد.
+- premultiply: امضا همان امضای خود issue است (`dst, dst_stride, src, src_stride, width, height`، stride بایتی، درجا مجاز).
+  ورودی نامعتبر (`c > a`) در جهت معکوس مثل ذخیره‌ی `uint8_t` wrap می‌شود. **فرض من: مرجع novasvg هم همین است، تأیید نشده.**
+- thread: پیش‌فرض auto (CPUهای مجاز: affinity و cgroup)، سقف است نه الزام؛ هر thread اضافه حدود 250us کار می‌خواهد؛
+  بدون pool؛ خروجی بایت‌به‌بایت با تک‌thread یکی. ثابت‌های تخمین (1.0 ns به‌ازای هر نمونه، 0.3 برای nearest) از اندازه‌گیری
+  تک‌هسته‌ی ماشین قبلی و محافظه‌کارانه‌اند؛ باید روی ماشین چندهسته‌ای تنظیم شوند. `parallel_for` فعلاً مصرف‌کننده ندارد.
+- نام‌ها: `sformat` (نه printf در نام). نسخه‌ی `{}`-style (`stb::format`) فقط اگر خواسته شود.
+
+## کارهای باز (به ترتیب پیشنهادی)
+
+1. **API فونت، بخش ب:** `font::shape(utf8, shape_options)` با `shaped_glyph {glyph, cluster (آفست بایت), x_advance, x_offset, y_offset}`،
+   `shape_options {direction auto/ltr/rtl, kerning_mode, ligatures}`. خط لوله روی کدپوینت کار می‌کند و باید منبع هر گلیف را از
+   bidi، mirror، joining عربی و ligatureهای چندبه‌یک عبور دهد. معنی ligatures=false: `liga/clig` بسته شوند، `rlig` و joining نه.
+   GPOS فعلاً فقط pair adjustment دارد. `unicode-bidi: embed/override` پشتیبانی نمی‌شود. اول API را پیشنهاد بده و تأیید بگیر.
+2. **WOFF/WOFF2:** libstb اصلاً ندارد (`from_memory` احتمالاً `decode_error`). WOFF1 ارزان است (zlib خودمان)، WOFF2 به Brotli نیاز دارد.
+   فقط اگر novasvg خودش decode نکند.
+3. بایندینگ پایتون برای API فونت (outline، glyph_index، ...)؛ فعلاً عمداً نیست.
+4. kernel دستی SSE2 برای premultiply (الان auto-vectorize؛ جهت مستقیم روی alpha نیمه‌شفاف فقط ~1.3x مرجع)، NEON/arm64/MSVC/ویندوز اجرا نشده.
+5. thread برای کارهای دیگر (blend با حالت‌های float، JPEG encode) فقط بعد از اندازه‌گیری روی ماشین چندهسته‌ای.
+   کارهای حافظه‌محور (premultiply، flip، convert) عمداً بدون thread.
+6. بایندینگ‌های تصویر پایتون موقع کار سنگین GIL را آزاد نمی‌کنند (فقط فونت‌ها می‌کنند).
+7. **سیستم لاگ:** libstb ندارد (aixlog هم در ریپو و تاریخچه‌اش نیست؛ شاید در ریپوی دیگری باشد). پیشنهاد من: hook کوچک خودمان
+   (`stb::set_log_handler` و `LIBSTB_LOG=off|warn|debug`، اتصال به `logging` پایتون، و دو هشدار stderr فعلی `LIBSTB_SIMD` و
+   `LIBSTB_THREADS` از همان مسیر). منتظر تصمیم کاربر؛ vendor کردن aixlog با مسیر 0.9.0 (حذف وابستگی‌های vendored) جور نیست.
+8. **سؤال آخر کاربر (بی‌پاسخ مانده): آیا `font` هنوز باید pimpl باشد؟** نظر من: بله. دلیل قدیمی (پنهان کردن `stb_truetype.h`)
+   از بین رفته، ولی pimpl هنوز سه کار می‌کند: (الف) هدرهای داخلی (`truetype::face`، otl، arabic، `once_flag` برای GSUB lazy)
+   را از هدر عمومی و نصب بیرون نگه می‌دارد؛ (ب) ABI کتابخانه‌ی shared و اشیای export شده را پایدار می‌کند؛ (ج) `shared_ptr<const impl>` همان
+   معنای «کپی ارزان، immutable، thread-safe» را می‌دهد که novasvg روی آن حساب کرده (کش و قفل خودش را حذف می‌کند). هزینه‌اش یک
+   اشاره‌گر اضافه در هر فراخوانی است که کنار کار هر گلیف ناچیز است.
+   **کامنت‌های کهنه (اصلاح نشده، چون گفته شد کدی عوض نشود):** `include/stb/font.hpp` خطوط 3 تا 6 و 238
+   (stb_truetype / stbtt_fontinfo / "no bounds checking") و `src/font/font.cpp` خط 62 هنوز از stb_truetype حرف می‌زنند؛
+   باید به «موتور TrueType/CFF خود libstb (`src/font/truetype/`)» اصلاح شوند. (متن `docs/guide.md` اصلاح شده است.)
+9. `checklist.md` تعداد تست‌ها و بخش «قدیمی‌ها» را کامل به‌روز نکرده‌ام (فقط آیتم‌های جدید اضافه شده).
+
+## نکته‌های فنی که زمان تلف می‌کنند
+
+- utest: `UTEST_PRINTF` آکولاد ندارد (داخل `if` همیشه چاپ می‌کند: `{}` بگذار)؛ `ASSERT_EQ` روی `std::string` کار نمی‌کند
+  (از `==` استفاده کن)؛ عبارت assert نباید `%` داشته باشد (utest آن را فرمت printf می‌کند)؛ `<< message` ندارد.
+- فونت‌های تست مصنوعی: `tests/data/make_test_font.py` (قدیمی) و `make_outline_test_fonts.py` (جدید: curves + composite + GPOS و kern،
+  CFF، `.ttc`)؛ با `pip install fonttools` بازتولید می‌شوند.
+- `metrics(px)` مقیاس را از (ascent - descent) می‌گیرد، نه `units_per_em`؛ برای em در SVG از `design_metrics().units_per_em` استفاده کن.
+- `glyph_kerning(automatic)`: اگر فونت GPOS دارد فقط GPOS (حتی اگر جفت نداشته باشد و `kern` داشته باشد)؛ `kern_table` فقط جدول kern.
+- `face_count(path)` کل فایل را می‌خواند. `glyph_info` عمداً `noexcept` نیست (CFF ممکن است تخصیص بدهد).
+
+## issue #2 (rasterizer برداری)
+
+وضعیت و گام‌های بعدی در `checklist.md` (بخش issue #2). تصمیم‌های کاربر: پورت الگوریتم plutovg با کد خودمان (نه vendored)،
+سبک و سریع، API خوب، snake_case، تصمیم‌ها با خودم؛ بعد از هر گام zip. نکته: plutovg استروک را بعد از اعمال ماتریس در فضای
+دستگاه می‌کشد (عرض = عرض * scale از ماتریس) و dash را قبل از ماتریس؛ برای تطابق دقیق با novasvg همین را نگه دار، پس
+`rasterize_*` و `fill/stroke` پارامتر `matrix` می‌گیرند. quad در outline به cubic با همان فرمول float تبدیل می‌شود.
