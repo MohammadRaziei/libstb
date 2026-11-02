@@ -8,6 +8,12 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- `stb::sformat`, `stb::vsformat` and `stb::sformat_to` (`stb/util.hpp`): printf for `std::string`.
+  One `vsnprintf` into a 256 byte stack buffer in the common case (one allocation, none for a short
+  result), a second exactly-sized one for a longer text; `sformat_to` appends to an existing string
+  without a temporary. GCC and Clang check the arguments against the format (`-Wformat`). The
+  messages that were built with `std::to_string` chains and an `ostringstream` (resize, image, font,
+  zlib, canvas, `color::to_string`, the Python bindings) now use it, with the same texts.
 - `stb::thread_count`, `stb::set_threads` and `stb::thread_scope` (Python: `libstb.thread_count`,
   `set_threads`, `with libstb.threads(n):`; environment `LIBSTB_THREADS=auto|off|<n>`): how many
   threads one call may use. `image::resize` / `resizer::resize` now share a big resize between

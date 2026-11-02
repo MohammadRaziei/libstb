@@ -1,4 +1,5 @@
 #include "stb/image.hpp"
+#include "stb/util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -134,9 +135,7 @@ image image::decode(const void* data, std::size_t size, const load_options& opt)
     const int want = opt.format ? channel_count(*opt.format) : hdr.channels();
     const std::uint64_t bytes = std::uint64_t(hdr.width) * std::uint64_t(hdr.height) * std::uint64_t(want);
     if (bytes > opt.max_bytes)
-        throw limit_error("image too large: " + std::to_string(hdr.width) + "x" +
-                          std::to_string(hdr.height) + "x" + std::to_string(want) +
-                          " exceeds max_bytes");
+        throw limit_error(sformat("image too large: %dx%dx%d exceeds max_bytes", hdr.width, hdr.height, want));
 
     // With orient, a flip is done after the orientation (a vertical flip commutes with
     // nothing else): stb flips only when no orientation has to be applied.

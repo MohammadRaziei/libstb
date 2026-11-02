@@ -1,4 +1,5 @@
 #include "stb/image.hpp"
+#include "stb/util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -131,8 +132,7 @@ image resizer::resize(const image& src, int width, int height) const {
     if (out_stride > INT_MAX || src.stride() > std::size_t(INT_MAX) ||
         std::uint64_t(width) * std::uint64_t(height) > std::uint64_t(INT_MAX) ||
         out_bytes > std::uint64_t(INT_MAX) || out_bytes > options_.max_bytes)
-        throw limit_error("resized image too large: " + std::to_string(width) + "x" +
-                          std::to_string(height) + "x" + std::to_string(src.channels()));
+        throw limit_error(sformat("resized image too large: %dx%dx%d", width, height, src.channels()));
 
     image out(width, height, src.format());
 

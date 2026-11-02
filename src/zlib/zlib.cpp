@@ -1,4 +1,5 @@
 #include "stb/zlib.hpp"
+#include "stb/util.hpp"
 
 #include <algorithm>
 #include <climits>
@@ -59,12 +60,12 @@ std::vector<std::uint8_t> zlib_decompress(const void* data, std::size_t size, st
     switch (out.status) {
         case codec::inflate_status::ok: break;
         case codec::inflate_status::too_large:
-            throw limit_error("zlib output exceeds max_bytes (" + std::to_string(limit) + ")");
+            throw limit_error(sformat("zlib output exceeds max_bytes (%zu)", limit));
         case codec::inflate_status::out_of_memory: throw std::bad_alloc();
         case codec::inflate_status::corrupt: throw decode_error("zlib: the stream is corrupt, truncated or not zlib");
     }
     if (out.data.size() > limit)  // fit the rounded-up buffer, but not the limit
-        throw limit_error("zlib output exceeds max_bytes (" + std::to_string(limit) + ")");
+        throw limit_error(sformat("zlib output exceeds max_bytes (%zu)", limit));
 
     // stb does not look at the Adler-32 trailer: check it, and with it that the input ends where
     // the stream ends (a truncated stream cannot match by accident).

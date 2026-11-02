@@ -779,7 +779,7 @@ void bind_image(nb::module_& m) {
              "The pixels as an ndarray: a view (no copy) unless copy=True or the requested\n"
              "dtype differs from uint8.")
         .def("__repr__", [](const image& i) {
-            return "Image(width=" + std::to_string(i.width()) + ", height=" + std::to_string(i.height()) +
-                   ", format=" + std::string(stb::pixel_format_name(i.format())) + ")";
+            const std::string_view format = stb::pixel_format_name(i.format());
+            return stb::sformat("Image(width=%d, height=%d, format=%.*s)", i.width(), i.height(), int(format.size()), format.data());
         });
 }

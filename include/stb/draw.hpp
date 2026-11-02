@@ -16,6 +16,7 @@
 
 #include "stb/export.hpp"
 #include "stb/color.hpp"
+#include "stb/util.hpp"
 #include "stb/font.hpp"
 #include "stb/image.hpp"
 
@@ -338,8 +339,8 @@ public:
         for (const item& it : items_) {
             if (const text_item* t = std::get_if<text_item>(&it)) {
                 if (!t->font_) {
-                    throw std::invalid_argument("canvas: text #" + std::to_string(n) +
-                                                " has no font (call set_font() on the canvas or font() on the text)");
+                    throw std::invalid_argument(
+                        sformat("canvas: text #%zu has no font (call set_font() on the canvas or font() on the text)", n));
                 }
                 ++n;
             }

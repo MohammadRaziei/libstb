@@ -102,8 +102,7 @@ namespace {
 
 void check_px(float px) {
     if (!(px > 0.0f) || px > font::max_pixel_height)  // also rejects NaN
-        throw std::invalid_argument("pixel_height must be in (0, " +
-                                    std::to_string(int(font::max_pixel_height)) + "]");
+        throw std::invalid_argument(sformat("pixel_height must be in (0, %d]", int(font::max_pixel_height)));
 }
 
 int check_cp(char32_t cp) {
@@ -349,7 +348,7 @@ text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes)
     if (w < 1 || h < 1) throw std::invalid_argument("text produces an empty image");
     if (w > INT_MAX || h > INT_MAX ||
         std::uint64_t(w) * std::uint64_t(h) > std::min<std::uint64_t>(max_bytes, INT_MAX))
-        throw limit_error("rendered text too large: " + std::to_string(w) + "x" + std::to_string(h));
+        throw limit_error(sformat("rendered text too large: %lldx%lld", w, h));
 
     image canvas(int(w), int(h), pixel_format::gray);
     for (const auto& p : placements) {

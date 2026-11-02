@@ -47,8 +47,7 @@ inline std::array<std::uint8_t, N> colour_of(nb::handle obj, std::size_t n, cons
     }
     nb::sequence seq = nb::cast<nb::sequence>(obj);
     if (nb::len(seq) != n)
-        throw std::invalid_argument(std::string(what) + " needs one value per channel (" + std::to_string(n) +
-                                    ") or a single int");
+        throw std::invalid_argument(stb::sformat("%s needs one value per channel (%zu) or a single int", std::string(what).c_str(), n));
     for (std::size_t i = 0; i < n; ++i) out[i] = byte_of(seq[i]);
     return out;
 }

@@ -1,11 +1,11 @@
 #include "stb/color.hpp"
+#include "stb/util.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
 #include <ostream>
-#include <sstream>
 
 namespace stb {
 namespace {
@@ -108,10 +108,7 @@ color color::from_name(const std::string& name) {
 }
 
 std::string color::to_string() const {
-    std::ostringstream oss;
-    oss << "color(r=" << static_cast<int>(r_) << ", g=" << static_cast<int>(g_) << ", b=" << static_cast<int>(b_)
-        << ", a=" << static_cast<int>(a_) << ")";
-    return oss.str();
+    return sformat("color(r=%d, g=%d, b=%d, a=%d)", int(r_), int(g_), int(b_), int(a_));
 }
 
 color color::blend(const color& other, int percentage) const {
