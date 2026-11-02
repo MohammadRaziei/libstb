@@ -1,10 +1,14 @@
 #include "stb/image.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <climits>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+#include "util/parallel.hpp"
 
 // The resizer engine, split by topic into image/resize/ (see the README there). STATIC gives every
 // stbir_* function internal linkage, so none of them leaves the library.
@@ -139,7 +143,29 @@ image resizer::resize(const image& src, int width, int height) const {
                       options_.srgb ? STBIR_TYPE_UINT8_SRGB : STBIR_TYPE_UINT8);
     stbir_set_edgemodes(&r, to_stb(options_.edge), to_stb(options_.edge));
     stbir_set_filters(&r, to_stb(options_.filter), to_stb(options_.filter));
-    if (!stbir_resize_extended(&r)) throw error("resize failed (out of memory?)");
+
+    // A big resize is shared between threads: the engine splits the output rows, each piece is
+    // independent, and the result is byte for byte the one-thread result. How many threads the work
+    // deserves (one, when it is small) is util/parallel.hpp's decision; this is the work, as a floor of
+    // what one core measured: about 1.2 ns per sample of the larger of the two images for the
+    // filters, 0.3 for point sampling.
+    const double larger_side = std::max(double(src.width()) * double(src.height()), double(width) * double(height));
+    const double ns_per_sample = options_.filter == resize_filter::point ? 0.3 : 1.0;
+    const std::size_t threads = detail::threads_for(larger_side * double(src.channels()) * ns_per_sample);
+    if (threads <= 1) {
+        if (!stbir_resize_extended(&r)) throw error("resize failed (out of memory?)");
+        return out;
+    }
+
+    struct free_samplers {
+        STBIR_RESIZE* resize;
+        ~free_samplers() { stbir_free_samplers(resize); }
+    } guard{&r};
+    const int splits = stbir_build_samplers_with_splits(&r, int(threads));  // fewer, if the image is short
+    if (splits < 1) throw error("resize failed (out of memory?)");
+    std::vector<char> done(std::size_t(splits), 0);
+    detail::run_parallel(std::size_t(splits), [&](std::size_t i) { done[i] = stbir_resize_extended_split(&r, int(i), 1) ? 1 : 0; });
+    if (std::find(done.begin(), done.end(), char(0)) != done.end()) throw error("resize failed");
     return out;
 }
 

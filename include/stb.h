@@ -17,6 +17,7 @@
 #include "stb/export.hpp"
 #include "stb/error.hpp"
 #include "stb/util.hpp"
+#include "stb/threads.hpp"
 #include "stb/color.hpp"
 #include "stb/image.hpp"
 #include "stb/font.hpp"

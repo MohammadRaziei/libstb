@@ -536,6 +536,15 @@ STBIRDEF int stbir_resize_extended( STBIR_RESIZE * resize )
   return result;
 }
 
+STBIRDEF int stbir_resize_extended_split( STBIR_RESIZE * resize, int split_start, int split_count )
+{
+  // the samplers must have been built with stbir_build_samplers_with_splits, and the range must lie inside them
+  if ( ( resize->samplers == 0 ) || ( split_start < 0 ) || ( split_count <= 0 ) || ( ( split_start + split_count ) > resize->splits ) )
+    return 0;
+
+  return stbir__perform_resize( resize->samplers, split_start, split_count );
+}
+
 #ifdef STBIR_PROFILE
 
 STBIRDEF void stbir_resize_build_profile_info( STBIR_PROFILE_INFO * info, STBIR_RESIZE const * resize )

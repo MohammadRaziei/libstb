@@ -45,6 +45,11 @@ add_library(stb_core SHARED ${LIBSTB_CORE_SOURCES})
 target_compile_definitions(stb_core PRIVATE STB_BUILDING_LIBRARY)
 add_library(libstb::libstb ALIAS stb_core)
 
+# image::resize shares big work between std::thread threads (src/util/parallel.hpp); on Linux the
+# library needs the threads library for that.
+find_package(Threads REQUIRED)
+target_link_libraries(stb_core PRIVATE Threads::Threads)
+
 set_target_properties(stb_core PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON

@@ -652,6 +652,7 @@ STBIRDEF int stbir_build_samplers_with_splits( STBIR_RESIZE * resize, int try_sp
 // But, if you have a weird situation where you MIGHT want 8 threads, but sometimes
 //   only 4 threads, you can use 0,2,4,6 for the split_start's and use "2" for the
 //   split_count each time to turn in into a 4 thread resize. (This is unusual).
+STBIRDEF int stbir_resize_extended_split( STBIR_RESIZE * resize, int split_start, int split_count );
 
 //===============================================================
 

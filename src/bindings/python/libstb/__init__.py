@@ -36,7 +36,8 @@ from .font import (Atlas, AtlasGlyph, Font, FontMetrics, Glyph, RenderedText, Te
 from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
 from .libstb_py import Align, BlendMode, Canvas, CanvasImage, CanvasShape, CanvasText, DecodeError, EncodeError, Error, LimitError, Resizer
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
-from .libstb_py import _SimdContext, set_simd, simd_backends, simd_name
+from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
+from .libstb_py import set_threads, thread_count
 
 _pkg_dir = _os.path.dirname(__file__)
 
@@ -53,6 +54,20 @@ def simd(name):
     thread.
     """
     return _SimdContext(name)
+
+
+def threads(n):
+    """Allow at most `n` threads for the calling thread inside a `with` block:
+
+        with libstb.threads(1):
+            small = img.resize(800, 600)  # on this thread alone, whatever the process setting
+
+    n == 0 is automatic, 1 never uses another thread. A ceiling, not a demand: a call with
+    little work never starts a thread. Unlike set_threads (the whole process), other threads
+    are not affected and the previous ceiling comes back on exit; blocks nest. ValueError
+    for a negative n. Enter and leave the block on the same thread.
+    """
+    return _ThreadsContext(n)
 
 
 def iminfo(source):
@@ -144,7 +159,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "imresize",
+    "Image", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "imresize",
     "Resizer",
     "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "BlendMode", "Align", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",

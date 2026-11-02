@@ -152,6 +152,30 @@ compiler's vectoriser struggles with 3-byte pixels), and the compiler-vectorised
 the other pairs. Flips, turns, `crop` and `pad` only move bytes and are limited by memory bandwidth, so they have no SIMD
 variants: AVX2 would not make them faster.
 
+**Threads.** A call with a lot of work in it shares that work between threads of its own;
+a call with little work never starts one. So far this is `resize` (`Image.resize`,
+`Resizer.resize`): a thumbnail is made on the calling thread, a photograph is split by output
+rows. The rule is cost-based: every extra thread must get a few hundred microseconds of work
+(starting one costs a few tens), and the estimate errs on the low side, so a doubtful case
+stays on one thread. The pixels never depend on the number of threads (the tests compare
+byte for byte). Threads live for the duration of the call only: there is no pool, nothing
+keeps running afterwards, and `fork()` is safe.
+
+`stb.thread_count()` is the most threads, the calling one included, that a call on the
+calling thread may use. It is a ceiling, not a demand: `set_threads(8)` lets a big image use
+eight threads and leaves a small one alone. By default it is automatic: the CPUs the process
+may run on (its CPU affinity and, on Linux, a cgroup CPU limit such as `docker run --cpus=2`).
+
+- `with stb.threads(1):` sets the ceiling for the calling thread only, for the length of the
+  block (`0` is automatic); other threads are not affected and blocks nest. In C++ the same is
+  `stb::thread_scope guard(1);`.
+- `stb.set_threads(4)` sets it for the whole process (`0` restores the default).
+
+Both raise `ValueError` (C++: `std::invalid_argument` / `false`) for a negative number. The
+environment variable `LIBSTB_THREADS=auto|off|<n>` chooses the initial setting. A program that
+already runs one worker per CPU, or calls libstb from a thread pool of its own, should
+`set_threads(1)` so that libstb does not add threads on top of those.
+
 **EXIF orientation.** Phone photos are stored sideways and carry an EXIF tag
 saying how to turn them; stb ignores it. `Image.open(path, orient=True)` (and
 `imread(..., orient=True)`) applies it while decoding, for JPEG and PNG (`eXIf`

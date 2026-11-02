@@ -8,6 +8,15 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- `stb::thread_count`, `stb::set_threads` and `stb::thread_scope` (Python: `libstb.thread_count`,
+  `set_threads`, `with libstb.threads(n):`; environment `LIBSTB_THREADS=auto|off|<n>`): how many
+  threads one call may use. `image::resize` / `resizer::resize` now share a big resize between
+  threads (the engine's output-row splits) and run a small one on the calling thread. The decision is
+  by cost: every extra thread must get about 250 microseconds of work, estimated from a floor of the
+  measured single-core speed. The default is automatic (the CPUs the process may use: affinity and a
+  Linux cgroup CPU limit); the pixels are byte for byte the same on any number of threads. Threads
+  last for the call only (no pool). Internals in `src/util/parallel.hpp` (`threads_for`,
+  `run_parallel`, `parallel_for`).
 - `stb::rgba_to_premultiplied_argb` and `stb::premultiplied_argb_to_rgba` (issue #1): the conversion
   between straight RGBA and the premultiplied ARGB32 words (`0xAARRGGBB`) that rasterizers such as
   novasvg, plutovg, Cairo, Skia and Qt draw into. Free functions on raw buffers (strides in bytes,

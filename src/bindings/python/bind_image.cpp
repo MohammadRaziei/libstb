@@ -298,6 +298,20 @@ nb::ndarray<nb::numpy, std::uint8_t, nb::ndim<3>> pixels_of(nb::handle self) {
     return {img.data(), 3, shape, self};
 }
 
+// The number of threads from Python: an int >= 0 (0 means automatic). A bool is refused (True is not
+// "one thread"), like a name is wanted for set_simd and not a bool.
+int thread_number(nb::handle n) {
+    if (PyBool_Check(n.ptr()) || !PyLong_Check(n.ptr()))
+        throw nb::type_error("the number of threads must be an int (0 means automatic)");
+    const long v = PyLong_AsLong(n.ptr());
+    if (v == -1 && PyErr_Occurred()) {  // does not fit a long
+        PyErr_Clear();
+        throw std::invalid_argument("the number of threads is too large");
+    }
+    if (v < 0 || v > INT_MAX) throw std::invalid_argument("the number of threads must be >= 0 (0 means automatic)");
+    return int(v);
+}
+
 }  // namespace
 
 void bind_image(nb::module_& m) {
@@ -400,6 +414,41 @@ void bind_image(nb::module_& m) {
             if (!c.scope) return false;
             if (c.owner != std::this_thread::get_id())
                 throw std::runtime_error("a simd() context must be left on the thread that entered it");
+            c.scope.reset();
+            return false;
+        });
+
+    // Threads (stb/threads.hpp): how many one call may use.
+    m.def("thread_count", &stb::thread_count,
+          "The most threads (the calling one included) that one call made on this thread may use: 1 or\n"
+          "more. A ceiling, not a demand: a call with little work never starts a thread (so far only\n"
+          "Image.resize / Resizer.resize use them). Results do not depend on it.");
+    m.def(
+        "set_threads", [](nb::handle n) { stb::set_threads(thread_number(n)); }, "n"_a.none(),
+        "Set the ceiling for the whole process: 0 is automatic (the default: the CPUs this process may\n"
+        "use), 1 never uses another thread, n at most n. ValueError for a negative number, TypeError\n"
+        "for anything but an int. The environment variable LIBSTB_THREADS=auto|off|<n> chooses the\n"
+        "initial one. Set 1 when your program already runs one worker per CPU.");
+    // `with libstb.threads(1):`: the ceiling for this thread only (stb::thread_scope).
+    struct ThreadsContext {
+        int n;
+        std::optional<stb::thread_scope> scope;
+        std::thread::id owner;
+    };
+    nb::class_<ThreadsContext>(m, "_ThreadsContext")
+        .def("__init__", [](ThreadsContext* self, nb::handle n) { new (self) ThreadsContext{thread_number(n), std::nullopt, {}}; }, "n"_a.none())
+        .def("__enter__",
+             [](nb::handle self) {
+                 auto& c = nb::cast<ThreadsContext&>(self);
+                 if (c.scope) throw std::runtime_error("this threads() context is already active");
+                 c.owner = std::this_thread::get_id();
+                 c.scope.emplace(c.n);
+                 return self;
+             })
+        .def("__exit__", [](ThreadsContext& c, nb::args) {
+            if (!c.scope) return false;
+            if (c.owner != std::this_thread::get_id())
+                throw std::runtime_error("a threads() context must be left on the thread that entered it");
             c.scope.reset();
             return false;
         });

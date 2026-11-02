@@ -33,4 +33,5 @@ Installation
    font
    zlib
    simd
+   threads
    errors
