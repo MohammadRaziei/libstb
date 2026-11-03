@@ -23,3 +23,16 @@
 #else
 #define STB_API
 #endif
+
+// STB_MIN and STB_MAX: std::min and std::max without the Windows trap. <windows.h> defines min and
+// max as macros (unless NOMINMAX is set before it), which turns std::min(a, b) into a syntax error
+// in any file that happens to see that header first. These two have the same result as the std
+// functions (the first argument when they are equal) but cannot be hit by that, and need no
+// <algorithm>. They are macros, so each argument is evaluated twice: pass names and plain
+// expressions, never calls with side effects or a costly call.
+#ifndef STB_MIN
+#define STB_MIN(a, b) (((b) < (a)) ? (b) : (a))
+#endif
+#ifndef STB_MAX
+#define STB_MAX(a, b) (((a) < (b)) ? (b) : (a))
+#endif

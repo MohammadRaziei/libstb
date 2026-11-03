@@ -8,6 +8,8 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- `STB_MIN` / `STB_MAX` (in `stb/export.hpp`): `std::min` / `std::max` that `<windows.h>` cannot break (its `min` and
+  `max` macros). Used in `draw.hpp` and the library instead of `(std::min)(...)`.
 - `stb/path.hpp`, the geometry half of the vector-drawing layer (issue #2): `stb::path` (builder calls
   `move_to`, `line_to`, `quad_to`, `cubic_to`, `close`; whole shapes `add_rect`, `add_rounded_rect`,
   `add_ellipse`, `add_circle`; `add_path` / `add_commands` with an optional matrix, `transform`,

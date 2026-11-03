@@ -382,10 +382,10 @@ private:
         if (t.align_ == text_align::center) left -= std::llround(s.width * 0.5f);
         if (t.align_ == text_align::right) left -= w;
         const std::int64_t pad = t.padding_;
-        const std::int64_t x0 = (std::max)(left - pad, std::int64_t(0));
-        const std::int64_t y0 = (std::max)(std::int64_t(t.y_) - pad, std::int64_t(0));
-        const std::int64_t x1 = (std::min)(left + w + pad, std::int64_t(img_.width()));
-        const std::int64_t y1 = (std::min)(std::int64_t(t.y_) + h + pad, std::int64_t(img_.height()));
+        const std::int64_t x0 = STB_MAX(left - pad, std::int64_t(0));
+        const std::int64_t y0 = STB_MAX(std::int64_t(t.y_) - pad, std::int64_t(0));
+        const std::int64_t x1 = STB_MIN(left + w + pad, std::int64_t(img_.width()));
+        const std::int64_t y1 = STB_MIN(std::int64_t(t.y_) + h + pad, std::int64_t(img_.height()));
         if (x1 <= x0 || y1 <= y0) return;  // entirely outside the image
         image layer(int(x1 - x0), int(y1 - y0), pixel_format::rgba);
         for (int row = 0; row < layer.height(); ++row) {
