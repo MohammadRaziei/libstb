@@ -13,6 +13,15 @@ using stb::path_command;
 using stb::path_op;
 using stb::point;
 
+// Built by a function, not a braced list: a comma inside braces is a macro-argument separator for
+// the (non-conforming) MSVC preprocessor, which then splits "point{0, 0}" inside EXPECT_TRUE.
+point pt(float x, float y) {
+    point p;
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
 bool near(float a, float b) { return std::fabs(a - b) < 1e-4f; }
 bool near(point a, point b) { return near(a.x, b.x) && near(a.y, b.y); }
 
@@ -29,7 +38,7 @@ std::vector<path_op> ops(const path& p) {
 UTEST(stb_matrix, identity_by_default) {
     const matrix m;
     EXPECT_TRUE(m.is_identity());
-    EXPECT_TRUE(m.map(3, -4) == (point{3, -4}));
+    EXPECT_TRUE(m.map(3, -4) == pt(3, -4));
 }
 
 UTEST(stb_matrix, map_uses_the_svg_convention) {
@@ -43,7 +52,7 @@ UTEST(stb_matrix, builder_calls_apply_to_the_point_first) {
     // translate(10, 0).scale(2): the point is scaled first, then moved.
     matrix m;
     m.translate(10, 0).scale(2);
-    EXPECT_TRUE(near(m.map(1, 1), point{12, 2}));
+    EXPECT_TRUE(near(m.map(1, 1), pt(12, 2)));
     // The same with then(): scale first, translate second.
     const matrix n = matrix::scaling(2).then(matrix::translation(10, 0));
     EXPECT_TRUE(m == n);
@@ -51,15 +60,15 @@ UTEST(stb_matrix, builder_calls_apply_to_the_point_first) {
 
 UTEST(stb_matrix, rotation_turns_x_towards_y) {
     const matrix r = matrix::rotation(1.57079632679f);
-    EXPECT_TRUE(near(r.map(1, 0), point{0, 1}));
-    EXPECT_TRUE(near(r.map(0, 1), point{-1, 0}));
+    EXPECT_TRUE(near(r.map(1, 0), pt(0, 1)));
+    EXPECT_TRUE(near(r.map(0, 1), pt(-1, 0)));
 }
 
 UTEST(stb_matrix, shear) {
     const matrix s = matrix::shearing(0.f, 0.f);
     EXPECT_TRUE(s.is_identity());
     const matrix t = matrix::shearing(0.7853981634f, 0.f);  // x += tan(45 degrees) * y
-    EXPECT_TRUE(near(t.map(0, 2), point{2, 2}));
+    EXPECT_TRUE(near(t.map(0, 2), pt(2, 2)));
 }
 
 UTEST(stb_matrix, inverse_undoes_the_matrix) {
@@ -68,7 +77,7 @@ UTEST(stb_matrix, inverse_undoes_the_matrix) {
     const auto inv = m.inverse();
     ASSERT_TRUE(inv.has_value());
     const point back = inv->map(m.map(7, 9));
-    EXPECT_TRUE(near(back, point{7, 9}));
+    EXPECT_TRUE(near(back, pt(7, 9)));
 }
 
 UTEST(stb_matrix, singular_matrix_has_no_inverse) {
@@ -83,8 +92,8 @@ UTEST(stb_path, builder_records_commands) {
     ASSERT_EQ(p.size(), 5u);
     EXPECT_TRUE(ops(p) == (std::vector<path_op>{path_op::move_to, path_op::line_to, path_op::quad_to,
                                                 path_op::cubic_to, path_op::close}));
-    EXPECT_TRUE(p.commands()[2].p[0] == (point{5, 6}));
-    EXPECT_TRUE(p.commands()[2].p[1] == (point{7, 8}));
+    EXPECT_TRUE(p.commands()[2].p[0] == pt(5, 6));
+    EXPECT_TRUE(p.commands()[2].p[1] == pt(7, 8));
 }
 
 UTEST(stb_path, empty_path_starts_at_the_origin) {
@@ -95,7 +104,7 @@ UTEST(stb_path, empty_path_starts_at_the_origin) {
     p.line_to(5, 5);
     ASSERT_EQ(p.size(), 2u);
     EXPECT_TRUE(p.commands()[0].op == path_op::move_to);
-    EXPECT_TRUE(p.commands()[0].p[0] == (point{0, 0}));
+    EXPECT_TRUE(p.commands()[0].p[0] == pt(0, 0));
 }
 
 UTEST(stb_path, a_command_after_close_starts_a_new_contour_at_the_old_start) {
@@ -103,7 +112,7 @@ UTEST(stb_path, a_command_after_close_starts_a_new_contour_at_the_old_start) {
     p.move_to(10, 10).line_to(20, 10).line_to(20, 20).close().line_to(30, 30);
     ASSERT_EQ(p.size(), 6u);
     EXPECT_TRUE(p.commands()[4].op == path_op::move_to);
-    EXPECT_TRUE(p.commands()[4].p[0] == (point{10, 10}));
+    EXPECT_TRUE(p.commands()[4].p[0] == pt(10, 10));
     EXPECT_TRUE(p.commands()[5].op == path_op::line_to);
 }
 
@@ -118,11 +127,11 @@ UTEST(stb_path, close_on_empty_or_closed_path_does_nothing) {
 UTEST(stb_path, current_point_follows_the_last_command_and_close) {
     path p;
     p.move_to(1, 2);
-    EXPECT_TRUE(*p.current_point() == (point{1, 2}));
+    EXPECT_TRUE(*p.current_point() == pt(1, 2));
     p.line_to(3, 4);
-    EXPECT_TRUE(*p.current_point() == (point{3, 4}));
+    EXPECT_TRUE(*p.current_point() == pt(3, 4));
     p.close();
-    EXPECT_TRUE(*p.current_point() == (point{1, 2}));
+    EXPECT_TRUE(*p.current_point() == pt(1, 2));
 }
 
 UTEST(stb_path, bounds_hold_every_point_including_controls) {
@@ -149,8 +158,8 @@ UTEST(stb_path, rect_is_one_closed_clockwise_contour) {
     EXPECT_EQ(b->y1, 60.f);
     EXPECT_TRUE(p.commands().front().op == path_op::move_to);
     EXPECT_TRUE(p.commands().back().op == path_op::close);
-    EXPECT_TRUE(p.commands()[1].p[0] == (point{40, 20}));  // first goes right, then down: clockwise
-    EXPECT_TRUE(p.commands()[2].p[0] == (point{40, 60}));
+    EXPECT_TRUE(p.commands()[1].p[0] == pt(40, 20));  // first goes right, then down: clockwise
+    EXPECT_TRUE(p.commands()[2].p[0] == pt(40, 60));
 }
 
 UTEST(stb_path, negative_sides_give_the_same_rect) {
@@ -222,10 +231,10 @@ UTEST(stb_path, transform_in_place_and_on_a_copy_agree) {
     path d = a;
     d.transform(m);
     EXPECT_TRUE(c == d);
-    EXPECT_TRUE(c.commands()[1].p[0] == (point{7, 13}));  // (3, 4) scaled to (6, 12), then moved
-    EXPECT_TRUE(*d.current_point() == (point{3, 7}));  // after close: the (moved) start (1, 2)
+    EXPECT_TRUE(c.commands()[1].p[0] == pt(7, 13));  // (3, 4) scaled to (6, 12), then moved
+    EXPECT_TRUE(*d.current_point() == pt(3, 7));  // after close: the (moved) start (1, 2)
     d.line_to(0, 0);                                   // a new contour from the moved start
-    EXPECT_TRUE(d.commands()[d.size() - 2].p[0] == (point{3, 7}));
+    EXPECT_TRUE(d.commands()[d.size() - 2].p[0] == pt(3, 7));
 }
 
 UTEST(stb_path, built_from_a_command_list_follows_the_same_rules) {
@@ -236,7 +245,7 @@ UTEST(stb_path, built_from_a_command_list_follows_the_same_rules) {
     const path p(list);
     ASSERT_EQ(p.size(), 3u);
     EXPECT_TRUE(p.commands()[0].op == path_op::move_to);
-    EXPECT_TRUE(p.commands()[0].p[0] == (point{0, 0}));
+    EXPECT_TRUE(p.commands()[0].p[0] == pt(0, 0));
 }
 
 UTEST(stb_path, clear_resets_everything) {

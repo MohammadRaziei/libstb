@@ -98,14 +98,14 @@ void run_parallel(std::size_t k, Fn&& fn) {
 template <class Fn>
 void parallel_for(std::size_t n, double ns_each, Fn&& fn) {
     if (n == 0) return;
-    const std::size_t k = std::min(n, threads_for(double(n) * ns_each));
+    const std::size_t k = (std::min)(n, threads_for(double(n) * ns_each));
     if (k <= 1) {
         fn(std::size_t(0), n);
         return;
     }
     const std::size_t each = n / k, extra = n % k;  // the first `extra` pieces get one more
     run_parallel(k, [&](std::size_t i) {
-        const std::size_t begin = i * each + std::min(i, extra);
+        const std::size_t begin = i * each + (std::min)(i, extra);
         fn(begin, begin + each + (i < extra ? 1 : 0));
     });
 }
