@@ -34,10 +34,10 @@ int main(int argc, char** argv) {
         stb::image framed = photo.pad(20, 20, 20, 20, {255, 255, 255});  // white border
 
         // 4. Resize: by filter name, by enum, or with a reusable resizer (shareable between threads).
-        stb::image small = photo.resize(320, 240, "cubic");
+        stb::image tiny = photo.resize(320, 240, "cubic");
         stb::image thumb = photo.thumbnail(200, 200, stb::resize_filter::mitchell);
         const stb::resizer sharp(stb::resize_filter::catmull_rom);
-        stb::image big = small.resize(1280, 960, &sharp);
+        stb::image big = tiny.resize(1280, 960, &sharp);
 
         // 5. Put images into an image. blend() and fill() change the image they are called on:
         //    copy() first to keep the original. Every call returns the image, so they chain.

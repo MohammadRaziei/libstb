@@ -34,7 +34,7 @@ outline_command cmd(outline_op op, point a = {}, point b = {}, point c = {}) {
     return x;
 }
 
-bool near(float a, float b) { return a - b < 1e-4f && b - a < 1e-4f; }
+bool close_to(float a, float b) { return a - b < 1e-4f && b - a < 1e-4f; }
 
 }  // namespace
 
@@ -66,9 +66,9 @@ UTEST(libstb_font_outline_tests, test_design_metrics_agree_with_the_pixel_metric
     const stb::font_design_metrics d = f.design_metrics();
     const stb::font_metrics m = f.metrics(100.0f);
     const float scale = 100.0f / float(d.ascent - d.descent);  // metrics() scales (ascent - descent) to the pixel height
-    ASSERT_TRUE(near(m.ascent, float(d.ascent) * scale));
-    ASSERT_TRUE(near(m.descent, float(d.descent) * scale));
-    ASSERT_TRUE(near(m.line_gap, float(d.line_gap) * scale));
+    ASSERT_TRUE(close_to(m.ascent, float(d.ascent) * scale));
+    ASSERT_TRUE(close_to(m.descent, float(d.descent) * scale));
+    ASSERT_TRUE(close_to(m.line_gap, float(d.line_gap) * scale));
 }
 
 // ----------------------------------------------------------------- glyph indices
@@ -107,7 +107,7 @@ UTEST(libstb_font_outline_tests, test_glyph_info_is_in_font_units) {
     ASSERT_TRUE(m.x_min == 0 && m.y_min == 0 && m.x_max == 0 && m.y_max == 0);
 
     // the same advance font::advance gives in pixels: 1000 units per (ascent - descent), 100 px -> 0.1 px per unit
-    ASSERT_TRUE(near(f.advance(U'A', 100.0f), f.glyph_info(f.glyph_index(U'A')).advance * 0.1f));
+    ASSERT_TRUE(close_to(f.advance(U'A', 100.0f), f.glyph_info(f.glyph_index(U'A')).advance * 0.1f));
 
     const stb::glyph_metrics v = curves().glyph_info(curves().glyph_index(U'V'));  // a composite glyph
     ASSERT_TRUE(v.advance == 1200 && v.lsb == 250);
@@ -258,14 +258,14 @@ UTEST(libstb_font_outline_tests, test_kerning_modes_pick_gpos_or_the_kern_table)
     ASSERT_TRUE(f.glyph_kerning(a, b, stb::kerning_mode::none) == 0.0f);
     ASSERT_TRUE(f.glyph_kerning(b, a) == 0.0f);  // only the (A, B) pair is kerned
     // kerning() is the automatic mode in pixels
-    ASSERT_TRUE(near(f.kerning(U'A', U'B', 100.0f), -50.0f * 100.0f / 2000.0f));
+    ASSERT_TRUE(close_to(f.kerning(U'A', U'B', 100.0f), -50.0f * 100.0f / 2000.0f));
 
     const stb::font r = rects();  // only a `kern` table: every mode but none finds it
     const std::uint32_t ra = r.glyph_index(U'A'), rb = r.glyph_index(U'B');
     ASSERT_TRUE(r.glyph_kerning(ra, rb) == -100.0f);
     ASSERT_TRUE(r.glyph_kerning(ra, rb, stb::kerning_mode::kern_table) == -100.0f);
     ASSERT_TRUE(r.glyph_kerning(ra, rb, stb::kerning_mode::none) == 0.0f);
-    ASSERT_TRUE(near(r.kerning(U'A', U'B', 100.0f), r.glyph_kerning(ra, rb) * 0.1f));
+    ASSERT_TRUE(close_to(r.kerning(U'A', U'B', 100.0f), r.glyph_kerning(ra, rb) * 0.1f));
 
     const stb::font c = cff();  // no kerning at all
     ASSERT_TRUE(c.glyph_kerning(c.glyph_index(U'C'), c.glyph_index(U'C')) == 0.0f);
