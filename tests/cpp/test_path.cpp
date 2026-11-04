@@ -22,8 +22,9 @@ point pt(float x, float y) {
     return p;
 }
 
-bool near(float a, float b) { return std::fabs(a - b) < 1e-4f; }
-bool near(point a, point b) { return near(a.x, b.x) && near(a.y, b.y); }
+// (not "near": <windows.h> #defines that as nothing)
+bool close_to(float a, float b) { return std::fabs(a - b) < 1e-4f; }
+bool close_to(point a, point b) { return close_to(a.x, b.x) && close_to(a.y, b.y); }
 
 std::vector<path_op> ops(const path& p) {
     std::vector<path_op> r;
@@ -52,7 +53,7 @@ UTEST(stb_matrix, builder_calls_apply_to_the_point_first) {
     // translate(10, 0).scale(2): the point is scaled first, then moved.
     matrix m;
     m.translate(10, 0).scale(2);
-    EXPECT_TRUE(near(m.map(1, 1), pt(12, 2)));
+    EXPECT_TRUE(close_to(m.map(1, 1), pt(12, 2)));
     // The same with then(): scale first, translate second.
     const matrix n = matrix::scaling(2).then(matrix::translation(10, 0));
     EXPECT_TRUE(m == n);
@@ -60,15 +61,15 @@ UTEST(stb_matrix, builder_calls_apply_to_the_point_first) {
 
 UTEST(stb_matrix, rotation_turns_x_towards_y) {
     const matrix r = matrix::rotation(1.57079632679f);
-    EXPECT_TRUE(near(r.map(1, 0), pt(0, 1)));
-    EXPECT_TRUE(near(r.map(0, 1), pt(-1, 0)));
+    EXPECT_TRUE(close_to(r.map(1, 0), pt(0, 1)));
+    EXPECT_TRUE(close_to(r.map(0, 1), pt(-1, 0)));
 }
 
 UTEST(stb_matrix, shear) {
     const matrix s = matrix::shearing(0.f, 0.f);
     EXPECT_TRUE(s.is_identity());
     const matrix t = matrix::shearing(0.7853981634f, 0.f);  // x += tan(45 degrees) * y
-    EXPECT_TRUE(near(t.map(0, 2), pt(2, 2)));
+    EXPECT_TRUE(close_to(t.map(0, 2), pt(2, 2)));
 }
 
 UTEST(stb_matrix, inverse_undoes_the_matrix) {
@@ -77,7 +78,7 @@ UTEST(stb_matrix, inverse_undoes_the_matrix) {
     const auto inv = m.inverse();
     ASSERT_TRUE(inv.has_value());
     const point back = inv->map(m.map(7, 9));
-    EXPECT_TRUE(near(back, pt(7, 9)));
+    EXPECT_TRUE(close_to(back, pt(7, 9)));
 }
 
 UTEST(stb_matrix, singular_matrix_has_no_inverse) {
@@ -197,7 +198,7 @@ UTEST(stb_path, ellipse_touches_its_box) {
     p.add_ellipse(50, 40, 30, 20);
     const auto b = p.bounds();
     ASSERT_TRUE(b.has_value());
-    EXPECT_TRUE(near(b->x0, 20) && near(b->x1, 80) && near(b->y0, 20) && near(b->y1, 60));
+    EXPECT_TRUE(close_to(b->x0, 20) && close_to(b->x1, 80) && close_to(b->y0, 20) && close_to(b->y1, 60));
     // Four cubics: move, 4 x cubic, close.
     EXPECT_EQ(p.size(), 6u);
 }

@@ -18,6 +18,7 @@
 #include "stb/color.hpp"
 #include "stb/util.hpp"
 #include "stb/font.hpp"
+#include "stb/raster.hpp"
 #include "stb/image.hpp"
 
 namespace stb {
@@ -93,10 +94,11 @@ STB_API void draw_shape(image& dst, const shape& s);
 //   c.add_text("small", 20, 200).size(24);
 //   c.add_line(0, 240, 400, 240).stroke(3, "red");
 //   c.add_image(logo, 16, 16).blend(stb::blend_mode::multiply).opacity(0.6f);   // another image
+//   c.add_path(p).fill("#09f").stroke(3, "white").dash({8, 4});     // any stb::path (stb/path.hpp)
 //
 //   stb::image out = c.finish();                                   // drawn here, in order
 //
-// add_text, add_image and the add_rect, add_ellipse and add_line shapes return the new item, so its own
+// add_text, add_image, add_path and the add_rect, add_ellipse and add_line shapes return the new item, so its own
 // settings can be chained onto it; every item starts again from `c`. An item takes the canvas
 // defaults as they are when it is added: changing a default later does not touch items that
 // already exist. Items are drawn in the order they were added, so a later one lands on top.
@@ -260,6 +262,105 @@ public:
         stb::color default_;
     };
 
+    // One vector path on a canvas, as returned by add_path. It belongs to the canvas, like a text_item.
+    // The path is copied when it is added and drawn with stb::fill and stb::stroke (see stb/raster.hpp),
+    // first the inside, then the outline on top. It starts filled with the canvas colour and without an
+    // outline. Unlike the box shapes, a stroke is centred on the path's line, and the path's own
+    // coordinates are floats.
+    class path_item {
+    public:
+        // Fill colour (the canvas colour by default), or no fill.
+        path_item& fill(const stb::color& c) {
+            check();
+            fill_ = c;
+            return *this;
+        }
+        path_item& no_fill() {
+            check();
+            fill_.reset();
+            return *this;
+        }
+        // How overlapping contours decide what is inside (non_zero by default).
+        path_item& rule(fill_rule r) {
+            check();
+            rule_ = r;
+            return *this;
+        }
+        // An outline of `width` (in path units, see stb/raster.hpp) in the canvas colour or in `c`.
+        // Throws invalid_argument if width <= 0.
+        path_item& stroke(float width) { return stroke(width, default_); }
+        path_item& stroke(float width, const stb::color& c) {
+            check();
+            if (!(width > 0)) throw std::invalid_argument("canvas: stroke width must be > 0");
+            style_.width = width;
+            stroke_ = c;
+            return *this;
+        }
+        path_item& no_stroke() {
+            check();
+            stroke_.reset();
+            return *this;
+        }
+        // The outline's ends, corners and dashes (see stroke_style); they only matter once stroke() has
+        // been called. Throws invalid_argument if miter_limit is below 1 or not a number.
+        path_item& cap(line_cap c) {
+            check();
+            style_.cap = c;
+            return *this;
+        }
+        path_item& join(line_join j) {
+            check();
+            style_.join = j;
+            return *this;
+        }
+        path_item& miter_limit(float limit) {
+            check();
+            if (!(limit >= 1.0f)) throw std::invalid_argument("canvas: miter limit must be >= 1");
+            style_.miter_limit = limit;
+            return *this;
+        }
+        path_item& dash(std::vector<float> lengths, float offset = 0.0f) {
+            check();
+            style_.dashes = std::move(lengths);
+            style_.dash_offset = offset;
+            return *this;
+        }
+        // Moves the path to where it is drawn (identity by default): the point (x, y) of the path lands at
+        // the pixel the matrix maps it to.
+        path_item& transform(const matrix& m) {
+            check();
+            options_.transform = m;
+            return *this;
+        }
+        // How the colours mix (blend_mode::normal by default) and the alpha scale (0..1, 1 by default).
+        // Throws invalid_argument outside 0..1.
+        path_item& blend(blend_mode m) {
+            check();
+            options_.blend = m;
+            return *this;
+        }
+        path_item& opacity(float o) {
+            check();
+            if (!(o >= 0.0f && o <= 1.0f)) throw std::invalid_argument("canvas: opacity must be in 0..1");
+            options_.opacity = o;
+            return *this;
+        }
+
+    private:
+        friend class canvas;
+        path_item(canvas* owner, stb::path p, const stb::color& c) : owner_(owner), path_(std::move(p)), default_(c), fill_(c) {}
+        void check() const { owner_->check(); }
+
+        canvas* owner_;
+        stb::path path_;
+        stb::color default_;
+        std::optional<stb::color> fill_;
+        std::optional<stb::color> stroke_;
+        fill_rule rule_ = fill_rule::non_zero;
+        stroke_style style_;
+        draw_options options_;
+    };
+
     // Copies `base` once.
     explicit canvas(const image& base) : img_(base.copy()) {}
     // Neither copied nor moved: the shape and text items it hands out point back to it.
@@ -330,6 +431,13 @@ public:
         return add_shape(shape::make_line(x1, y1, x2, y2), false);
     }
 
+    // Adds a copy of `p`, filled with the current colour until told otherwise (see path_item).
+    path_item& add_path(const stb::path& p) {
+        check();
+        items_.emplace_back(path_item(this, p, color_));
+        return std::get<path_item>(items_.back());
+    }
+
     bool finished() const { return finished_; }
 
     // Draws every item in order onto the copy and hands the image over (no further copy).
@@ -352,6 +460,9 @@ public:
                 t->font_->draw_text_in_place(img_, t->text_, t->px_, t->x_, t->y_, t->color_, t->align_);
             } else if (const image_item* i = std::get_if<image_item>(&it)) {
                 img_.blend(i->img_, i->x_, i->y_, i->mode_, i->opacity_);
+            } else if (const path_item* pi = std::get_if<path_item>(&it)) {
+                if (pi->fill_) stb::fill(img_, pi->path_, *pi->fill_, pi->rule_, pi->options_);
+                if (pi->stroke_) stb::stroke(img_, pi->path_, *pi->stroke_, pi->style_, pi->options_);
             } else {
                 draw_shape(img_, std::get<shape_item>(it).s_);
             }
@@ -401,7 +512,7 @@ private:
     }
 
     image img_;
-    using item = std::variant<text_item, shape_item, image_item>;
+    using item = std::variant<text_item, shape_item, image_item, path_item>;
     std::deque<item> items_;  // a deque: the references add_* returns stay valid
     std::optional<font> font_;
     float px_ = 0;

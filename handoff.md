@@ -78,9 +78,39 @@ cmake --build /tmp/b --target stb_bench_premultiply        # بنچمارک prem
 - `glyph_kerning(automatic)`: اگر فونت GPOS دارد فقط GPOS (حتی اگر جفت نداشته باشد و `kern` داشته باشد)؛ `kern_table` فقط جدول kern.
 - `face_count(path)` کل فایل را می‌خواند. `glyph_info` عمداً `noexcept` نیست (CFF ممکن است تخصیص بدهد).
 
-## issue #2 (rasterizer برداری)
+## issue #2: rasterizer برداری (تمام شد، منتظر review)
 
-وضعیت و گام‌های بعدی در `checklist.md` (بخش issue #2). تصمیم‌های کاربر: پورت الگوریتم plutovg با کد خودمان (نه vendored)،
-سبک و سریع، API خوب، snake_case، تصمیم‌ها با خودم؛ بعد از هر گام zip. نکته: plutovg استروک را بعد از اعمال ماتریس در فضای
-دستگاه می‌کشد (عرض = عرض * scale از ماتریس) و dash را قبل از ماتریس؛ برای تطابق دقیق با novasvg همین را نگه دار، پس
-`rasterize_*` و `fill/stroke` پارامتر `matrix` می‌گیرند. quad در outline به cubic با همان فرمول float تبدیل می‌شود.
+مسئله: https://github.com/MohammadRaziei/libstb/issues/2. همه‌ی گام‌ها انجام شد؛ جزئیات و کارهای باقی‌مانده در `checklist.md`.
+
+### API (C++ و پایتون هم‌نام)
+- `stb/path.hpp`: `matrix` (قرارداد SVG، `translate/scale/rotate/shear` به نقطه اول اعمال می‌شوند و زنجیره‌ای‌اند، `then`، `map`،
+  `inverse`)، `path` (`move_to/line_to/quad_to/cubic_to/close`، `add_rect/add_rounded_rect/add_ellipse/add_circle`،
+  `add_path/add_commands(…, matrix)`، `transform/transformed`، `dashed`، `bounds`، `current_point`).
+- `stb/raster.hpp`: `fill(image&, path, color, fill_rule, draw_options)`, `stroke(image&, path, color, stroke_style, draw_options)`,
+  و سطح پایین `rasterize_fill/rasterize_stroke(path, …, matrix, clip_rect, span_sink)` که coverage را به صورت `span_view` دسته‌ای
+  گزارش می‌کنند. `draw_options` = matrix + blend + opacity. `canvas::add_path` → `path_item`.
+- پایتون: `Matrix`, `Path`, `Image.fill_path/stroke_path` (کپی برمی‌گردانند)، `Path.fill_mask/stroke_mask` (تصویر gray)، `Canvas.add_path`.
+
+### تصمیم‌ها (و تفاوت با پیشنهاد اولیه)
+- الگوریتم‌ها پورت FreeType (از طریق plutovg) هستند، نه vendored. نتیجه روی ۳۱۹ صحنه (شامل ۲۴۰ صحنه‌ی fuzz) بایت‌به‌بایت با plutovg
+  برابر است. حساب ثابت‌نقطه با `int64` است، پس روی همه‌ی پلتفرم‌ها یکسان؛ کل `src/draw` با `-ffp-contract=off` ساخته می‌شود.
+- حذف‌شده‌ها: بخش conic (در plutovg هم ورودی conic نیست)، memory pool و band بندی (با `std::vector`؛ نتیجه یکی است).
+- `path::stroked()` که در پیشنهاد اولیه بود **نیست**: stroke در فضای پیکسل با دقت 1/64 پیکسل ساخته می‌شود (مثل plutovg)، پس بازگرداندنش
+  به path ی با مختصات float دقت را خراب می‌کرد. به‌جایش `rasterize_stroke` و `stroke` هست. `path::dashed` در فضای خود path کار می‌کند.
+- عرض stroke با میانگین scale ماتریس ضرب می‌شود و dash قبل از ماتریس بریده می‌شود (رفتار plutovg، برای تطابق با novasvg).
+- مختصات NaN/بی‌نهایت: چیزی کشیده نمی‌شود؛ بزرگ‌تر از 1e6 به 1e6 محدود می‌شود. dash نامعتبر (منفی، NaN، مجموع 0) = خط پر.
+- `STB_MIN`/`STB_MAX` (در `stb/export.hpp`) جایگزین `(std::min)(...)` در کل ریپو شد (درخواست کاربر).
+- هر چیز مخصوص SVG (parse path، arc، gradient، clip-path، mask) عمداً در novasvg می‌ماند.
+
+### تست
+- `tests/cpp/test_path.cpp`, `test_raster.cpp`, `test_raster_reference.cpp`; `tests/python/test_path.py`.
+- مرجع plutovg: `tests/tools/raster_reference/` (`gen_scenes.py` → `scenes.h`، `reference.c` با plutovg → `reference_hashes.h`). برای
+  بازتولید: دستور بالای `reference.c` را اجرا کن، خروجی را در `reference_hashes.h` بگذار. برای پیدا کردن اولین پیکسل متفاوت:
+  `STB_RASTER_DUMP=dir ./test_stb_cpp` و `./reference dir2` و فایل‌های `.bin` را مقایسه کن.
+- ASan/UBSan روی تست‌های raster/path/matrix تمیز بود. یک یافته‌ی UBSan از قبل در کد resize/SIMD هست (store ناهم‌تراز `double` در
+  `emmintrin.h`)؛ ربطی به این تغییر ندارد و دست نزدم.
+- CI ویندوز (MSVC): `near` ماکرو است (`windef.h`)، پس در تست‌ها نباید اسم `near`/`min`/`max` گذاشت؛ داخل ماکروی `EXPECT_TRUE` هم
+  `point{0, 0}` با کاما ممنوع (از `pt(x, y)` استفاده شد). روی ویندوز اجرا نشده؛ CI تأیید نهایی است.
+
+## کارهای باقی‌مانده از قبل
+font part B (`font::shape`)، WOFF/WOFF2، بایندینگ پایتون برای font outline، `set_log_handler`، مرتب‌سازی `checklist.md`؛ جزئیات در همین فایل بالاتر.

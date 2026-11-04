@@ -183,9 +183,15 @@
 
 ## issue #2: rasterizer و stroker برداری (novasvg)
 
-- [x] گام ۱: `stb/path.hpp` (`matrix`, `path`, جابه‌جایی `point`/`path_command` از `font.hpp`)، `src/draw/path.cpp`،
-      `tests/cpp/test_path.cpp`.
-- [ ] گام ۲: rasterizer پر کردن (پورت الگوریتم `ftgrays` از plutovg به کلاس‌های خودمان)، `span`/`span_view`،
-      `fill_rule`، `fill(image&, ...)`؛ تست دقیق در برابر خروجی مرجع plutovg.
-- [ ] گام ۳: stroker (`line_cap`, `line_join`, `miter_limit`) و dash.
-- [ ] گام ۴: `canvas::add_path` و بایندینگ پایتون (همان نام‌ها)، مثال‌ها، `NOTICE.md` (FTL/plutovg)، مستندات.
+- [x] `stb/path.hpp` + `src/draw/path.cpp`: `matrix`, `path` (builder، شکل‌ها، `add_path`/`add_commands`، `transform`، `dashed`)؛
+      `point`/`path_op`/`path_command` از `font.hpp` به اینجا آمدند.
+- [x] `stb/raster.hpp` + `src/draw/raster.cpp`: `rasterize_fill`/`rasterize_stroke` (span ها)، `fill`/`stroke` روی `image`،
+      `fill_rule`، `stroke_style`، `draw_options`، `span_sink`.
+- [x] `src/draw/raster/`: `fixed` (ریاضی ثابت‌نقطه)، `outline`، `gray_raster` (پورت ftgrays)، `stroker` (پورت ftstroke)، `dash`.
+- [x] `canvas::add_path` (`path_item`).
+- [x] پایتون: `Matrix`, `Path`, `Image.fill_path/stroke_path`, `Path.fill_mask/stroke_mask`, `Canvas.add_path`/`CanvasPath`.
+- [x] تست دقیق در برابر plutovg (319 صحنه، `tests/cpp/test_raster_reference.cpp`)، تست رفتاری C++ و پایتون.
+- [x] `NOTICE.md` (FTL/plutovg)، `CHANGELOG.md`، `README.md`، `docs/guide.md`، مثال‌ها (`examples/cpp/paths.cpp`, `examples/python/12_vector_paths.py`).
+- [ ] بنچمارک rasterizer (سرعت fill/stroke نسبت به plutovg و Pillow/cairo) و بهینه‌سازی در صورت لزوم.
+- [ ] بایندینگ پایتون برای `font.outline` تا `Path(font.outline(g))` مستقیم کار کند.
+- [ ] تأیید novasvg روی goldenهای خودش (باید با تلرانس 0 برابر باشد؛ اگر نبود اول تفاوت FMA/پرچم کامپایل را بررسی کن).

@@ -45,7 +45,8 @@ img.resize(320, 240, "cubic").write("small.png")   # the format comes from the e
 - **Many formats in, four out.** Decodes PNG, JPEG, BMP, TGA, GIF and more; encodes PNG, JPEG,
   BMP and TGA.
 - **Editing, not just I/O.** Crop, pad, flips, rotation, thumbnail, channel conversion, alpha
-  blend modes, fill, masks, stacking, EXIF orientation, and a canvas for text and shapes.
+  blend modes, fill, masks, stacking, EXIF orientation, vector paths (anti-aliased fill and stroke with caps,
+  joins and dashes) and a canvas for text, shapes and paths.
 - **Text, including Persian and Arabic.** TrueType and CFF fonts, GSUB shaping and bidi
   reordering (no GPOS), plus a text size estimate that needs no font file.
 - **zlib as an API.** `zlib_compress` and `zlib_decompress`, with bounded output so a zip bomb
@@ -94,6 +95,11 @@ centred = img.draw_text("Hello", font, 32, img.width // 2, 10, align="center")  
 font.render("Hello", 32).bitmap.write("hello.png")
 # Persian / Arabic text works as typed: GSUB shaping and bidi reordering (no GPOS, see docs/guide.md)
 stb.estimate_text("Hello", 16)                    # text size with no font file at all
+
+# Vector paths: anti-aliased fill and stroke (width, caps, joins, dashes), no extra dependency
+heart = stb.Path().move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close()
+art = img.fill_path(heart, "#e63946").stroke_path(heart, "white", 3, join="round", dashes=[8, 4])
+mask = heart.fill_mask(100, 100)                  # the coverage as a gray Image, for your own compositing
 
 packed = stb.zlib_compress(data)                  # zlib streams: the compressor that writes PNG
 data = stb.zlib_decompress(packed, max_bytes=64 << 20)   # output is bounded: a zip bomb is a LimitError
@@ -155,6 +161,11 @@ stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, stb::color("white"));
 stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
 stb::text_bitmap t = f.render("Hello", 32);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file needed
+
+stb::path heart;                                          // <stb/path.hpp>, <stb/raster.hpp>
+heart.move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close();
+stb::fill(img, heart, stb::color("#e63946"));             // anti-aliased, in place
+stb::stroke(img, heart, stb::color("white"), stb::stroke_style{3.f});   // width, caps, joins, dashes
 
 std::vector<std::uint8_t> z = stb::zlib_compress(bytes);                 // <stb/zlib.hpp>, level 0..9 like zlib
 std::vector<std::uint8_t> back = stb::zlib_decompress(z, 64u << 20);     // throws limit_error past max_bytes

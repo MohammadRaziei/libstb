@@ -8,6 +8,16 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **Vector paths (issue #2).** `stb/raster.hpp`: anti-aliased `stb::fill` and `stb::stroke` of a `stb::path` onto an
+  image (`fill_rule`, `stroke_style` with width, `line_cap`, `line_join`, `miter_limit`, dashes and a dash offset,
+  `draw_options` with matrix, blend mode and opacity), and the low-level `rasterize_fill` / `rasterize_stroke` that
+  report coverage `span`s to a callback (`span_sink`) for your own compositing. `path::dashed` cuts a path into
+  dashes. The rasterizer and stroker are fixed-point ports of the FreeType algorithms (through plutovg), under
+  `src/draw/raster/`, and give the same pixels on every platform: `tests/cpp/test_raster_reference.cpp` checks 319
+  scenes against plutovg byte for byte (see `tests/tools/raster_reference/`).
+- `stb::canvas::add_path` (`path_item`: fill, rule, stroke, cap, join, miter_limit, dash, transform, blend, opacity).
+- Python: `Matrix`, `Path` (builder calls, `commands`, `bounds`, `dashed`, `fill_mask`, `stroke_mask`),
+  `Image.fill_path`, `Image.stroke_path`, `Canvas.add_path` / `CanvasPath`.
 - `STB_MIN` / `STB_MAX` (in `stb/export.hpp`): `std::min` / `std::max` that `<windows.h>` cannot break (its `min` and
   `max` macros). Used in `draw.hpp` and the library instead of `(std::min)(...)`.
 - `stb/path.hpp`, the geometry half of the vector-drawing layer (issue #2): `stb::path` (builder calls

@@ -311,6 +311,41 @@ copied. `Image.open` takes ownership of stb's own buffer, no copy either. When
 you want an independent image, say so: `img.copy()` (also `copy.copy` and
 `copy.deepcopy`).
 
+### Vector paths
+
+A `Path` is a shape made of lines and quadratic or cubic curves, in float coordinates (x to the right, y
+down). Build it with chained calls, then draw it on an image (every `Image` method returns a copy) or on a
+`Canvas`:
+
+```python
+p = stb.Path().move_to(10, 10).line_to(90, 10).quad_to(120, 50, 90, 90).close()
+p.add_rounded_rect(20, 20, 60, 40, 8)           # whole shapes: add_rect, add_rounded_rect, add_ellipse, add_circle
+p.add_path(other, stb.Matrix.translation(200, 0))
+
+img.fill_path(p, "#09f", rule="even_odd")        # rule: "non_zero" (default) or "even_odd"
+img.stroke_path(p, "white", 3, cap="round", join="bevel", miter_limit=4, dashes=[8, 4], dash_offset=2)
+img.fill_path(p, (255, 0, 0, 128), matrix=stb.Matrix().translate(40, 40).rotate(0.3), blend="multiply", opacity=0.8)
+
+c = stb.Canvas(img)                              # or several paths on one copy, with texts and shapes
+c.add_path(p).fill("#09f").stroke(3, "white").dash([8, 4]).opacity(0.9)
+mask = p.fill_mask(img.width, img.height)        # the coverage as a gray Image, for your own colours or gradients
+```
+
+What to know:
+
+- Pixel (0, 0) covers [0, 1) x [0, 1): a coordinate is the corner of a pixel.
+- `Matrix` follows the SVG convention (`x' = a*x + c*y + e`); `translate`, `scale`, `rotate` and `shear` apply
+  to a point first, like the SVG `transform` attribute, and chain.
+- A stroke is centred on the line and its width is in path units, scaled by the matrix (the mean of the two
+  axes). Dashes are cut in path units before the matrix. The outline is computed in pixels at 1/64 pixel
+  precision, so tiny paths (a few pixels across in path units) should be scaled up with `matrix=` rather than
+  drawn at their own size.
+- `dashes` alternate "on" and "off" lengths; an odd count repeats the list once more with on and off swapped.
+  A negative entry, or a sum of 0, gives a solid line. `Path.dashed` gives the same cut as a new path.
+- NaN or infinite coordinates draw nothing; coordinates beyond 1,000,000 are limited to that.
+- The rasterizer is a port of the FreeType smooth rasterizer and stroker: the pixels are the same on every
+  platform, and are tested against plutovg (see `NOTICE.md` and `tests/tools/raster_reference/`).
+
 ## Command line
 
 ```
@@ -461,13 +496,43 @@ Runtime failures derive from
 `stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
 programmer errors throw `std::invalid_argument`.
 
+### Vector paths
+
+`<stb/path.hpp>` has `stb::matrix` and `stb::path`; `<stb/raster.hpp>` draws them:
+
+```cpp
+stb::path p;
+p.move_to(10, 10).line_to(90, 10).quad_to(120, 50, 90, 90).close();
+p.add_rounded_rect(20, 20, 60, 40, 8);                       // add_rect, add_ellipse, add_circle
+p.add_commands(font.outline(glyph), stb::matrix::translation(10, 40));   // a glyph outline goes straight in
+
+stb::fill(img, p, stb::color("#09f"), stb::fill_rule::even_odd);
+stb::stroke_style st{3.f};                                   // width in path units
+st.cap = stb::line_cap::round; st.join = stb::line_join::bevel; st.dashes = {8, 4};
+stb::draw_options o;                                         // matrix, blend mode, opacity
+o.transform = stb::matrix().translate(40, 40).rotate(0.3f);
+stb::stroke(img, p, stb::color("white"), st, o);
+
+// Your own compositing: coverage spans (y, x, len, coverage 1..255), top to bottom, left to right.
+stb::rasterize_fill(p, stb::fill_rule::non_zero, {}, stb::clip_rect{0, 0, img.width(), img.height()},
+                    [&](stb::span_view spans) { for (const stb::span& s : spans) { /* ... */ } });
+
+stb::canvas c(img);
+c.add_path(p).fill("#09f").stroke(3, "white").dash({8, 4});  // with texts and shapes, drawn in order
+```
+
+`fill` and `stroke` blend through `image::blend` (a layer the size of the path's box), so the blend modes and
+opacity work as everywhere else. The coordinate, matrix, dash and precision rules are the ones listed
+under "Vector paths" in the Python section above. The geometry is fixed-point (`src/draw/raster/`), so there is
+no platform-dependent rounding.
+
 Or `cmake --install build` and `find_package(libstb)` as usual.
 
 ## Layout (mirrors httpp / ctoon)
 
 ```
 include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/stb/*.hpp           public API (error, util, color, image, font, shaping, draw, zlib); never includes stb
+include/stb/*.hpp           public API (error, util, color, image, path, raster, font, shaping, draw, zlib); never includes stb
 src/util/                   file I/O helpers, UTF-8
 src/image/                  image, editing ops, resize, EXIF, SIMD kernels and their dispatch
 src/codec/                  every format: decode/ (one file per format, from stb_image), PNG / JPEG / BMP / TGA
@@ -475,12 +540,13 @@ src/codec/                  every format: decode/ (one file per format, from stb
 src/zlib/                   the public zlib API (on top of src/codec)
 src/font/                   fonts, text rendering, atlases; truetype/ (font file, CFF, rasterizer, packer) and
                             shaper/ (arabic, bidi, gsub, otl)
-src/draw/                   shapes and colours
+src/draw/                   shapes, colours, paths; raster/ holds the scan converter, stroker and fixed-point math
 src/image/resize/           the resizer engine, split by topic from stb_image_resize2 (see its README)
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package
 cmake/                      DynamicVersion, Startup, Optimize, package config
 tests/{cpp,python,cmake}    unit tests + find_package consumer test, all run by ctest
-tests/tools/                dev checks that are not tests (snapshot.py, jpeg_vs_upstream.py, zlib_fuzz.py)
+tests/tools/                dev checks that are not tests (snapshot.py, jpeg_vs_upstream.py, zlib_fuzz.py,
+                            raster_reference/ = plutovg scenes and hashes for the rasterizer test)
 tests/data/                 synthetic test font (solid-rectangle glyphs) + the script that makes it
 ```
 

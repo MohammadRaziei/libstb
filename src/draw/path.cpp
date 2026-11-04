@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "draw/raster/dash.hpp"
+
 namespace stb {
 
 // ----------------------------------------------------------------------------- matrix
@@ -207,6 +209,11 @@ path& path::transform(const matrix& m) {
     start_ = m.map(start_);
     current_ = m.map(current_);
     return *this;
+}
+
+path path::dashed(const std::vector<float>& dashes, float offset) const {
+    if (!detail::valid_dashes(dashes.data(), dashes.size()) || !std::isfinite(offset)) return *this;
+    return path(detail::dash_commands(detail::to_cubic_commands(*this), dashes.data(), dashes.size(), offset));
 }
 
 path path::transformed(const matrix& m) const {

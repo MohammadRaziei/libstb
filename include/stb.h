@@ -21,6 +21,7 @@
 #include "stb/color.hpp"
 #include "stb/image.hpp"
 #include "stb/path.hpp"
+#include "stb/raster.hpp"
 #include "stb/font.hpp"
 #include "stb/shaping.hpp"
 #include "stb/draw.hpp"

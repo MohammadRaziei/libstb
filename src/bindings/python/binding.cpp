@@ -27,5 +27,6 @@ NB_MODULE(libstb_py, m) {
     bind_resizer(m);
     bind_image(m);
     bind_font(m);
+    bind_raster(m);
     bind_zlib(m);
 }

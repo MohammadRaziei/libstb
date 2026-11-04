@@ -145,6 +145,13 @@ public:
     path& add_path(const path& other, const matrix& m = {});
     path& add_commands(const std::vector<path_command>& commands, const matrix& m = {});
 
+    // A copy cut into dashes: `dashes` are alternating "on" and "off" lengths in path units (an odd count
+    // repeats the list once more with on and off swapped), `offset` is how far into the pattern the path
+    // starts. The result has only straight lines, one contour per dash (curves are flattened to within a
+    // quarter of a unit, closed contours become open ones). A pattern with a negative or non-finite entry,
+    // or whose sum is 0, gives an unchanged copy.
+    path dashed(const std::vector<float>& dashes, float offset = 0.f) const;
+
     // Moves every point through `m`, in place, or on a copy.
     path& transform(const matrix& m);
     path transformed(const matrix& m) const;
