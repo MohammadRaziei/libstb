@@ -14,7 +14,7 @@ namespace {
 
 using detail::fixed;
 using detail::fvec;
-using detail::outline;
+using detail::fixed_outline;
 
 // A coordinate in pixels as 26.6 fixed point (1/64 pixel), rounded to the nearest.
 fixed to_fixed(float v) noexcept { return fixed(std::round(v * 64.f)); }
@@ -23,9 +23,9 @@ fvec to_fixed(point p) noexcept { return {to_fixed(p.x), to_fixed(p.y)}; }
 
 // The device-space outline of cubic-only `commands` moved through `m`. Empty when `m` produces a
 // coordinate that is NaN or infinite.
-outline make_outline(const std::vector<path_command>& commands, const matrix& m) {
+fixed_outline make_outline(const std::vector<outline_command>& commands, const matrix& m) {
     constexpr float limit = 1000000.f;
-    outline o;
+    fixed_outline o;
     o.points.reserve(commands.size() * 2);
     o.tags.reserve(commands.size() * 2);
 
@@ -41,18 +41,18 @@ outline make_outline(const std::vector<path_command>& commands, const matrix& m)
         return to_fixed(p);
     };
 
-    for (const path_command& c : commands) {
+    for (const outline_command& c : commands) {
         switch (c.op) {
-            case path_op::move_to: o.move_to(map(c.p[0])); break;
-            case path_op::line_to: o.line_to(map(c.p[0])); break;
-            case path_op::cubic_to: {
+            case outline_op::move_to: o.move_to(map(c.p[0])); break;
+            case outline_op::line_to: o.line_to(map(c.p[0])); break;
+            case outline_op::cubic_to: {
                 const fvec a = map(c.p[0]);
                 const fvec b = map(c.p[1]);
                 o.cubic_to(a, b, map(c.p[2]));
                 break;
             }
-            case path_op::close: o.close(); break;
-            case path_op::quad_to: break;  // converted before
+            case outline_op::close: o.close(); break;
+            case outline_op::quad_to: break;  // converted before
         }
     }
     o.end();
@@ -62,26 +62,26 @@ outline make_outline(const std::vector<path_command>& commands, const matrix& m)
 
 }  // namespace
 
-void rasterize_fill(const path& p, fill_rule rule, const matrix& m, const clip_rect& clip, span_sink sink) {
+void rasterize_fill(const outline& p, fill_rule rule, const matrix& m, const clip_rect& clip, span_sink sink) {
     if (p.empty()) return;
-    const outline o = make_outline(detail::to_cubic_commands(p), m);
+    const fixed_outline o = make_outline(detail::to_cubic_commands(p), m);
     detail::rasterize_outline(o, rule == fill_rule::even_odd, clip, sink);
 }
 
-void rasterize_stroke(const path& p, const stroke_style& style, const matrix& m, const clip_rect& clip, span_sink sink) {
+void rasterize_stroke(const outline& p, const stroke_style& style, const matrix& m, const clip_rect& clip, span_sink sink) {
     if (p.empty() || !(style.width > 0.f) || !std::isfinite(style.width)) return;
 
-    std::vector<path_command> cubics = detail::to_cubic_commands(p);
+    std::vector<outline_command> cubics = detail::to_cubic_commands(p);
 
-    // Dashes are cut in the path's own space, before the matrix.
+    // Dashes are cut in the outline's own space, before the matrix.
     if (detail::valid_dashes(style.dashes.data(), style.dashes.size()) && std::isfinite(style.dash_offset)) {
         cubics = detail::dash_commands(cubics, style.dashes.data(), style.dashes.size(), style.dash_offset);
     }
 
-    const outline center = make_outline(cubics, m);
+    const fixed_outline center = make_outline(cubics, m);
     if (center.empty()) return;
 
-    // The line's width is given in path units; in pixels it is scaled by the mean scale of the matrix.
+    // The line's width is given in outline units; in pixels it is scaled by the mean scale of the matrix.
     const float sx2 = m.a * m.a + m.b * m.b;
     const float sy2 = m.c * m.c + m.d * m.d;
     const double scale_x = std::sqrt(double(sx2));
@@ -94,7 +94,7 @@ void rasterize_stroke(const path& p, const stroke_style& style, const matrix& m,
     const float miter = std::isfinite(style.miter_limit) ? style.miter_limit : 1.f;
     const fixed miter_limit = fixed(std::min(miter, 1.0e6f) * 65536.f);
 
-    const outline stroked = detail::stroke_outline(center, radius, style.cap, style.join, miter_limit);
+    const fixed_outline stroked = detail::stroke_outline(center, radius, style.cap, style.join, miter_limit);
     detail::rasterize_outline(stroked, false, clip, sink);
 }
 
@@ -138,7 +138,7 @@ void paint(image& img, const color& c, const draw_options& options, Produce&& pr
 
 }  // namespace
 
-void fill(image& img, const path& p, const color& c, fill_rule rule, const draw_options& options) {
+void fill(image& img, const outline& p, const color& c, fill_rule rule, const draw_options& options) {
     check_options(img, options);
     if (p.empty()) return;
     paint(img, c, options, [&](const clip_rect& clip, span_sink sink) {
@@ -146,7 +146,7 @@ void fill(image& img, const path& p, const color& c, fill_rule rule, const draw_
     });
 }
 
-void stroke(image& img, const path& p, const color& c, const stroke_style& style, const draw_options& options) {
+void stroke(image& img, const outline& p, const color& c, const stroke_style& style, const draw_options& options) {
     check_options(img, options);
     if (p.empty()) return;
     paint(img, c, options, [&](const clip_rect& clip, span_sink sink) {

@@ -5,8 +5,8 @@
 //
 //   decode.cpp    the entry points: read_header, decode, zlib_inflate, on top of decode/ (one file per
 //                 format, the stateful ones as classes: jpeg_decoder, png_decoder, gif_decoder, inflater)
-//   deflate.cpp   the zlib compressor (LZ77 + Huffman), shared by PNG and the public zlib API
-//   png.cpp, jpeg.cpp, bmp_tga.cpp   the encoders
+//   encode/       the writers: deflate.cpp is the zlib compressor (LZ77 + Huffman), shared by PNG and the
+//                 public zlib API; png.cpp, jpeg.cpp and bmp_tga.cpp are the encoders
 //
 // The encoders and the compressor are libstb's own code (derived from stb_image_write.h, which
 // is no longer vendored); the decoders are stb_image.h v2.30 restructured into decode/, same algorithms.

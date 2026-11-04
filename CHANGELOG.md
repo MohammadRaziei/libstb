@@ -8,33 +8,33 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
-- **Vector paths (issue #2).** `stb/raster.hpp`: anti-aliased `stb::fill` and `stb::stroke` of a `stb::path` onto an
+- **Vector outlines (issue #2).** `stb/raster.hpp`: anti-aliased `stb::fill` and `stb::stroke` of a `stb::outline` onto an
   image (`fill_rule`, `stroke_style` with width, `line_cap`, `line_join`, `miter_limit`, dashes and a dash offset,
   `draw_options` with matrix, blend mode and opacity), and the low-level `rasterize_fill` / `rasterize_stroke` that
-  report coverage `span`s to a callback (`span_sink`) for your own compositing. `path::dashed` cuts a path into
+  report coverage `span`s to a callback (`span_sink`) for your own compositing. `outline::dashed` cuts an outline into
   dashes. The rasterizer and stroker are fixed-point ports of the FreeType algorithms (through plutovg), under
   `src/draw/raster/`, and give the same pixels on every platform: `tests/cpp/test_raster_reference.cpp` checks 319
   scenes against plutovg byte for byte (see `tests/tools/raster_reference/`).
-- `stb::canvas::add_path` (`path_item`: fill, rule, stroke, cap, join, miter_limit, dash, transform, blend, opacity).
-- Python: `Matrix`, `Path` (builder calls, `commands`, `bounds`, `dashed`, `fill_mask`, `stroke_mask`),
-  `Image.fill_path`, `Image.stroke_path`, `Canvas.add_path` / `CanvasPath`.
+- `stb::canvas::add_outline` (`outline_item`: fill, rule, stroke, cap, join, miter_limit, dash, transform, blend, opacity).
+- Python: `Matrix`, `Outline` (builder calls, `commands`, `bounds`, `dashed`, `fill_mask`, `stroke_mask`),
+  `Image.fill_outline`, `Image.stroke_outline`, `Canvas.add_outline` / `CanvasOutline`.
 - `STB_MIN` / `STB_MAX` (in `stb/export.hpp`): `std::min` / `std::max` that `<windows.h>` cannot break (its `min` and
   `max` macros). Used in `draw.hpp` and the library instead of `(std::min)(...)`.
-- `stb/path.hpp`, the geometry half of the vector-drawing layer (issue #2): `stb::path` (builder calls
+- `stb/outline.hpp`, the geometry half of the vector-drawing layer (issue #2): `stb::outline` (builder calls
   `move_to`, `line_to`, `quad_to`, `cubic_to`, `close`; whole shapes `add_rect`, `add_rounded_rect`,
-  `add_ellipse`, `add_circle`; `add_path` / `add_commands` with an optional matrix, `transform`,
+  `add_ellipse`, `add_circle`; `add_outline` / `add_commands` with an optional matrix, `transform`,
   `current_point`, `bounds`) and `stb::matrix` (SVG convention, fluent `translate` / `scale` / `rotate` /
-  `shear`, `then`, `map`, `inverse`). A glyph outline from `font::outline` goes straight into a path.
-  `point`, `path_op` and `path_command` moved from `stb/font.hpp` to this header (same names, `font.hpp`
+  `shear`, `then`, `map`, `inverse`). A glyph outline from `font::outline` goes straight into an outline.
+  `point`, `outline_op` and `outline_command` moved from `stb/font.hpp` to this header (same names, `font.hpp`
   includes it). Everything under `src/draw` is now built without FMA contraction, not only `shape.cpp`.
 - Glyph-index API of `stb::font`, for vector renderers: `outline(glyph)` (also `outline(glyph, out)` to
-  reuse a buffer) as `path_command`s in font units (`move_to`, `line_to`, `quad_to` for TrueType,
+  reuse a buffer) as `outline_command`s in font units (`move_to`, `line_to`, `quad_to` for TrueType,
   `cubic_to` for CFF, `close`; y up), `glyph_index(codepoint)`, `glyph_count()`, `glyph_info(glyph)`
   (`glyph_metrics`: advance, lsb, ink box, `has_outline`), `design_metrics()` (`font_design_metrics`:
   `units_per_em`, ascent, descent, line gap, font bounding box), `glyph_kerning(left, right, mode)` with
   `kerning_mode::{none, kern_table, automatic}` (`kern_table` ignores GPOS, `automatic` is what `kerning()`
   uses), and `font::face_count(data | path)` for `.ttc` collections. An index past `glyph_count()` gives an
-  empty outline and zero metrics, never an exception. New types `point`, `path_op`, `path_command`
+  empty outline and zero metrics, never an exception. New types `point`, `outline_op`, `outline_command`
   (with `point_count(op)` and `==`). Tests use new synthetic fonts: a TrueType one with curves, a
   composite and GPOS plus `kern`, a CFF one, and a `.ttc` (`tests/data/make_outline_test_fonts.py`).
 - `stb::sformat`, `stb::vsformat` and `stb::sformat_to` (`stb/util.hpp`): printf for `std::string`.
@@ -60,6 +60,19 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   only invalid input has, wraps modulo 256 like a byte store). Blocks of 32 opaque pixels only swap
   R and B. Tests check every (colour, alpha) pair on every backend; `cmake --build <dir> --target
   stb_bench_premultiply` times them.
+
+### Changed
+- Names, so that `path` means a file path everywhere: the vector geometry type is now `stb::outline`
+  (`stb/outline.hpp`, `src/draw/outline.cpp`), with `outline_op`, `outline_command`, `outline_item`,
+  `canvas::add_outline`; Python `Outline`, `CanvasOutline`, `Image.fill_outline` / `stroke_outline`,
+  `Canvas.add_outline`. These names were only in this unreleased section, so nothing released breaks. The
+  internal fixed-point type is `detail::fixed_outline`.
+- `stb/shaping.hpp` is now `stb/rtl.hpp` (same functions: `shape_for_display`, `has_rtl`, `is_arabic_mark`), so
+  that the header is named for what it does (right-to-left text), not "shaping", which also means the font's glyph
+  shaping (`shape_glyphs`, `src/font/shaper/`). `stb.h` includes it as before.
+- Source layout only, no API change: the encoders and the compressor moved to `src/codec/encode/` (next to
+  `decode/`), the glyph rasterizer is `src/font/truetype/glyph_raster.cpp`, the Python outline bindings are in
+  `bind_outline.cpp`, and the resizer's SIMD vector header is `src/image/resize/simd_vec.hpp`.
 
 ## [0.9.0] - 2026-11-01
 

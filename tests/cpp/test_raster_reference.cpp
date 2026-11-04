@@ -25,8 +25,8 @@ std::uint64_t fnv1a(const std::vector<unsigned char>& v) {
     return h;
 }
 
-stb::path build_path(const ref_scene& s) {
-    stb::path p;
+stb::outline build_path(const ref_scene& s) {
+    stb::outline p;
     for (int k = 0; k < s.nops; ++k) {
         const ref_op& o = s.ops[k];
         switch (o.op) {
@@ -41,7 +41,7 @@ stb::path build_path(const ref_scene& s) {
 }
 
 std::vector<unsigned char> coverage_of(const ref_scene& s) {
-    const stb::path p = build_path(s);
+    const stb::outline p = build_path(s);
     const stb::matrix m{s.m[0], s.m[1], s.m[2], s.m[3], s.m[4], s.m[5]};
     const stb::clip_rect clip{0, 0, s.w, s.h};
     std::vector<unsigned char> cov(std::size_t(s.w) * std::size_t(s.h), 0);

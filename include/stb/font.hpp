@@ -19,7 +19,7 @@
 #include "stb/color.hpp"
 #include "stb/error.hpp"
 #include "stb/image.hpp"
-#include "stb/path.hpp"
+#include "stb/outline.hpp"
 
 namespace stb {
 
@@ -92,8 +92,8 @@ private:
 // applied: what a vector renderer needs. To draw at `size` (the em in output units) multiply by
 // size / units_per_em, and flip y if the output grows downwards.
 
-// Outlines use stb::point and stb::path_command from stb/path.hpp, so a glyph outline goes
-// straight into a stb::path (path::add_commands) and from there to the rasterizer.
+// Outlines use stb::point and stb::outline_command from stb/outline.hpp, so a glyph outline goes
+// straight into a stb::outline (outline::add_commands) and from there to the rasterizer.
 
 // One glyph's horizontal metrics and ink box.
 struct glyph_metrics {
@@ -161,8 +161,8 @@ public:
     // curve types (quad_to for TrueType, cubic_to for CFF). Empty for a glyph with no outline. The
     // second form fills `out` (cleared first, its capacity kept), for drawing many glyphs without an
     // allocation each.
-    std::vector<path_command> outline(std::uint32_t glyph) const;
-    void outline(std::uint32_t glyph, std::vector<path_command>& out) const;
+    std::vector<outline_command> outline(std::uint32_t glyph) const;
+    void outline(std::uint32_t glyph, std::vector<outline_command>& out) const;
 
     // Kerning between two glyphs, in font units (usually <= 0). kerning() is the same for characters
     // and in pixels, always in automatic mode.

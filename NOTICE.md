@@ -8,7 +8,7 @@ under two licenses, public domain or MIT; libstb uses the MIT option, reproduced
 | libstb | derived from | stb version |
 | :--- | :--- | :--- |
 | `src/codec/decode/` (decoders and the inflater) | `stb_image.h` | v2.30 |
-| `src/codec/` (`png.cpp`, `jpeg.cpp`, `bmp_tga.cpp`, `deflate.cpp`) | `stb_image_write.h` | v1.16 |
+| `src/codec/encode/` (`png.cpp`, `jpeg.cpp`, `bmp_tga.cpp`, `deflate.cpp`) | `stb_image_write.h` | v1.16 |
 | `src/image/resize/` | `stb_image_resize2.h` | v2.18 |
 | `src/font/truetype/` | `stb_truetype.h`, `stb_rect_pack.h` | v1.26, v1.01 |
 | `src/draw/raster/` (the path rasterizer and stroker) | FreeType `ftgrays.c`, `ftstroke.c`, `fttrigon.c`, through plutovg | plutovg 1.x |

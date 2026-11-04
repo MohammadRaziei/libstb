@@ -13,7 +13,7 @@ namespace stb::detail {
 
 enum class point_tag : char { on = 1, cubic = 2 };
 
-struct outline {
+struct fixed_outline {
     std::vector<fvec> points;
     std::vector<point_tag> tags;
     std::vector<int> contours;  // index of the last point of each contour

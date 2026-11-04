@@ -15,12 +15,12 @@ namespace {
 using stb::clip_rect;
 using stb::fill_rule;
 using stb::matrix;
-using stb::path;
+using stb::outline;
 using stb::span;
 using stb::span_view;
 using stb::stroke_style;
 
-// The coverage of a path as a w x h image of bytes (0 where nothing is reported).
+// The coverage of an outline as a w x h image of bytes (0 where nothing is reported).
 struct coverage_map {
     int w, h;
     std::vector<unsigned char> v;
@@ -51,13 +51,13 @@ struct coverage_map {
     }
 };
 
-coverage_map fill_map(const path& p, fill_rule rule, int w, int h, const matrix& m = {}) {
+coverage_map fill_map(const outline& p, fill_rule rule, int w, int h, const matrix& m = {}) {
     coverage_map c(w, h);
     stb::rasterize_fill(p, rule, m, clip_rect{0, 0, w, h}, [&](span_view v) { c.add(v); });
     return c;
 }
 
-coverage_map stroke_map(const path& p, const stroke_style& st, int w, int h, const matrix& m = {}) {
+coverage_map stroke_map(const outline& p, const stroke_style& st, int w, int h, const matrix& m = {}) {
     coverage_map c(w, h);
     stb::rasterize_stroke(p, st, m, clip_rect{0, 0, w, h}, [&](span_view v) { c.add(v); });
     return c;
@@ -72,7 +72,7 @@ int count_nonzero(const coverage_map& c) {
 }  // namespace
 
 UTEST(stb_raster, a_pixel_aligned_rect_is_fully_covered_inside_and_empty_outside) {
-    path p;
+    outline p;
     p.add_rect(4, 3, 10, 6);
     const coverage_map c = fill_map(p, fill_rule::non_zero, 20, 12);
     for (int y = 0; y < 12; ++y) {
@@ -86,7 +86,7 @@ UTEST(stb_raster, a_pixel_aligned_rect_is_fully_covered_inside_and_empty_outside
 }
 
 UTEST(stb_raster, edges_at_fractions_get_partial_coverage) {
-    path p;
+    outline p;
     p.add_rect(2.5f, 2.f, 4.f, 3.f);  // x from 2.5 to 6.5
     const coverage_map c = fill_map(p, fill_rule::non_zero, 10, 8);
     EXPECT_EQ(int(c.at(2, 3)), 128);  // half of the pixel
@@ -96,7 +96,7 @@ UTEST(stb_raster, edges_at_fractions_get_partial_coverage) {
 }
 
 UTEST(stb_raster, even_odd_leaves_a_hole_where_non_zero_fills) {
-    path p;
+    outline p;
     p.add_rect(2, 2, 20, 20);
     p.add_rect(8, 8, 8, 8);  // same direction as the outer one
     const coverage_map nz = fill_map(p, fill_rule::non_zero, 24, 24);
@@ -107,14 +107,14 @@ UTEST(stb_raster, even_odd_leaves_a_hole_where_non_zero_fills) {
 }
 
 UTEST(stb_raster, an_open_contour_is_closed_for_filling) {
-    path p;
+    outline p;
     p.move_to(2, 2).line_to(18, 2).line_to(18, 18).line_to(2, 18);  // no close()
     const coverage_map c = fill_map(p, fill_rule::non_zero, 20, 20);
     EXPECT_EQ(int(c.at(10, 10)), 255);
 }
 
 UTEST(stb_raster, the_clip_limits_what_is_reported) {
-    path p;
+    outline p;
     p.add_rect(0, 0, 30, 30);
     int min_x = 1000, max_x = -1000, min_y = 1000, max_y = -1000;
     stb::rasterize_fill(p, fill_rule::non_zero, {}, clip_rect{5, 7, 10, 4}, [&](span_view v) {
@@ -132,7 +132,7 @@ UTEST(stb_raster, the_clip_limits_what_is_reported) {
 }
 
 UTEST(stb_raster, a_clip_cuts_a_curve_the_same_way_as_drawing_everything_and_cropping) {
-    path p;
+    outline p;
     p.add_ellipse(20, 20, 17.5f, 13.25f);
     const coverage_map full = fill_map(p, fill_rule::non_zero, 40, 40);
     coverage_map cut(40, 40);
@@ -145,21 +145,21 @@ UTEST(stb_raster, a_clip_cuts_a_curve_the_same_way_as_drawing_everything_and_cro
     }
 }
 
-UTEST(stb_raster, nothing_is_reported_for_an_empty_path_empty_clip_or_a_path_outside) {
+UTEST(stb_raster, nothing_is_reported_for_an_empty_outline_empty_clip_or_a_outline_outside) {
     int calls = 0;
     auto count = [&](span_view) { ++calls; };
-    stb::rasterize_fill(path{}, fill_rule::non_zero, {}, clip_rect{0, 0, 10, 10}, count);
-    path p;
+    stb::rasterize_fill(outline{}, fill_rule::non_zero, {}, clip_rect{0, 0, 10, 10}, count);
+    outline p;
     p.add_rect(1, 1, 5, 5);
     stb::rasterize_fill(p, fill_rule::non_zero, {}, clip_rect{0, 0, 0, 10}, count);
     stb::rasterize_fill(p, fill_rule::non_zero, {}, clip_rect{0, 0, 10, -3}, count);
     stb::rasterize_fill(p, fill_rule::non_zero, {}, clip_rect{20, 20, 10, 10}, count);
-    stb::rasterize_stroke(path{}, stroke_style{}, {}, clip_rect{0, 0, 10, 10}, count);
+    stb::rasterize_stroke(outline{}, stroke_style{}, {}, clip_rect{0, 0, 10, 10}, count);
     EXPECT_EQ(calls, 0);
 }
 
-UTEST(stb_raster, the_matrix_moves_the_path) {
-    path p;
+UTEST(stb_raster, the_matrix_moves_the_outline) {
+    outline p;
     p.add_rect(0, 0, 4, 4);
     const coverage_map c = fill_map(p, fill_rule::non_zero, 20, 20, matrix::translation(10, 6));
     EXPECT_EQ(int(c.at(10, 6)), 255);
@@ -173,27 +173,27 @@ UTEST(stb_raster, nan_and_infinity_draw_nothing_and_huge_values_are_survivable) 
     const float nan = std::numeric_limits<float>::quiet_NaN();
     const float inf = std::numeric_limits<float>::infinity();
 
-    path a;
+    outline a;
     a.move_to(1, 1).line_to(nan, 5).line_to(10, 10).close();
     EXPECT_EQ(count_nonzero(fill_map(a, fill_rule::non_zero, 12, 12)), 0);
     EXPECT_EQ(count_nonzero(stroke_map(a, stroke_style{2.f}, 12, 12)), 0);
 
-    path b;
+    outline b;
     b.add_rect(0, 0, 5, inf);
     EXPECT_EQ(count_nonzero(fill_map(b, fill_rule::non_zero, 12, 12)), 0);
 
-    path c;
+    outline c;
     c.add_rect(1, 1, 5, 5);
     EXPECT_EQ(count_nonzero(fill_map(c, fill_rule::non_zero, 12, 12, matrix{nan, 0, 0, 1, 0, 0})), 0);
 
-    path huge;
+    outline huge;
     huge.add_rect(-1e30f, -1e30f, 2e30f, 2e30f);
     const coverage_map h = fill_map(huge, fill_rule::non_zero, 12, 12);
     EXPECT_EQ(int(h.at(5, 5)), 255);
 }
 
 UTEST(stb_raster, a_stroke_of_a_horizontal_line_covers_its_width) {
-    path p;
+    outline p;
     p.move_to(2, 10).line_to(18, 10);
     const coverage_map c = stroke_map(p, stroke_style{4.f}, 20, 20);
     for (int y = 0; y < 20; ++y) {
@@ -205,7 +205,7 @@ UTEST(stb_raster, a_stroke_of_a_horizontal_line_covers_its_width) {
 }
 
 UTEST(stb_raster, caps_extend_an_open_line) {
-    path p;
+    outline p;
     p.move_to(6, 10).line_to(14, 10);
     stroke_style butt{4.f};
     stroke_style square{4.f};
@@ -224,7 +224,7 @@ UTEST(stb_raster, caps_extend_an_open_line) {
 }
 
 UTEST(stb_raster, a_closed_contour_has_no_caps_and_joins_its_corners) {
-    path p;
+    outline p;
     p.add_rect(5, 5, 10, 10);
     stroke_style st{2.f};
     const coverage_map miter = stroke_map(p, st, 20, 20);
@@ -236,7 +236,7 @@ UTEST(stb_raster, a_closed_contour_has_no_caps_and_joins_its_corners) {
 }
 
 UTEST(stb_raster, a_miter_beyond_the_limit_becomes_a_bevel) {
-    path p;
+    outline p;
     p.move_to(2, 20).line_to(36, 10).line_to(2, 12);  // a sharp corner
     stroke_style spiky{3.f};
     spiky.miter_limit = 20.f;
@@ -246,7 +246,7 @@ UTEST(stb_raster, a_miter_beyond_the_limit_becomes_a_bevel) {
 }
 
 UTEST(stb_raster, the_width_is_scaled_by_the_matrix) {
-    path p;
+    outline p;
     p.move_to(1, 2).line_to(9, 2);
     const coverage_map thin = stroke_map(p, stroke_style{1.f}, 40, 20);
     const coverage_map scaled = stroke_map(p, stroke_style{1.f}, 40, 20, matrix::scaling(3));
@@ -254,7 +254,7 @@ UTEST(stb_raster, the_width_is_scaled_by_the_matrix) {
 }
 
 UTEST(stb_raster, width_zero_negative_or_not_a_number_draws_nothing) {
-    path p;
+    outline p;
     p.move_to(1, 5).line_to(15, 5);
     EXPECT_EQ(count_nonzero(stroke_map(p, stroke_style{0.f}, 20, 10)), 0);
     EXPECT_EQ(count_nonzero(stroke_map(p, stroke_style{-2.f}, 20, 10)), 0);
@@ -262,7 +262,7 @@ UTEST(stb_raster, width_zero_negative_or_not_a_number_draws_nothing) {
 }
 
 UTEST(stb_raster, dashes_cut_the_line_into_pieces) {
-    path p;
+    outline p;
     p.move_to(0, 5).line_to(24, 5);
     stroke_style st{2.f};
     st.dashes = {4.f, 4.f};
@@ -276,7 +276,7 @@ UTEST(stb_raster, dashes_cut_the_line_into_pieces) {
 }
 
 UTEST(stb_raster, the_dash_offset_moves_the_pattern_and_an_odd_list_alternates) {
-    path p;
+    outline p;
     p.move_to(0, 5).line_to(24, 5);
     stroke_style st{2.f};
     st.dashes = {4.f, 4.f};
@@ -294,7 +294,7 @@ UTEST(stb_raster, the_dash_offset_moves_the_pattern_and_an_odd_list_alternates) 
 }
 
 UTEST(stb_raster, an_unusable_dash_pattern_gives_a_solid_line) {
-    path p;
+    outline p;
     p.move_to(0, 5).line_to(24, 5);
     stroke_style solid{2.f};
     const int expected = count_nonzero(stroke_map(p, solid, 24, 10));
@@ -306,22 +306,22 @@ UTEST(stb_raster, an_unusable_dash_pattern_gives_a_solid_line) {
     }
 }
 
-UTEST(stb_raster, path_dashed_returns_straight_dashes) {
-    path p;
+UTEST(stb_raster, outline_dashed_returns_straight_dashes) {
+    outline p;
     p.move_to(0, 0).line_to(20, 0);
-    const path d = p.dashed({5.f, 5.f});
+    const outline d = p.dashed({5.f, 5.f});
     // 5 on, 5 off, 5 on, 5 off: two dashes (move + line each); the third starts at x = 20 (a point).
     EXPECT_TRUE(d.size() >= 4);
-    for (const stb::path_command& c : d) {
-        EXPECT_TRUE(c.op == stb::path_op::move_to || c.op == stb::path_op::line_to);
+    for (const stb::outline_command& c : d) {
+        EXPECT_TRUE(c.op == stb::outline_op::move_to || c.op == stb::outline_op::line_to);
     }
-    EXPECT_TRUE(d.commands()[0].op == stb::path_op::move_to);
+    EXPECT_TRUE(d.commands()[0].op == stb::outline_op::move_to);
     EXPECT_EQ(d.commands()[1].p[0].x, 5.f);
     EXPECT_EQ(d.commands()[2].p[0].x, 10.f);
 }
 
-UTEST(stb_raster, path_dashed_with_an_unusable_pattern_is_a_copy) {
-    path p;
+UTEST(stb_raster, outline_dashed_with_an_unusable_pattern_is_a_copy) {
+    outline p;
     p.add_circle(5, 5, 3);
     EXPECT_TRUE(p.dashed({}) == p);
     EXPECT_TRUE(p.dashed({0.f}) == p);
@@ -329,7 +329,7 @@ UTEST(stb_raster, path_dashed_with_an_unusable_pattern_is_a_copy) {
 }
 
 UTEST(stb_raster, a_dot_gets_round_caps_and_nothing_with_butt_caps) {
-    path p;
+    outline p;
     p.move_to(10, 10).line_to(10, 10);
     stroke_style round{8.f};
     round.cap = stb::line_cap::round;
@@ -365,7 +365,7 @@ stb::image white(int w, int h) {
 
 UTEST(stb_raster, fill_paints_the_inside_and_leaves_the_rest) {
     stb::image img = white(20, 20);
-    path p;
+    outline p;
     p.add_rect(5, 5, 10, 10);
     stb::fill(img, p, stb::color(255, 0, 0));
     EXPECT_TRUE(pixel(img, 10, 10) == stb::color(255, 0, 0, 255));
@@ -375,7 +375,7 @@ UTEST(stb_raster, fill_paints_the_inside_and_leaves_the_rest) {
 
 UTEST(stb_raster, fill_blends_the_colour_alpha_and_the_opacity) {
     stb::image img = white(10, 10);
-    path p;
+    outline p;
     p.add_rect(0, 0, 10, 10);
     stb::fill(img, p, stb::color(0, 0, 0, 255), fill_rule::non_zero, stb::draw_options{{}, stb::blend_mode::normal, 0.5f});
     const stb::color c = pixel(img, 5, 5);
@@ -388,7 +388,7 @@ UTEST(stb_raster, fill_blends_the_colour_alpha_and_the_opacity) {
 
 UTEST(stb_raster, fill_uses_the_blend_mode_and_the_transform) {
     stb::image img = white(20, 20);
-    path p;
+    outline p;
     p.add_rect(0, 0, 4, 4);
     stb::draw_options o;
     o.transform = matrix::translation(8, 8);
@@ -400,7 +400,7 @@ UTEST(stb_raster, fill_uses_the_blend_mode_and_the_transform) {
 
 UTEST(stb_raster, stroke_draws_the_outline_and_not_the_inside) {
     stb::image img = white(30, 30);
-    path p;
+    outline p;
     p.add_rect(5, 5, 20, 20);
     stb::stroke(img, p, stb::color(0, 0, 255), stroke_style{3.f});
     EXPECT_TRUE(pixel(img, 15, 5) == stb::color(0, 0, 255, 255));    // on the edge
@@ -409,13 +409,13 @@ UTEST(stb_raster, stroke_draws_the_outline_and_not_the_inside) {
 
 UTEST(stb_raster, drawing_partly_or_wholly_outside_the_image_is_fine) {
     stb::image img = white(10, 10);
-    path p;
+    outline p;
     p.add_circle(0, 0, 6);
     stb::fill(img, p, stb::color(0, 255, 0));
     EXPECT_TRUE(pixel(img, 1, 1) == stb::color(0, 255, 0, 255));
     EXPECT_TRUE(pixel(img, 9, 9) == stb::color(255, 255, 255, 255));
 
-    path q;
+    outline q;
     q.add_rect(100, 100, 5, 5);
     stb::fill(img, q, stb::color(255, 0, 0));
     stb::stroke(img, q, stb::color(255, 0, 0));
@@ -423,7 +423,7 @@ UTEST(stb_raster, drawing_partly_or_wholly_outside_the_image_is_fine) {
 }
 
 UTEST(stb_raster, fill_and_stroke_check_their_arguments) {
-    path p;
+    outline p;
     p.add_rect(1, 1, 3, 3);
     stb::image empty;
     ASSERT_THROWS(stb::fill(empty, p, stb::color(0, 0, 0)), std::invalid_argument);
@@ -438,32 +438,32 @@ UTEST(stb_raster, fill_and_stroke_check_their_arguments) {
 }
 
 UTEST(stb_raster, a_glyph_outline_can_be_filled) {
-    // The path of any outline works: here a triangle given as raw commands, like font::outline returns.
-    std::vector<stb::path_command> cmds(4);
-    cmds[0].op = stb::path_op::move_to;
+    // The outline of any outline works: here a triangle given as raw commands, like font::outline returns.
+    std::vector<stb::outline_command> cmds(4);
+    cmds[0].op = stb::outline_op::move_to;
     cmds[0].p[0] = {2, 2};
-    cmds[1].op = stb::path_op::line_to;
+    cmds[1].op = stb::outline_op::line_to;
     cmds[1].p[0] = {18, 2};
-    cmds[2].op = stb::path_op::line_to;
+    cmds[2].op = stb::outline_op::line_to;
     cmds[2].p[0] = {10, 18};
-    cmds[3].op = stb::path_op::close;
+    cmds[3].op = stb::outline_op::close;
     stb::image img = white(20, 20);
-    stb::fill(img, path(cmds), stb::color(0, 0, 0));
+    stb::fill(img, outline(cmds), stb::color(0, 0, 0));
     EXPECT_TRUE(pixel(img, 10, 6) == stb::color(0, 0, 0, 255));
     EXPECT_TRUE(pixel(img, 2, 17) == stb::color(255, 255, 255, 255));
 }
 
-// --- stb::canvas::add_path ------------------------------------------------------------------------------
+// --- stb::canvas::add_outline ------------------------------------------------------------------------------
 
-UTEST(stb_raster_canvas, add_path_fills_with_the_canvas_colour_and_gives_the_pixels_of_stb_fill) {
-    path p;
+UTEST(stb_raster_canvas, add_outline_fills_with_the_canvas_colour_and_gives_the_pixels_of_stb_fill) {
+    outline p;
     p.add_circle(15, 15, 10);
     p.add_rect(2, 2, 6, 6);
 
     stb::image base = white(30, 30);
     stb::canvas c(base);
     c.set_color(stb::color(200, 30, 30));
-    c.add_path(p);
+    c.add_outline(p);
     const stb::image out = c.finish();
 
     stb::image expected = white(30, 30);
@@ -471,13 +471,13 @@ UTEST(stb_raster_canvas, add_path_fills_with_the_canvas_colour_and_gives_the_pix
     EXPECT_TRUE(same_pixels(out, expected));
 }
 
-UTEST(stb_raster_canvas, a_path_item_fills_then_strokes_with_its_own_settings) {
-    path p;
+UTEST(stb_raster_canvas, a_outline_item_fills_then_strokes_with_its_own_settings) {
+    outline p;
     p.add_rect(6, 6, 18, 18);
 
     stb::image base = white(30, 30);
     stb::canvas c(base);
-    c.add_path(p).fill(stb::color(0, 255, 0)).stroke(4.f, stb::color(0, 0, 255)).join(stb::line_join::round).opacity(1.f);
+    c.add_outline(p).fill(stb::color(0, 255, 0)).stroke(4.f, stb::color(0, 0, 255)).join(stb::line_join::round).opacity(1.f);
     const stb::image out = c.finish();
 
     stroke_style st{4.f};
@@ -491,38 +491,38 @@ UTEST(stb_raster_canvas, a_path_item_fills_then_strokes_with_its_own_settings) {
 }
 
 UTEST(stb_raster_canvas, no_fill_and_dash_and_transform) {
-    path p;
+    outline p;
     p.move_to(0, 0).line_to(20, 0);
 
     stb::image base = white(30, 30);
     stb::canvas c(base);
-    c.add_path(p).no_fill().stroke(2.f, stb::color(0, 0, 0)).dash({4.f, 4.f}).transform(matrix::translation(5, 10));
+    c.add_outline(p).no_fill().stroke(2.f, stb::color(0, 0, 0)).dash({4.f, 4.f}).transform(matrix::translation(5, 10));
     const stb::image out = c.finish();
     EXPECT_TRUE(pixel(out, 6, 10) == stb::color(0, 0, 0, 255));        // on a dash
     EXPECT_TRUE(pixel(out, 11, 10) == stb::color(255, 255, 255, 255));  // in a gap
 }
 
 UTEST(stb_raster_canvas, items_are_drawn_in_the_order_they_were_added) {
-    path p;
+    outline p;
     p.add_rect(0, 0, 10, 10);
     stb::image base = white(10, 10);
     stb::canvas c(base);
-    c.add_path(p).fill(stb::color(255, 0, 0));
-    c.add_path(p).fill(stb::color(0, 0, 255));
+    c.add_outline(p).fill(stb::color(255, 0, 0));
+    c.add_outline(p).fill(stb::color(0, 0, 255));
     EXPECT_TRUE(pixel(c.finish(), 5, 5) == stb::color(0, 0, 255, 255));
 }
 
-UTEST(stb_raster_canvas, path_item_checks_its_arguments_and_the_canvas_state) {
-    path p;
+UTEST(stb_raster_canvas, outline_item_checks_its_arguments_and_the_canvas_state) {
+    outline p;
     p.add_rect(0, 0, 4, 4);
     stb::image base = white(8, 8);
     stb::canvas c(base);
-    stb::canvas::path_item& item = c.add_path(p);
+    stb::canvas::outline_item& item = c.add_outline(p);
     ASSERT_THROWS(item.stroke(0.f), std::invalid_argument);
     ASSERT_THROWS(item.stroke(-1.f, stb::color(0, 0, 0)), std::invalid_argument);
     ASSERT_THROWS(item.miter_limit(0.5f), std::invalid_argument);
     ASSERT_THROWS(item.opacity(2.f), std::invalid_argument);
     c.finish();
     ASSERT_THROWS(item.fill(stb::color(0, 0, 0)), std::invalid_argument);
-    ASSERT_THROWS(c.add_path(p), std::invalid_argument);
+    ASSERT_THROWS(c.add_outline(p), std::invalid_argument);
 }

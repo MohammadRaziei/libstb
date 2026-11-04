@@ -1,7 +1,8 @@
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در سشن بعدی)
 
 تاریخ: 2026-11-02. ریپو: mohammadraziei/libstb (از 0.9.0، کامیت `48bfda8`). این فایل untracked است
-(قبل از push حذفش کن). همه‌ی کارهای زیر commit شده‌اند و working tree تمیز است.
+(قبل از push حذفش کن). کارهای جدول زیر commit شده‌اند؛ تغییرات «بازنامگذاری 2026-11-04» پایین‌تر هنوز commit نشده‌اند (working tree عمداً
+dirty است؛ قبل از commit با `git status` ببین).
 
 ## کامیت‌های این سشن (به ترتیب)
 
@@ -11,6 +12,23 @@
 | `685f126` | threading هوشمند: `stb::thread_count / set_threads / thread_scope`، پایتون `threads(n)`، env `LIBSTB_THREADS`، `src/util/parallel.hpp`، `src/util/threads.cpp`؛ فقط `resize` ازش استفاده می‌کند |
 | `8e76e18` | `stb::sformat / vsformat / sformat_to` در `include/stb/util.hpp`؛ پیام‌های خطای دستی به آن‌ها تبدیل شدند |
 | `657ae77` | API گلیف-ایندکس `stb::font` (بخش الف درخواست novasvg) |
+
+## بازنامگذاری 2026-11-04 (commit نشده)
+
+هدف: `path` فقط به معنی مسیر فایل بماند. همه با CMake بیلد و تست شد (C++ پاس، پایتون 1394 پاس و 4 skip).
+
+- هندسه‌ی برداری: `stb::path` شد `stb::outline` (`include/stb/outline.hpp`، `src/draw/outline.cpp`)، همراه `outline_op`،
+  `outline_command`، `outline_item`، `canvas::add_outline`. پایتون: `Outline`، `CanvasOutline`، `Image.fill_outline` و
+  `stroke_outline`، `Canvas.add_outline`. نوع داخلی ثابت‌نقطه‌ی قبلی شد `detail::fixed_outline` (`src/draw/raster/fixed_outline.hpp`).
+  این نام‌ها فقط در بخش Unreleased بودند، پس چیزی از نسخه‌ی منتشرشده نمی‌شکند.
+- `include/stb/shaping.hpp` شد `include/stb/rtl.hpp` (و `src/font/shaping.cpp` شد `rtl.cpp`)؛ توابع همان‌اند. این **یک
+  شکست API نسبت به 0.9.0** است (فقط نام هدر؛ `stb.h` همان را include می‌کند).
+- ساختار فایل‌ها: انکودرها و deflate رفتند به `src/codec/encode/`؛ `src/font/truetype/raster.cpp` شد `glyph_raster.cpp`؛
+  `bind_raster.cpp` شد `bind_outline.cpp`؛ `src/image/resize/simd.hpp` شد `simd_vec.hpp`.
+- **عمداً دست نخورد:** `stb::shape`، `draw_shape`، `shape_item`، پایتون `CanvasShape` (API منتشرشده؛ اگر قرار است عوض شود، کاربر
+  بگوید: پیشنهاد قبلی `draw_primitive`). `include/stb/export.hpp` هم که `STB_MIN/STB_MAX` را دارد جابه‌جا نشد.
+- `CHANGELOG.md` بخش Unreleased/Changed این تغییرها را ثبت می‌کند. نام تست‌ها و مثال‌ها (`examples/cpp/outlines.cpp`،
+  `examples/python/12_vector_outlines.py`) هم عوض شدند.
 
 ## کار با build و تست (همه با CMake، طبق قاعده‌ی کاربر)
 

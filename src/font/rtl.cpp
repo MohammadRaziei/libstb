@@ -1,4 +1,4 @@
-#include "stb/shaping.hpp"
+#include "stb/rtl.hpp"
 
 #include "font/shaper/arabic.hpp"
 #include "font/shaper/bidi.hpp"

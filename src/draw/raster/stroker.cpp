@@ -237,7 +237,7 @@ public:
     stroker(fixed radius, line_cap cap, line_join join, fixed miter_limit)
         : radius_(radius), cap_(cap), join_(join), join_saved_(join), miter_limit_(std::max<fixed>(miter_limit, 0x10000)) {}
 
-    outline run(const outline& in);
+    fixed_outline run(const fixed_outline& in);
 
 private:
     void begin_subpath(fvec to, bool open);
@@ -252,7 +252,7 @@ private:
     void process_corner(fixed line_length);
     void subpath_start(fixed start_angle, fixed line_length);
     void add_reverse_left(bool open);
-    bool parse(const outline& in);
+    bool parse(const fixed_outline& in);
 
     // The settings.
     const fixed radius_;
@@ -583,7 +583,7 @@ void stroker::end_subpath() {
     borders_[1].close(true);
 }
 
-bool stroker::parse(const outline& in) {
+bool stroker::parse(const fixed_outline& in) {
     borders_[0].reset();
     borders_[1].reset();
 
@@ -633,8 +633,8 @@ bool stroker::parse(const outline& in) {
     return true;
 }
 
-outline stroker::run(const outline& in) {
-    outline result;
+fixed_outline stroker::run(const fixed_outline& in) {
+    fixed_outline result;
     if (!parse(in)) return result;
 
     std::size_t points0 = 0, contours0 = 0, points1 = 0, contours1 = 0;
@@ -658,7 +658,7 @@ outline stroker::run(const outline& in) {
 
 }  // namespace
 
-outline stroke_outline(const outline& in, fixed radius, line_cap cap, line_join join, fixed miter_limit) {
+fixed_outline stroke_outline(const fixed_outline& in, fixed radius, line_cap cap, line_join join, fixed miter_limit) {
     stroker s(radius, cap, join, miter_limit);
     return s.run(in);
 }

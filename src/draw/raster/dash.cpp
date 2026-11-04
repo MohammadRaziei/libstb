@@ -18,8 +18,8 @@ point limited(point p) noexcept {
     return p;
 }
 
-path_command make(path_op op, point a = {}, point b = {}, point c = {}) {
-    path_command cmd;
+outline_command make(outline_op op, point a = {}, point b = {}, point c = {}) {
+    outline_command cmd;
     cmd.op = op;
     cmd.p[0] = a;
     cmd.p[1] = b;
@@ -90,7 +90,7 @@ void flatten_cubic(point from, point c1, point c2, point to, Emit&& emit) {
 
 class dasher {
 public:
-    dasher(const float* dashes, std::size_t n, float offset, std::vector<path_command>& out)
+    dasher(const float* dashes, std::size_t n, float offset, std::vector<outline_command>& out)
         : dashes_(dashes), n_(n), out_(out) {
         float sum = 0.f;
         for (std::size_t i = 0; i < n; ++i) sum += dashes[i];
@@ -109,7 +109,7 @@ public:
     }
 
     void move_to(point p) {
-        if (start_toggle_) out_.push_back(make(path_op::move_to, p));
+        if (start_toggle_) out_.push_back(make(outline_op::move_to, p));
         current_ = p;
         phase_ = start_phase_;
         index_ = start_index_;
@@ -129,14 +129,14 @@ public:
             dist1 += dashes_[index_ % n_] - phase_;
             const float a = dist1 / dist0;
             const point p{p0.x + a * dx, p0.y + a * dy};
-            out_.push_back(make(toggle_ ? path_op::line_to : path_op::move_to, p));
+            out_.push_back(make(toggle_ ? outline_op::line_to : outline_op::move_to, p));
 
             phase_ = 0.f;
             toggle_ = !toggle_;
             ++index_;
         }
 
-        if (toggle_) out_.push_back(make(path_op::line_to, p1));
+        if (toggle_) out_.push_back(make(outline_op::line_to, p1));
 
         phase_ += dist0 - dist1;
         current_ = p1;
@@ -145,7 +145,7 @@ public:
 private:
     const float* dashes_;
     std::size_t n_;
-    std::vector<path_command>& out_;
+    std::vector<outline_command>& out_;
     float start_phase_ = 0.f;
     float phase_ = 0.f;
     std::size_t start_index_ = 0;
@@ -157,41 +157,41 @@ private:
 
 }  // namespace
 
-std::vector<path_command> to_cubic_commands(const path& p) {
-    std::vector<path_command> out;
+std::vector<outline_command> to_cubic_commands(const outline& p) {
+    std::vector<outline_command> out;
     out.reserve(p.size());
 
     point start, cur;
-    for (const path_command& c : p) {
+    for (const outline_command& c : p) {
         for (int k = 0; k < point_count(c.op); ++k) {
             if (!finite(c.p[k])) return {};
         }
         switch (c.op) {
-            case path_op::move_to:
+            case outline_op::move_to:
                 start = cur = limited(c.p[0]);
-                out.push_back(make(path_op::move_to, cur));
+                out.push_back(make(outline_op::move_to, cur));
                 break;
-            case path_op::line_to:
+            case outline_op::line_to:
                 cur = limited(c.p[0]);
-                out.push_back(make(path_op::line_to, cur));
+                out.push_back(make(outline_op::line_to, cur));
                 break;
-            case path_op::quad_to: {
+            case outline_op::quad_to: {
                 // The cubic with the same shape: its controls are two thirds of the way from the
                 // end points to the quadratic's control.
                 const point q = limited(c.p[0]);
                 const point e = limited(c.p[1]);
                 const point cp1{2.f / 3.f * q.x + 1.f / 3.f * cur.x, 2.f / 3.f * q.y + 1.f / 3.f * cur.y};
                 const point cp2{2.f / 3.f * q.x + 1.f / 3.f * e.x, 2.f / 3.f * q.y + 1.f / 3.f * e.y};
-                out.push_back(make(path_op::cubic_to, cp1, cp2, e));
+                out.push_back(make(outline_op::cubic_to, cp1, cp2, e));
                 cur = e;
                 break;
             }
-            case path_op::cubic_to:
+            case outline_op::cubic_to:
                 cur = limited(c.p[2]);
-                out.push_back(make(path_op::cubic_to, limited(c.p[0]), limited(c.p[1]), cur));
+                out.push_back(make(outline_op::cubic_to, limited(c.p[0]), limited(c.p[1]), cur));
                 break;
-            case path_op::close:
-                out.push_back(make(path_op::close, start));
+            case outline_op::close:
+                out.push_back(make(outline_op::close, start));
                 cur = start;
                 break;
         }
@@ -209,29 +209,29 @@ bool valid_dashes(const float* dashes, std::size_t n) noexcept {
     return sum > 0.f && std::isfinite(sum);
 }
 
-std::vector<path_command> dash_commands(const std::vector<path_command>& cubics, const float* dashes, std::size_t n,
+std::vector<outline_command> dash_commands(const std::vector<outline_command>& cubics, const float* dashes, std::size_t n,
                                         float offset) {
-    std::vector<path_command> out;
+    std::vector<outline_command> out;
     out.reserve(cubics.size() * 2);
     dasher d(dashes, n, offset, out);
 
     point current;
-    for (const path_command& c : cubics) {
+    for (const outline_command& c : cubics) {
         switch (c.op) {
-            case path_op::move_to:
+            case outline_op::move_to:
                 d.move_to(c.p[0]);
                 current = c.p[0];
                 break;
-            case path_op::line_to:
-            case path_op::close:
+            case outline_op::line_to:
+            case outline_op::close:
                 d.line_to(c.p[0]);
                 current = c.p[0];
                 break;
-            case path_op::cubic_to:
+            case outline_op::cubic_to:
                 flatten_cubic(current, c.p[0], c.p[1], c.p[2], [&](point p) { d.line_to(p); });
                 current = c.p[2];
                 break;
-            case path_op::quad_to:
+            case outline_op::quad_to:
                 break;  // not in the list: to_cubic_commands converted them
         }
         if (out.size() >= max_commands) break;

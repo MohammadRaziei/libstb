@@ -2,9 +2,9 @@
 // from the algorithms of stb_truetype.h v1.26 (public domain / MIT, Sean Barrett and contributors)
 // and giving the same pixels:
 //
-//   face.cpp      the file: tables, cmap, metrics, kerning, glyph outlines (glyf and CFF)
-//   raster.cpp    outline -> 8-bit coverage bitmap (curve flattening, scanline area coverage)
-//   atlas.cpp     packing many glyph bitmaps into one image
+//   face.cpp         the file: tables, cmap, metrics, kerning, glyph outlines (glyf and CFF)
+//   glyph_raster.cpp outline -> 8-bit coverage bitmap (curve flattening, scanline area coverage)
+//   atlas.cpp        packing many glyph bitmaps into one image
 //
 // A font is untrusted input, so every read goes through otl::byte_view: out-of-range reads give
 // 0 instead of touching memory outside the file.
@@ -155,7 +155,7 @@ private:
     cff_buffer cff_, char_strings_, global_subrs_, subrs_, font_dicts_, fd_select_;
 };
 
-// ---- raster.cpp
+// ---- glyph_raster.cpp
 
 // Fills `pixels` (w * h, rows `stride` apart) with the coverage of `outline` scaled to pixels and
 // shifted: the glyph's top left pixel is (x_off, y_off). `invert` flips y (fonts have y up).

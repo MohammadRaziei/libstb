@@ -1,7 +1,7 @@
 #pragma once
 
 // Internal: the per-row pixel kernels (channel conversion, alpha blending, premultiplying). Written once as
-// always-inline templates; image_ops.cpp instantiates them as plain code and with the AVX2
+// always-inline templates; ops.cpp instantiates them as plain code and with the AVX2
 // target attribute, kernels_scalar.cpp with auto-vectorisation off. They are
 // branchless on purpose: a data-dependent branch is what stops the vectoriser. Every
 // instantiation computes the same integers, so the results are bit-identical.

@@ -92,5 +92,5 @@ inline stb::align to_align(nb::handle h) {
 void bind_image(nb::module_& m);
 void bind_resizer(nb::module_& m);
 void bind_font(nb::module_& m);
-void bind_raster(nb::module_& m);
+void bind_outline(nb::module_& m);
 void bind_zlib(nb::module_& m);

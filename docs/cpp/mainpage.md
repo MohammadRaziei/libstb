@@ -67,7 +67,7 @@ Hebrew text: pass it in typing order. Letter shapes, lam-alef and other ligature
 Arabic Presentation Forms in its cmap is shaped through those. ZWNJ and ZWJ are honoured and each line is
 ordered with UAX #9. There is no GPOS: kerning is the `kern` table only, and marks (harakat) are placed by a
 rule (centred on the letter, stacked above or below its ink). `font::shape_glyphs` returns the glyph ids
-that were chosen. The code-point-level steps are public in `<stb/shaping.hpp>` (`stb::shape_for_display`,
+that were chosen. The code-point-level steps are public in `<stb/rtl.hpp>` (`stb::shape_for_display`,
 `stb::has_rtl`).
 
 ## SIMD backends

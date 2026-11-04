@@ -107,7 +107,7 @@
       **اثر واقعی چندهسته‌ای اندازه‌گیری نشده** (ماشین من یک هسته داره): ثابت‌ها بعداً روی ماشین چندهسته‌ای
       تنظیم بشن.
 - [x] **API گلیف-ایندکس برای رندر وکتور (گام الف درخواست novasvg).** `font::outline(g)` (و فرم بافر
-      `outline(g, out)`) به‌صورت `path_command` در واحد فونت (`quad_to` برای TrueType، `cubic_to` برای CFF،
+      `outline(g, out)`) به‌صورت `outline_command` در واحد فونت (`quad_to` برای TrueType، `cubic_to` برای CFF،
       `close` ساخته‌شده؛ y رو به بالا)، `glyph_index`، `glyph_count`، `glyph_info`، `design_metrics`،
       `glyph_kerning(l, r, kerning_mode)` و `font::face_count`. روی `truetype::face` ساخته شد (فقط
       `units_per_em`، bbox فونت، `num_glyphs`، `kern_table_advance`، `font_count` اضافه شد). اندیس بیرون از
@@ -183,15 +183,15 @@
 
 ## issue #2: rasterizer و stroker برداری (novasvg)
 
-- [x] `stb/path.hpp` + `src/draw/path.cpp`: `matrix`, `path` (builder، شکل‌ها، `add_path`/`add_commands`، `transform`، `dashed`)؛
-      `point`/`path_op`/`path_command` از `font.hpp` به اینجا آمدند.
+- [x] `stb/outline.hpp` + `src/draw/outline.cpp`: `matrix`, `outline` (builder، شکل‌ها، `add_outline`/`add_commands`، `transform`، `dashed`)؛
+      `point`/`outline_op`/`outline_command` از `font.hpp` به اینجا آمدند.
 - [x] `stb/raster.hpp` + `src/draw/raster.cpp`: `rasterize_fill`/`rasterize_stroke` (span ها)، `fill`/`stroke` روی `image`،
       `fill_rule`، `stroke_style`، `draw_options`، `span_sink`.
-- [x] `src/draw/raster/`: `fixed` (ریاضی ثابت‌نقطه)، `outline`، `gray_raster` (پورت ftgrays)، `stroker` (پورت ftstroke)، `dash`.
-- [x] `canvas::add_path` (`path_item`).
-- [x] پایتون: `Matrix`, `Path`, `Image.fill_path/stroke_path`, `Path.fill_mask/stroke_mask`, `Canvas.add_path`/`CanvasPath`.
+- [x] `src/draw/raster/`: `fixed` (ریاضی ثابت‌نقطه)، `fixed_outline`، `gray_raster` (پورت ftgrays)، `stroker` (پورت ftstroke)، `dash`.
+- [x] `canvas::add_outline` (`outline_item`).
+- [x] پایتون: `Matrix`, `Outline`, `Image.fill_outline/stroke_outline`, `Outline.fill_mask/stroke_mask`, `Canvas.add_outline`/`CanvasOutline`.
 - [x] تست دقیق در برابر plutovg (319 صحنه، `tests/cpp/test_raster_reference.cpp`)، تست رفتاری C++ و پایتون.
-- [x] `NOTICE.md` (FTL/plutovg)، `CHANGELOG.md`، `README.md`، `docs/guide.md`، مثال‌ها (`examples/cpp/paths.cpp`, `examples/python/12_vector_paths.py`).
+- [x] `NOTICE.md` (FTL/plutovg)، `CHANGELOG.md`، `README.md`، `docs/guide.md`، مثال‌ها (`examples/cpp/outlines.cpp`, `examples/python/12_vector_outlines.py`).
 - [ ] بنچمارک rasterizer (سرعت fill/stroke نسبت به plutovg و Pillow/cairo) و بهینه‌سازی در صورت لزوم.
-- [ ] بایندینگ پایتون برای `font.outline` تا `Path(font.outline(g))` مستقیم کار کند.
+- [ ] بایندینگ پایتون برای `font.outline` تا `Outline(font.outline(g))` مستقیم کار کند.
 - [ ] تأیید novasvg روی goldenهای خودش (باید با تلرانس 0 برابر باشد؛ اگر نبود اول تفاوت FMA/پرچم کامپایل را بررسی کن).

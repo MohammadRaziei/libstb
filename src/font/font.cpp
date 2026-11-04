@@ -20,7 +20,7 @@
 #endif
 
 #include "util/file.hpp"
-#include "stb/shaping.hpp"
+#include "stb/rtl.hpp"
 #include "font/shaper/text_shaper.hpp"
 #include "stb/util.hpp"
 
@@ -310,13 +310,13 @@ font_design_metrics font::design_metrics() const noexcept {
     return d;
 }
 
-void font::outline(std::uint32_t g, std::vector<path_command>& out) const {
+void font::outline(std::uint32_t g, std::vector<outline_command>& out) const {
     out.clear();
     if (g >= glyph_count()) return;
     const std::vector<truetype::vertex> vertices = impl_->face.outline(int(g));
     const auto at = [](int x, int y) { return point{float(x), float(y)}; };
-    const auto command = [](path_op op, point a = {}, point b = {}, point c = {}) {
-        path_command cmd;
+    const auto command = [](outline_op op, point a = {}, point b = {}, point c = {}) {
+        outline_command cmd;
         cmd.op = op, cmd.p[0] = a, cmd.p[1] = b, cmd.p[2] = c;
         return cmd;
     };
@@ -325,25 +325,25 @@ void font::outline(std::uint32_t g, std::vector<path_command>& out) const {
     for (const truetype::vertex& v : vertices) {
         switch (v.type) {
             case truetype::vertex::move:
-                if (open) out.push_back(command(path_op::close));
-                out.push_back(command(path_op::move_to, at(v.x, v.y)));
+                if (open) out.push_back(command(outline_op::close));
+                out.push_back(command(outline_op::move_to, at(v.x, v.y)));
                 open = true;
                 break;
-            case truetype::vertex::line: out.push_back(command(path_op::line_to, at(v.x, v.y))); break;
+            case truetype::vertex::line: out.push_back(command(outline_op::line_to, at(v.x, v.y))); break;
             case truetype::vertex::curve:
-                out.push_back(command(path_op::quad_to, at(v.cx, v.cy), at(v.x, v.y)));
+                out.push_back(command(outline_op::quad_to, at(v.cx, v.cy), at(v.x, v.y)));
                 break;
             case truetype::vertex::cubic:
-                out.push_back(command(path_op::cubic_to, at(v.cx, v.cy), at(v.cx1, v.cy1), at(v.x, v.y)));
+                out.push_back(command(outline_op::cubic_to, at(v.cx, v.cy), at(v.cx1, v.cy1), at(v.x, v.y)));
                 break;
             default: break;
         }
     }
-    if (open) out.push_back(command(path_op::close));
+    if (open) out.push_back(command(outline_op::close));
 }
 
-std::vector<path_command> font::outline(std::uint32_t g) const {
-    std::vector<path_command> out;
+std::vector<outline_command> font::outline(std::uint32_t g) const {
+    std::vector<outline_command> out;
     outline(g, out);
     return out;
 }

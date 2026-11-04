@@ -1,6 +1,6 @@
 #pragma once
 
-#include "draw/raster/outline.hpp"
+#include "draw/raster/fixed_outline.hpp"
 #include "stb/raster.hpp"
 
 namespace stb::detail {
@@ -13,6 +13,6 @@ namespace stb::detail {
 //
 // `o` is in 26.6 fixed point and in pixel space (y down). Only what falls inside `clip` is computed
 // and reported; spans go to `sink` in batches, top to bottom, left to right.
-void rasterize_outline(const outline& o, bool even_odd, const clip_rect& clip, span_sink sink);
+void rasterize_outline(const fixed_outline& o, bool even_odd, const clip_rect& clip, span_sink sink);
 
 }  // namespace stb::detail

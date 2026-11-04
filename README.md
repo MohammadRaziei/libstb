@@ -45,8 +45,8 @@ img.resize(320, 240, "cubic").write("small.png")   # the format comes from the e
 - **Many formats in, four out.** Decodes PNG, JPEG, BMP, TGA, GIF and more; encodes PNG, JPEG,
   BMP and TGA.
 - **Editing, not just I/O.** Crop, pad, flips, rotation, thumbnail, channel conversion, alpha
-  blend modes, fill, masks, stacking, EXIF orientation, vector paths (anti-aliased fill and stroke with caps,
-  joins and dashes) and a canvas for text, shapes and paths.
+  blend modes, fill, masks, stacking, EXIF orientation, vector outlines (anti-aliased fill and stroke with caps,
+  joins and dashes) and a canvas for text, shapes and outlines.
 - **Text, including Persian and Arabic.** TrueType and CFF fonts, GSUB shaping and bidi
   reordering (no GPOS), plus a text size estimate that needs no font file.
 - **zlib as an API.** `zlib_compress` and `zlib_decompress`, with bounded output so a zip bomb
@@ -96,9 +96,9 @@ font.render("Hello", 32).bitmap.write("hello.png")
 # Persian / Arabic text works as typed: GSUB shaping and bidi reordering (no GPOS, see docs/guide.md)
 stb.estimate_text("Hello", 16)                    # text size with no font file at all
 
-# Vector paths: anti-aliased fill and stroke (width, caps, joins, dashes), no extra dependency
-heart = stb.Path().move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close()
-art = img.fill_path(heart, "#e63946").stroke_path(heart, "white", 3, join="round", dashes=[8, 4])
+# Vector outlines: anti-aliased fill and stroke (width, caps, joins, dashes), no extra dependency
+heart = stb.Outline().move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close()
+art = img.fill_outline(heart, "#e63946").stroke_outline(heart, "white", 3, join="round", dashes=[8, 4])
 mask = heart.fill_mask(100, 100)                  # the coverage as a gray Image, for your own compositing
 
 packed = stb.zlib_compress(data)                  # zlib streams: the compressor that writes PNG
@@ -162,7 +162,7 @@ stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::col
 stb::text_bitmap t = f.render("Hello", 32);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file needed
 
-stb::path heart;                                          // <stb/path.hpp>, <stb/raster.hpp>
+stb::outline heart;                                          // <stb/outline.hpp>, <stb/raster.hpp>
 heart.move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close();
 stb::fill(img, heart, stb::color("#e63946"));             // anti-aliased, in place
 stb::stroke(img, heart, stb::color("white"), stb::stroke_style{3.f});   // width, caps, joins, dashes
@@ -189,7 +189,7 @@ stateful code, bounds-checked reads, no global state):
 | Area | From | Lives in |
 | :--- | :--- | :--- |
 | Decoders: PNG, JPEG, BMP, TGA, GIF, PSD, HDR, PIC, PNM, and the inflater | `stb_image` v2.30 | `src/codec/decode/` |
-| Encoders: PNG, JPEG, BMP, TGA, and the zlib compressor | `stb_image_write` v1.16 (the JPEG encoder is based on jo_jpeg) | `src/codec/` |
+| Encoders: PNG, JPEG, BMP, TGA, and the zlib compressor | `stb_image_write` v1.16 (the JPEG encoder is based on jo_jpeg) | `src/codec/encode/` |
 | Resizer, all filters | `stb_image_resize2` v2.18 | `src/image/resize/` |
 | Font file, glyph outlines (TrueType and CFF), rasterizer, atlas packer | `stb_truetype` v1.26, `stb_rect_pack` v1.01 | `src/font/truetype/` |
 

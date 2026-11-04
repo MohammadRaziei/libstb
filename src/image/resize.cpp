@@ -17,7 +17,7 @@
 #include "image/resize/api.hpp"
 #include "image/resize/config.hpp"
 #include "image/resize/srgb.hpp"
-#include "image/resize/simd.hpp"
+#include "image/resize/simd_vec.hpp"
 #include "image/resize/filters.hpp"
 #include "image/resize/coefficients.hpp"
 #include "image/resize/coders.hpp"

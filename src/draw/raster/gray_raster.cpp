@@ -47,7 +47,7 @@ struct box {
 
 class worker {
 public:
-    worker(const outline& o, bool even_odd, span_sink sink) : o_(o), even_odd_(even_odd), sink_(sink) {
+    worker(const fixed_outline& o, bool even_odd, span_sink sink) : o_(o), even_odd_(even_odd), sink_(sink) {
         batch_.reserve(span_batch);
     }
 
@@ -76,7 +76,7 @@ private:
     void sweep();
     void flush();
 
-    const outline& o_;
+    const fixed_outline& o_;
     const bool even_odd_;
     span_sink sink_;
 
@@ -711,7 +711,7 @@ void worker::run(const clip_rect& clip) {
 
 }  // namespace
 
-void rasterize_outline(const outline& o, bool even_odd, const clip_rect& clip, span_sink sink) {
+void rasterize_outline(const fixed_outline& o, bool even_odd, const clip_rect& clip, span_sink sink) {
     worker w(o, even_odd, sink);
     w.run(clip);
 }

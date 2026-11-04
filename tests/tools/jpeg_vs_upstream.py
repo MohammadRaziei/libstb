@@ -1,4 +1,4 @@
-"""Development check, NOT a test: does libstb's JPEG encoder (src/codec/jpeg.cpp) write the same
+"""Development check, NOT a test: does libstb's JPEG encoder (src/codec/encode/jpeg.cpp) write the same
 bytes as upstream stb_image_write.h v1.16?
 
 JPEG is lossy and its bytes are not a stable contract: two correct builds may differ in rare

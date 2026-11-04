@@ -1,6 +1,6 @@
 #pragma once
 
-#include "draw/raster/outline.hpp"
+#include "draw/raster/fixed_outline.hpp"
 #include "stb/raster.hpp"
 
 namespace stb::detail {
@@ -12,6 +12,6 @@ namespace stb::detail {
 //   radius        half the line's width, 26.6
 //   miter_limit   16.16: how far a miter may reach, in half-widths, before it is cut to a bevel
 // Everything is fixed point. Returns an empty outline when `in` is malformed.
-outline stroke_outline(const outline& in, fixed radius, line_cap cap, line_join join, fixed miter_limit);
+fixed_outline stroke_outline(const fixed_outline& in, fixed radius, line_cap cap, line_join join, fixed miter_limit);
 
 }  // namespace stb::detail

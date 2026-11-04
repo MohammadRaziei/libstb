@@ -1,4 +1,4 @@
-"""Fuzz libstb's deflate (src/codec/deflate.cpp) directly.
+"""Fuzz libstb's deflate (src/codec/encode/deflate.cpp) directly.
 
 The PNG tests reach zlib_deflate through the PNG filters, which shape the data it
 sees. This script calls it on raw bytes instead (every quality 0..10, sizes around the

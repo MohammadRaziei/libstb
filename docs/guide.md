@@ -311,23 +311,23 @@ copied. `Image.open` takes ownership of stb's own buffer, no copy either. When
 you want an independent image, say so: `img.copy()` (also `copy.copy` and
 `copy.deepcopy`).
 
-### Vector paths
+### Vector outlines
 
-A `Path` is a shape made of lines and quadratic or cubic curves, in float coordinates (x to the right, y
+An `Outline` is a shape made of lines and quadratic or cubic curves, in float coordinates (x to the right, y
 down). Build it with chained calls, then draw it on an image (every `Image` method returns a copy) or on a
 `Canvas`:
 
 ```python
-p = stb.Path().move_to(10, 10).line_to(90, 10).quad_to(120, 50, 90, 90).close()
+p = stb.Outline().move_to(10, 10).line_to(90, 10).quad_to(120, 50, 90, 90).close()
 p.add_rounded_rect(20, 20, 60, 40, 8)           # whole shapes: add_rect, add_rounded_rect, add_ellipse, add_circle
-p.add_path(other, stb.Matrix.translation(200, 0))
+p.add_outline(other, stb.Matrix.translation(200, 0))
 
-img.fill_path(p, "#09f", rule="even_odd")        # rule: "non_zero" (default) or "even_odd"
-img.stroke_path(p, "white", 3, cap="round", join="bevel", miter_limit=4, dashes=[8, 4], dash_offset=2)
-img.fill_path(p, (255, 0, 0, 128), matrix=stb.Matrix().translate(40, 40).rotate(0.3), blend="multiply", opacity=0.8)
+img.fill_outline(p, "#09f", rule="even_odd")        # rule: "non_zero" (default) or "even_odd"
+img.stroke_outline(p, "white", 3, cap="round", join="bevel", miter_limit=4, dashes=[8, 4], dash_offset=2)
+img.fill_outline(p, (255, 0, 0, 128), matrix=stb.Matrix().translate(40, 40).rotate(0.3), blend="multiply", opacity=0.8)
 
-c = stb.Canvas(img)                              # or several paths on one copy, with texts and shapes
-c.add_path(p).fill("#09f").stroke(3, "white").dash([8, 4]).opacity(0.9)
+c = stb.Canvas(img)                              # or several outlines on one copy, with texts and shapes
+c.add_outline(p).fill("#09f").stroke(3, "white").dash([8, 4]).opacity(0.9)
 mask = p.fill_mask(img.width, img.height)        # the coverage as a gray Image, for your own colours or gradients
 ```
 
@@ -336,12 +336,12 @@ What to know:
 - Pixel (0, 0) covers [0, 1) x [0, 1): a coordinate is the corner of a pixel.
 - `Matrix` follows the SVG convention (`x' = a*x + c*y + e`); `translate`, `scale`, `rotate` and `shear` apply
   to a point first, like the SVG `transform` attribute, and chain.
-- A stroke is centred on the line and its width is in path units, scaled by the matrix (the mean of the two
-  axes). Dashes are cut in path units before the matrix. The outline is computed in pixels at 1/64 pixel
-  precision, so tiny paths (a few pixels across in path units) should be scaled up with `matrix=` rather than
+- A stroke is centred on the line and its width is in outline units, scaled by the matrix (the mean of the two
+  axes). Dashes are cut in outline units before the matrix. The geometry is computed in pixels at 1/64 pixel
+  precision, so tiny outlines (a few pixels across in outline units) should be scaled up with `matrix=` rather than
   drawn at their own size.
 - `dashes` alternate "on" and "off" lengths; an odd count repeats the list once more with on and off swapped.
-  A negative entry, or a sum of 0, gives a solid line. `Path.dashed` gives the same cut as a new path.
+  A negative entry, or a sum of 0, gives a solid line. `Outline.dashed` gives the same cut as a new outline.
 - NaN or infinite coordinates draw nothing; coordinates beyond 1,000,000 are limited to that.
 - The rasterizer is a port of the FreeType smooth rasterizer and stroker: the pixels are the same on every
   platform, and are tested against plutovg (see `NOTICE.md` and `tests/tools/raster_reference/`).
@@ -438,7 +438,7 @@ stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file: fixed sans / serif / mono tables
 ```
 
-**Glyph outlines (vector rendering).** `font` also gives the outline of any glyph as path commands, in
+**Glyph outlines (vector rendering).** `font` also gives the outline of any glyph as outline commands, in
 font units, so a vector renderer can draw text without rasterising it first. The glyph indices are the
 font's own, the ones `shape_glyphs` returns; an index past `glyph_count()` is an empty glyph, not an
 error. TrueType outlines come as `quad_to`, CFF ones as `cubic_to` (they are never converted), every
@@ -447,20 +447,20 @@ contour is `move_to ... close`, and `y` points up like the font.
 ```cpp
 const stb::font_design_metrics dm = f.design_metrics();      // units_per_em, ascent, descent, line_gap, bbox
 const float scale = font_size / float(dm.units_per_em);       // font units -> output units
-std::vector<stb::path_command> cmds;                          // reused: outline() clears it, keeps its capacity
+std::vector<stb::outline_command> cmds;                          // reused: outline() clears it, keeps its capacity
 float pen = 0;
 std::uint32_t prev = 0;
 for (char32_t cp : codepoints) {
     const std::uint32_t g = f.glyph_index(cp);                // 0 = .notdef
     if (prev) pen += f.glyph_kerning(prev, g, stb::kerning_mode::kern_table) * scale;
     f.outline(g, cmds);
-    for (const stb::path_command& c : cmds) {                 // c.p[0 .. stb::point_count(c.op) - 1] are used
+    for (const stb::outline_command& c : cmds) {                 // c.p[0 .. stb::point_count(c.op) - 1] are used
         switch (c.op) {
-            case stb::path_op::move_to:  /* c.p[0] */ break;
-            case stb::path_op::line_to:  /* c.p[0] */ break;
-            case stb::path_op::quad_to:  /* control c.p[0], end c.p[1] */ break;
-            case stb::path_op::cubic_to: /* controls c.p[0], c.p[1], end c.p[2] */ break;
-            case stb::path_op::close:    break;
+            case stb::outline_op::move_to:  /* c.p[0] */ break;
+            case stb::outline_op::line_to:  /* c.p[0] */ break;
+            case stb::outline_op::quad_to:  /* control c.p[0], end c.p[1] */ break;
+            case stb::outline_op::cubic_to: /* controls c.p[0], c.p[1], end c.p[2] */ break;
+            case stb::outline_op::close:    break;
         }
     }
     pen += f.glyph_info(g).advance * scale;                   // advance, lsb and the ink box, in font units
@@ -496,18 +496,18 @@ Runtime failures derive from
 `stb::error` (`decode_error`, `encode_error`, `limit_error`, `io_error`);
 programmer errors throw `std::invalid_argument`.
 
-### Vector paths
+### Vector outlines
 
-`<stb/path.hpp>` has `stb::matrix` and `stb::path`; `<stb/raster.hpp>` draws them:
+`<stb/outline.hpp>` has `stb::matrix` and `stb::outline`; `<stb/raster.hpp>` draws them:
 
 ```cpp
-stb::path p;
+stb::outline p;
 p.move_to(10, 10).line_to(90, 10).quad_to(120, 50, 90, 90).close();
 p.add_rounded_rect(20, 20, 60, 40, 8);                       // add_rect, add_ellipse, add_circle
 p.add_commands(font.outline(glyph), stb::matrix::translation(10, 40));   // a glyph outline goes straight in
 
 stb::fill(img, p, stb::color("#09f"), stb::fill_rule::even_odd);
-stb::stroke_style st{3.f};                                   // width in path units
+stb::stroke_style st{3.f};                                   // width in outline units
 st.cap = stb::line_cap::round; st.join = stb::line_join::bevel; st.dashes = {8, 4};
 stb::draw_options o;                                         // matrix, blend mode, opacity
 o.transform = stb::matrix().translate(40, 40).rotate(0.3f);
@@ -518,12 +518,12 @@ stb::rasterize_fill(p, stb::fill_rule::non_zero, {}, stb::clip_rect{0, 0, img.wi
                     [&](stb::span_view spans) { for (const stb::span& s : spans) { /* ... */ } });
 
 stb::canvas c(img);
-c.add_path(p).fill("#09f").stroke(3, "white").dash({8, 4});  // with texts and shapes, drawn in order
+c.add_outline(p).fill("#09f").stroke(3, "white").dash({8, 4});  // with texts and shapes, drawn in order
 ```
 
-`fill` and `stroke` blend through `image::blend` (a layer the size of the path's box), so the blend modes and
+`fill` and `stroke` blend through `image::blend` (a layer the size of the outline's box), so the blend modes and
 opacity work as everywhere else. The coordinate, matrix, dash and precision rules are the ones listed
-under "Vector paths" in the Python section above. The geometry is fixed-point (`src/draw/raster/`), so there is
+under "Vector outlines" in the Python section above. The geometry is fixed-point (`src/draw/raster/`), so there is
 no platform-dependent rounding.
 
 Or `cmake --install build` and `find_package(libstb)` as usual.
@@ -532,15 +532,15 @@ Or `cmake --install build` and `find_package(libstb)` as usual.
 
 ```
 include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/stb/*.hpp           public API (error, util, color, image, path, raster, font, shaping, draw, zlib); never includes stb
+include/stb/*.hpp           public API (error, util, color, image, outline, raster, font, rtl, draw, zlib); never includes stb
 src/util/                   file I/O helpers, UTF-8
 src/image/                  image, editing ops, resize, EXIF, SIMD kernels and their dispatch
-src/codec/                  every format: decode/ (one file per format, from stb_image), PNG / JPEG / BMP / TGA
-                            encoders, deflate
+src/codec/                  every format: decode/ (one file per format, from stb_image), encode/ (PNG / JPEG / BMP /
+                            TGA encoders, deflate)
 src/zlib/                   the public zlib API (on top of src/codec)
 src/font/                   fonts, text rendering, atlases; truetype/ (font file, CFF, rasterizer, packer) and
                             shaper/ (arabic, bidi, gsub, otl)
-src/draw/                   shapes, colours, paths; raster/ holds the scan converter, stroker and fixed-point math
+src/draw/                   shapes, colours, outlines; raster/ holds the scan converter, stroker and fixed-point math
 src/image/resize/           the resizer engine, split by topic from stb_image_resize2 (see its README)
 src/bindings/python/        nanobind module (bind_*.cpp, one per area) + the `libstb` Python package
 cmake/                      DynamicVersion, Startup, Optimize, package config

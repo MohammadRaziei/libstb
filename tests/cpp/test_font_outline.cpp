@@ -19,8 +19,8 @@
 
 namespace {
 
-using stb::path_command;
-using stb::path_op;
+using stb::outline_command;
+using stb::outline_op;
 using stb::point;
 
 std::string data(const char* name) { return std::string(LIBSTB_TEST_DATA_DIR) + "/" + name; }
@@ -28,8 +28,8 @@ stb::font rects() { return stb::font::open(data("libstb-test.ttf")); }
 stb::font curves() { return stb::font::open(data("libstb-curves-test.ttf")); }
 stb::font cff() { return stb::font::open(data("libstb-cff-test.otf")); }
 
-path_command cmd(path_op op, point a = {}, point b = {}, point c = {}) {
-    path_command x;
+outline_command cmd(outline_op op, point a = {}, point b = {}, point c = {}) {
+    outline_command x;
     x.op = op, x.p[0] = a, x.p[1] = b, x.p[2] = c;
     return x;
 }
@@ -129,30 +129,30 @@ UTEST(libstb_font_outline_tests, test_an_index_past_the_glyphs_is_nothing_not_an
 
 UTEST(libstb_font_outline_tests, test_a_rectangle_is_move_lines_and_close) {
     const stb::font f = rects();
-    const std::vector<path_command> want = {cmd(path_op::move_to, {100, 0}),   cmd(path_op::line_to, {100, 700}),
-                                            cmd(path_op::line_to, {500, 700}), cmd(path_op::line_to, {500, 0}),
-                                            cmd(path_op::line_to, {100, 0}),   cmd(path_op::close)};
+    const std::vector<outline_command> want = {cmd(outline_op::move_to, {100, 0}),   cmd(outline_op::line_to, {100, 700}),
+                                            cmd(outline_op::line_to, {500, 700}), cmd(outline_op::line_to, {500, 0}),
+                                            cmd(outline_op::line_to, {100, 0}),   cmd(outline_op::close)};
     ASSERT_TRUE(f.outline(f.glyph_index(U'A')) == want);
     ASSERT_TRUE(f.outline(f.glyph_index(U' ')).empty());
 }
 
 UTEST(libstb_font_outline_tests, test_a_truetype_quadratic_stays_a_quad) {
     const stb::font f = curves();
-    const std::vector<path_command> want = {cmd(path_op::move_to, {0, 0}), cmd(path_op::line_to, {1000, 0}),
-                                            cmd(path_op::quad_to, {1000, 1000}, {0, 1000}),  // control, end
-                                            cmd(path_op::line_to, {0, 0}), cmd(path_op::close)};
+    const std::vector<outline_command> want = {cmd(outline_op::move_to, {0, 0}), cmd(outline_op::line_to, {1000, 0}),
+                                            cmd(outline_op::quad_to, {1000, 1000}, {0, 1000}),  // control, end
+                                            cmd(outline_op::line_to, {0, 0}), cmd(outline_op::close)};
     ASSERT_TRUE(f.outline(f.glyph_index(U'Q')) == want);
 }
 
 UTEST(libstb_font_outline_tests, test_a_contour_of_only_off_curve_points_starts_on_an_implied_point) {
     const stb::font f = curves();
-    const std::vector<path_command> o = f.outline(f.glyph_index(U'O'));
+    const std::vector<outline_command> o = f.outline(f.glyph_index(U'O'));
     ASSERT_EQ(std::size_t(6), o.size());  // move_to, four quads, close
-    ASSERT_TRUE(o.front().op == path_op::move_to);
-    ASSERT_TRUE(o.back().op == path_op::close);
+    ASSERT_TRUE(o.front().op == outline_op::move_to);
+    ASSERT_TRUE(o.back().op == outline_op::close);
     std::set<std::pair<float, float>> controls, ends;
     for (std::size_t i = 1; i + 1 < o.size(); ++i) {
-        ASSERT_TRUE(o[i].op == path_op::quad_to);
+        ASSERT_TRUE(o[i].op == outline_op::quad_to);
         controls.insert({o[i].p[0].x, o[i].p[0].y});
         ends.insert({o[i].p[1].x, o[i].p[1].y});
     }
@@ -164,7 +164,7 @@ UTEST(libstb_font_outline_tests, test_a_contour_of_only_off_curve_points_starts_
 
 UTEST(libstb_font_outline_tests, test_a_composite_is_its_component_moved) {
     const stb::font f = curves();
-    const std::vector<path_command> a = f.outline(f.glyph_index(U'A')), v = f.outline(f.glyph_index(U'V'));
+    const std::vector<outline_command> a = f.outline(f.glyph_index(U'A')), v = f.outline(f.glyph_index(U'V'));
     ASSERT_EQ(a.size(), v.size());
     ASSERT_TRUE(!a.empty());
     for (std::size_t i = 0; i < a.size(); ++i) {
@@ -178,9 +178,9 @@ UTEST(libstb_font_outline_tests, test_a_composite_is_its_component_moved) {
 
 UTEST(libstb_font_outline_tests, test_a_cff_cubic_stays_a_cubic) {
     const stb::font f = cff();
-    const std::vector<path_command> want = {cmd(path_op::move_to, {0, 0}), cmd(path_op::line_to, {1000, 0}),
-                                            cmd(path_op::cubic_to, {1000, 500}, {500, 1000}, {0, 1000}),  // two controls, end
-                                            cmd(path_op::line_to, {0, 0}), cmd(path_op::close)};
+    const std::vector<outline_command> want = {cmd(outline_op::move_to, {0, 0}), cmd(outline_op::line_to, {1000, 0}),
+                                            cmd(outline_op::cubic_to, {1000, 500}, {500, 1000}, {0, 1000}),  // two controls, end
+                                            cmd(outline_op::line_to, {0, 0}), cmd(outline_op::close)};
     ASSERT_TRUE(f.outline(f.glyph_index(U'C')) == want);
     ASSERT_TRUE(f.outline(f.glyph_index(U' ')).empty());
     ASSERT_FALSE(f.glyph_info(f.glyph_index(U' ')).has_outline);
@@ -195,27 +195,27 @@ UTEST(libstb_font_outline_tests, test_every_outline_of_every_font_is_well_formed
     const std::vector<entry> fonts = {{rects(), true}, {curves(), true}, {cff(), false}};
     for (const entry& e : fonts)
         for (std::uint32_t g = 0; g < e.font.glyph_count(); ++g) {
-            const std::vector<path_command> o = e.font.outline(g);
+            const std::vector<outline_command> o = e.font.outline(g);
             const stb::glyph_metrics m = e.font.glyph_info(g);
             ASSERT_EQ(m.has_outline, !o.empty());
             if (o.empty()) continue;
-            ASSERT_TRUE(o.front().op == path_op::move_to);
-            ASSERT_TRUE(o.back().op == path_op::close);
+            ASSERT_TRUE(o.front().op == outline_op::move_to);
+            ASSERT_TRUE(o.back().op == outline_op::close);
             bool open = false;
-            for (const path_command& c : o) {
+            for (const outline_command& c : o) {
                 // the points a command does not use are zero
                 for (int k = stb::point_count(c.op); k < 3; ++k) ASSERT_TRUE(c.p[k] == point{});
-                if (c.op == path_op::move_to) {
+                if (c.op == outline_op::move_to) {
                     ASSERT_FALSE(open);
                     open = true;
-                } else if (c.op == path_op::close) {
+                } else if (c.op == outline_op::close) {
                     ASSERT_TRUE(open);
                     open = false;
                 } else {
                     ASSERT_TRUE(open);
                 }
-                ASSERT_TRUE(e.truetype ? c.op != path_op::cubic_to : c.op != path_op::quad_to);  // the two are never mixed up
-                if (c.op != path_op::close) {  // the point the command arrives at is inside the ink box
+                ASSERT_TRUE(e.truetype ? c.op != outline_op::cubic_to : c.op != outline_op::quad_to);  // the two are never mixed up
+                if (c.op != outline_op::close) {  // the point the command arrives at is inside the ink box
                     const point end = c.p[stb::point_count(c.op) - 1];
                     ASSERT_TRUE(end.x >= m.x_min && end.x <= m.x_max && end.y >= m.y_min && end.y <= m.y_max);
                 }
@@ -226,7 +226,7 @@ UTEST(libstb_font_outline_tests, test_every_outline_of_every_font_is_well_formed
 
 UTEST(libstb_font_outline_tests, test_the_buffer_form_reuses_the_callers_vector) {
     const stb::font f = curves();
-    std::vector<path_command> buffer(50, cmd(path_op::cubic_to, {9, 9}, {9, 9}, {9, 9}));  // old contents must not survive
+    std::vector<outline_command> buffer(50, cmd(outline_op::cubic_to, {9, 9}, {9, 9}, {9, 9}));  // old contents must not survive
     const std::size_t capacity = buffer.capacity();
     f.outline(f.glyph_index(U'Q'), buffer);
     ASSERT_TRUE(buffer == f.outline(f.glyph_index(U'Q')));
@@ -235,16 +235,16 @@ UTEST(libstb_font_outline_tests, test_the_buffer_form_reuses_the_callers_vector)
     ASSERT_TRUE(buffer.empty());
 }
 
-UTEST(libstb_font_outline_tests, test_path_command_helpers) {
-    ASSERT_EQ(1, stb::point_count(path_op::move_to));
-    ASSERT_EQ(1, stb::point_count(path_op::line_to));
-    ASSERT_EQ(2, stb::point_count(path_op::quad_to));
-    ASSERT_EQ(3, stb::point_count(path_op::cubic_to));
-    ASSERT_EQ(0, stb::point_count(path_op::close));
+UTEST(libstb_font_outline_tests, test_outline_command_helpers) {
+    ASSERT_EQ(1, stb::point_count(outline_op::move_to));
+    ASSERT_EQ(1, stb::point_count(outline_op::line_to));
+    ASSERT_EQ(2, stb::point_count(outline_op::quad_to));
+    ASSERT_EQ(3, stb::point_count(outline_op::cubic_to));
+    ASSERT_EQ(0, stb::point_count(outline_op::close));
     ASSERT_TRUE((point{1, 2} == point{1, 2}) && (point{1, 2} != point{1, 3}));
-    ASSERT_TRUE(cmd(path_op::line_to, {1, 2}) == cmd(path_op::line_to, {1, 2}));
-    ASSERT_TRUE(cmd(path_op::line_to, {1, 2}) != cmd(path_op::move_to, {1, 2}));
-    ASSERT_TRUE(cmd(path_op::quad_to, {1, 2}, {3, 4}) != cmd(path_op::quad_to, {1, 2}, {3, 5}));
+    ASSERT_TRUE(cmd(outline_op::line_to, {1, 2}) == cmd(outline_op::line_to, {1, 2}));
+    ASSERT_TRUE(cmd(outline_op::line_to, {1, 2}) != cmd(outline_op::move_to, {1, 2}));
+    ASSERT_TRUE(cmd(outline_op::quad_to, {1, 2}, {3, 4}) != cmd(outline_op::quad_to, {1, 2}, {3, 5}));
 }
 
 // ------------------------------------------------------------------------ kerning

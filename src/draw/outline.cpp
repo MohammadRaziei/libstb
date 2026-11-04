@@ -1,4 +1,4 @@
-#include "stb/path.hpp"
+#include "stb/outline.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -47,15 +47,15 @@ std::optional<matrix> matrix::inverse() const noexcept {
     return r;
 }
 
-// ------------------------------------------------------------------------------- path
+// ------------------------------------------------------------------------------- outline
 
 namespace {
 
 // The control-point factor of a quarter circle drawn with one cubic.
 constexpr float kappa = 0.55228474983079339840f;
 
-path_command make(path_op op, point a = {}, point b = {}, point c = {}) {
-    path_command cmd;
+outline_command make(outline_op op, point a = {}, point b = {}, point c = {}) {
+    outline_command cmd;
     cmd.op = op;
     cmd.p[0] = a;
     cmd.p[1] = b;
@@ -71,9 +71,9 @@ void normalise(float& x, float& y, float& w, float& h) {
 
 }  // namespace
 
-path::path(const std::vector<path_command>& commands) { add_commands(commands); }
+outline::outline(const std::vector<outline_command>& commands) { add_commands(commands); }
 
-void path::ensure_start() {
+void outline::ensure_start() {
     if (has_start_) return;
     if (commands_.empty()) {
         move_to(0, 0);
@@ -82,43 +82,43 @@ void path::ensure_start() {
     }
 }
 
-path& path::move_to(float x, float y) {
-    commands_.push_back(make(path_op::move_to, {x, y}));
+outline& outline::move_to(float x, float y) {
+    commands_.push_back(make(outline_op::move_to, {x, y}));
     start_ = current_ = {x, y};
     has_start_ = true;
     return *this;
 }
 
-path& path::line_to(float x, float y) {
+outline& outline::line_to(float x, float y) {
     ensure_start();
-    commands_.push_back(make(path_op::line_to, {x, y}));
+    commands_.push_back(make(outline_op::line_to, {x, y}));
     current_ = {x, y};
     return *this;
 }
 
-path& path::quad_to(float cx, float cy, float x, float y) {
+outline& outline::quad_to(float cx, float cy, float x, float y) {
     ensure_start();
-    commands_.push_back(make(path_op::quad_to, {cx, cy}, {x, y}));
+    commands_.push_back(make(outline_op::quad_to, {cx, cy}, {x, y}));
     current_ = {x, y};
     return *this;
 }
 
-path& path::cubic_to(float c1x, float c1y, float c2x, float c2y, float x, float y) {
+outline& outline::cubic_to(float c1x, float c1y, float c2x, float c2y, float x, float y) {
     ensure_start();
-    commands_.push_back(make(path_op::cubic_to, {c1x, c1y}, {c2x, c2y}, {x, y}));
+    commands_.push_back(make(outline_op::cubic_to, {c1x, c1y}, {c2x, c2y}, {x, y}));
     current_ = {x, y};
     return *this;
 }
 
-path& path::close() {
-    if (!has_start_) return *this;  // empty path, or already closed: nothing to close
-    commands_.push_back(make(path_op::close));
+outline& outline::close() {
+    if (!has_start_) return *this;  // empty outline, or already closed: nothing to close
+    commands_.push_back(make(outline_op::close));
     current_ = start_;
     has_start_ = false;
     return *this;
 }
 
-path& path::add_rect(float x, float y, float w, float h) {
+outline& outline::add_rect(float x, float y, float w, float h) {
     normalise(x, y, w, h);
     if (w == 0 || h == 0) return *this;
     reserve(commands_.size() + 6);
@@ -126,7 +126,7 @@ path& path::add_rect(float x, float y, float w, float h) {
     return close();
 }
 
-path& path::add_rounded_rect(float x, float y, float w, float h, float rx, float ry) {
+outline& outline::add_rounded_rect(float x, float y, float w, float h, float rx, float ry) {
     normalise(x, y, w, h);
     if (w == 0 || h == 0) return *this;
     rx = std::min(std::fabs(rx), w * 0.5f);
@@ -151,7 +151,7 @@ path& path::add_rounded_rect(float x, float y, float w, float h, float rx, float
     return close();
 }
 
-path& path::add_ellipse(float cx, float cy, float rx, float ry) {
+outline& outline::add_ellipse(float cx, float cy, float rx, float ry) {
     rx = std::fabs(rx);
     ry = std::fabs(ry);
     if (rx == 0 || ry == 0) return *this;
@@ -172,38 +172,38 @@ path& path::add_ellipse(float cx, float cy, float rx, float ry) {
     return close();
 }
 
-path& path::add_commands(const std::vector<path_command>& commands, const matrix& m) {
-    // `commands` may be our own list (add_path(*this)): work from a count, not from iterators.
+outline& outline::add_commands(const std::vector<outline_command>& commands, const matrix& m) {
+    // `commands` may be our own list (add_outline(*this)): work from a count, not from iterators.
     const bool identity = m.is_identity();
     const std::size_t n = commands.size();
     reserve(commands_.size() + n);
     for (std::size_t i = 0; i < n; ++i) {
-        path_command c = commands[i];
+        outline_command c = commands[i];
         if (!identity) {
             for (int k = 0; k < point_count(c.op); ++k) c.p[k] = m.map(c.p[k]);
         }
         switch (c.op) {
-            case path_op::move_to: move_to(c.p[0]); break;
-            case path_op::line_to: line_to(c.p[0]); break;
-            case path_op::quad_to: quad_to(c.p[0], c.p[1]); break;
-            case path_op::cubic_to: cubic_to(c.p[0], c.p[1], c.p[2]); break;
-            case path_op::close: close(); break;
+            case outline_op::move_to: move_to(c.p[0]); break;
+            case outline_op::line_to: line_to(c.p[0]); break;
+            case outline_op::quad_to: quad_to(c.p[0], c.p[1]); break;
+            case outline_op::cubic_to: cubic_to(c.p[0], c.p[1], c.p[2]); break;
+            case outline_op::close: close(); break;
         }
     }
     return *this;
 }
 
-path& path::add_path(const path& other, const matrix& m) {
+outline& outline::add_outline(const outline& other, const matrix& m) {
     if (&other == this) {
-        const std::vector<path_command> copy = commands_;
+        const std::vector<outline_command> copy = commands_;
         return add_commands(copy, m);
     }
     return add_commands(other.commands_, m);
 }
 
-path& path::transform(const matrix& m) {
+outline& outline::transform(const matrix& m) {
     if (m.is_identity()) return *this;
-    for (path_command& c : commands_) {
+    for (outline_command& c : commands_) {
         for (int k = 0; k < point_count(c.op); ++k) c.p[k] = m.map(c.p[k]);
     }
     start_ = m.map(start_);
@@ -211,34 +211,34 @@ path& path::transform(const matrix& m) {
     return *this;
 }
 
-path path::dashed(const std::vector<float>& dashes, float offset) const {
+outline outline::dashed(const std::vector<float>& dashes, float offset) const {
     if (!detail::valid_dashes(dashes.data(), dashes.size()) || !std::isfinite(offset)) return *this;
-    return path(detail::dash_commands(detail::to_cubic_commands(*this), dashes.data(), dashes.size(), offset));
+    return outline(detail::dash_commands(detail::to_cubic_commands(*this), dashes.data(), dashes.size(), offset));
 }
 
-path path::transformed(const matrix& m) const {
-    path r = *this;
+outline outline::transformed(const matrix& m) const {
+    outline r = *this;
     return r.transform(m);
 }
 
-void path::clear() noexcept {
+void outline::clear() noexcept {
     commands_.clear();
     start_ = current_ = {};
     has_start_ = false;
 }
 
-std::optional<point> path::current_point() const noexcept {
+std::optional<point> outline::current_point() const noexcept {
     if (commands_.empty()) return std::nullopt;
     return current_;
 }
 
-std::optional<path_bounds> path::bounds() const noexcept {
-    std::optional<path_bounds> r;
-    for (const path_command& c : commands_) {
+std::optional<outline_bounds> outline::bounds() const noexcept {
+    std::optional<outline_bounds> r;
+    for (const outline_command& c : commands_) {
         for (int k = 0; k < point_count(c.op); ++k) {
             const point p = c.p[k];
             if (!r) {
-                r = path_bounds{p.x, p.y, p.x, p.y};
+                r = outline_bounds{p.x, p.y, p.x, p.y};
                 continue;
             }
             r->x0 = std::min(r->x0, p.x);
