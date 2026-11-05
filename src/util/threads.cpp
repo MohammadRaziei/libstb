@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "stb/logging.hpp"
+#include "util/log.hpp"
 #include "stb/util.hpp"
 #include "util/parallel.hpp"
 
@@ -132,6 +133,7 @@ int thread_count() noexcept {
 bool set_threads(int n) noexcept {
     if (n < 0) return false;
     detail::setting().store(n, std::memory_order_relaxed);
+    detail::loggers::threads().debug("thread ceiling set to %d for the process (0 is auto)", n);
     return true;
 }
 

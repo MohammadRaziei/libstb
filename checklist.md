@@ -201,3 +201,4 @@
 - [x] `tests/cpp/test_logging.cpp` (19 تست: سطح‌ها، سلسله‌مراتب، propagate، handlerها، formatter، چند thread)، `docs/guide.md`، `CHANGELOG.md`.
 - [x] پل پایتون (`bind_logging.cpp`): `callback_handler` روی `libstb` که به `logging.getLogger(name).log(levelno, message)` می‌رود؛ با `import libstb` خودکار نصب می‌شود؛ تنها تابع عمومی `libstb.logging_bridge(enabled)`؛ `_log` خصوصی برای تست؛ `tests/python/test_logging.py`.
 - [ ] handlerهای پلتفرمی از aixlog (`syslog`، `android`، `debugstring`، `unified`، `eventlog`) و ثبتشان در `NOTICE.md`.
+- [x] logging خود کتابخانه (`src/util/log.hpp` و فراخوانی‌ها)، `tests/cpp/test_library_logging.cpp`، `docs/adr/0001..0003`.

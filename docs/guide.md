@@ -529,7 +529,18 @@ no platform-dependent rounding.
 ### Logging
 
 `<stb/logging.hpp>` is a small copy of Python's `logging`: the same names, the same level numbers, the same tree of
-dotted logger names. libstb itself logs through `libstb` and `libstb.<part>` (`libstb.simd`, `libstb.threads`).
+dotted logger names. libstb itself logs through `libstb` and `libstb.<part>` (`libstb.decode`, `libstb.encode`, `libstb.resize`,
+`libstb.zlib`, `libstb.font`, `libstb.raster`, `libstb.simd`, `libstb.threads`).
+
+**What libstb logs.** Nothing at the default level, unless it changed something you asked for. At `debug` it says
+what it decided or did, one record per call: the backend chosen, the threads a resize will use, the size of a
+decode, an encode or a zlib call, the glyphs a font lacks. At `warning` it says when it deviated from the request:
+an ignored `LIBSTB_SIMD` or `LIBSTB_THREADS`, a NaN or infinite coordinate (the outline is ignored), a coordinate
+moved to the 1,000,000 limit, a dash pattern it cannot use (the line is solid), a thread it could not start. A failure
+is an exception and never also a record. The rules and the full table are in
+[ADR-0003](adr/0003-logging-policy.md). A disabled `debug` call costs one level check; with the Python bridge on
+and Python's level above `debug`, a logged call costs a few microseconds (see [ADR-0002](adr/0002-python-logging-bridge.md)),
+which only matters for tiny images in a hot loop: `libstb.logging_bridge(False)` removes it.
 
 ```cpp
 auto& lg = stb::logging::get_logger("libstb.simd");           // logging.getLogger("libstb.simd")
@@ -571,7 +582,7 @@ Or `cmake --install build` and `find_package(libstb)` as usual.
 
 libstb is not a wrapper around stb. Its image decoders, encoders, resizer and font reader are
 **derived from stb's algorithms and rewritten as libstb's own code**; everything around them is
-new. Each derived file says so in its header, and [`NOTICE.md`](NOTICE.md) has the lineage and
+new. Each derived file says so in its header, and [`NOTICE.md`](../NOTICE.md) has the lineage and
 the license (stb is public domain or MIT; libstb uses the MIT option).
 
 **Descended from stb** (same algorithms, reorganised: one file per format or topic, classes for
@@ -613,7 +624,7 @@ stateful code, bounds-checked reads, no global state):
   with upstream.
 
 Performance numbers against Pillow and OpenCV, including where libstb is slower (JPEG encoding
-is one), are in [`benchmarks/`](benchmarks/README.md). They depend on the machine, so run them
+is one), are in [`benchmarks/`](../benchmarks/README.md). They depend on the machine, so run them
 on yours.
 
 ## Layout (mirrors httpp / ctoon)

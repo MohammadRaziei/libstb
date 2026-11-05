@@ -54,7 +54,16 @@
    (فقط `Py_IsInitialized`). **نکته:** اگر روزی thread کارگر libstb log کند، callback روی GIL منتظر می‌ماند و ممکن است با thread صدازننده‌ای که
    GIL را نگه داشته و join می‌کند deadlock شود؛ الان فقط دو هشدار env روی thread صدازننده log می‌شوند.
 
-پیشنهاد commit: چهار commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون).
+5. **logging خود کتابخانه + ADRها** (تمام شد، commit نشد): `src/util/log.hpp` (loggerهای `libstb.decode|encode|resize|zlib|font|raster|simd|threads`)
+   و فراخوانی‌ها در `image.cpp` (decode/encode)، `resize.cpp`، `simd.cpp`، `threads.cpp`، `zlib.cpp`، `font.cpp` (glyph گمشده)،
+   `draw/raster.cpp` و `draw/raster/dash.cpp` (هشدارها). سیاست در `docs/adr/0003-logging-policy.md`: DEBUG یعنی «چه تصمیمی گرفتم»،
+   WARNING فقط وقتی از درخواست منحرف شدم، بدون INFO/ERROR، هیچ log از thread کارگر `parallel.hpp` (خطر deadlock روی GIL)،
+   خطا فقط exception است. هزینه‌ی پل: حدود 2.5 تا 5 میکروثانیه به‌ازای هر فراخوانی log‌شده (اندازه‌گیری در ADR-0002). تست‌ها:
+   `tests/cpp/test_library_logging.cpp` (6) و سه تست در `tests/python/test_logging.py`. ADRها: `docs/adr/0001..0003`
+   (0001 بعد از کد و از روی طراحی موجود نوشته شد). نکته: `to_cubic_commands` مختصات NaN را پیش از `make_outline` دور می‌ریزد، پس
+   هشدار مختصات ورودی آنجاست و هشدار `make_outline` فقط برای ماتریس NaN است. باگ MSVC در `test_logging.cpp` (`each` در lambda) هم اصلاح شد.
+
+پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها).
 
 ## کارهای باز (به ترتیب پیشنهادی)
 

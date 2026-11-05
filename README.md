@@ -399,7 +399,9 @@ You do not need to set any of this: the fastest SIMD backend is picked at run ti
 are used only where the work pays for them. When you do want control (a library, a thread pool,
 a diagnosis), a scope changes one thread only, and the previous setting comes back on exit.
 libstb's messages go to Python's `logging` (the logger is `libstb`, with children such as
-`libstb.simd`); in C++ you add handlers to `stb::logging::get_logger("libstb")`.
+`libstb.simd`); in C++ you add handlers to `stb::logging::get_logger("libstb")`. libstb is silent
+unless asked: at `debug` it says what it decided on each call (the backend, the threads, the sizes),
+and at `warning` only when it changed something you asked for.
 
 **Python**
 
@@ -500,6 +502,7 @@ on yours.
   Pillow, errors, logging, design and source layout).
 - `docs/`: the Sphinx (Python) and Doxygen (C++) sources of the documentation site.
 - [`examples/`](examples): runnable Python scripts, C++ programs and notebooks.
+- [`docs/adr/`](docs/adr): why logging works the way it does (three short decision records).
 - [`CHANGELOG.md`](CHANGELOG.md) and [`NOTICE.md`](NOTICE.md).
 
 ## Build and test

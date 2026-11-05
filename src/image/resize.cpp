@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "util/log.hpp"
 #include "util/parallel.hpp"
 
 // The resizer engine, split by topic into image/resize/ (see the README there). STATIC gives every
@@ -152,6 +153,8 @@ image resizer::resize(const image& src, int width, int height) const {
     const double larger_side = std::max(double(src.width()) * double(src.height()), double(width) * double(height));
     const double ns_per_sample = options_.filter == resize_filter::point ? 0.3 : 1.0;
     const std::size_t threads = detail::threads_for(larger_side * double(src.channels()) * ns_per_sample);
+    detail::loggers::resize().debug("resize %dx%d -> %dx%d, %d channel(s): %zu thread(s) (ceiling %d)", src.width(), src.height(),
+                                    width, height, src.channels(), threads, stb::thread_count());
     if (threads <= 1) {
         if (!stbir_resize_extended(&r)) throw error("resize failed (out of memory?)");
         return out;

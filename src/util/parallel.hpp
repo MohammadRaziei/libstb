@@ -30,6 +30,7 @@
 
 #include "stb/export.hpp"
 #include "stb/threads.hpp"
+#include "util/log.hpp"
 
 namespace stb {
 namespace detail {
@@ -79,7 +80,10 @@ void run_parallel(std::size_t k, Fn&& fn) {
                 }
             });
     } catch (...) {
-        // no more threads: the pieces without one are run on this thread, below
+        // no more threads: the pieces without one are run on this thread, below (and said once, from
+        // here: never from a worker, see util/log.hpp)
+        loggers::threads().warning("could not start %zu of %zu thread(s); those pieces run on the calling thread",
+                                   k - spawned, k - 1);
     }
     note_parallel_run();
     const auto run_here = [&](std::size_t i) {

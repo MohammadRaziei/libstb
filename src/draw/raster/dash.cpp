@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include "util/log.hpp"
 
 namespace stb::detail {
 
@@ -162,9 +163,14 @@ std::vector<outline_command> to_cubic_commands(const outline& p) {
     out.reserve(p.size());
 
     point start, cur;
+    bool clamped = false;
     for (const outline_command& c : p) {
         for (int k = 0; k < point_count(c.op); ++k) {
-            if (!finite(c.p[k])) return {};
+            if (!finite(c.p[k])) {
+                loggers::raster().warning("a coordinate is NaN or infinite: the outline is ignored");
+                return {};
+            }
+            if (std::fabs(c.p[k].x) > coord_limit || std::fabs(c.p[k].y) > coord_limit) clamped = true;
         }
         switch (c.op) {
             case outline_op::move_to:
@@ -196,6 +202,7 @@ std::vector<outline_command> to_cubic_commands(const outline& p) {
                 break;
         }
     }
+    if (clamped) loggers::raster().warning("a coordinate is beyond +-%g: it is moved to that limit", double(coord_limit));
     return out;
 }
 

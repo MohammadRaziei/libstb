@@ -361,10 +361,10 @@ UTEST(libstb_logging_tests, test_many_threads_log_without_losing_or_interleaving
         ++counted;
         if (r.message.substr(0, 4) != "msg ") whole = false;
     }));
-    constexpr int threads = 4, each = 250;
+    const int threads = 4, each = 250;
     std::vector<std::thread> pool;
     for (int t = 0; t < threads; ++t)
-        pool.emplace_back([&log, t] {
+        pool.emplace_back([&log, t, each] {  // `each` by value: MSVC does not see a constexpr as always usable
             for (int i = 0; i < each; ++i) log.info("msg %d %d", t, i);
         });
     for (std::thread& th : pool) th.join();

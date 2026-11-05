@@ -7,6 +7,7 @@
 #include "draw/raster/dash.hpp"
 #include "draw/raster/gray_raster.hpp"
 #include "draw/raster/stroker.hpp"
+#include "util/log.hpp"
 
 namespace stb {
 
@@ -29,13 +30,14 @@ fixed_outline make_outline(const std::vector<outline_command>& commands, const m
     o.points.reserve(commands.size() * 2);
     o.tags.reserve(commands.size() * 2);
 
-    bool ok = true;
+    bool ok = true, clamped = false;
     auto map = [&](point p) {
         p = m.map(p);
         if (!std::isfinite(p.x) || !std::isfinite(p.y)) {
             ok = false;
             return fvec{};
         }
+        if (std::fabs(p.x) > limit || std::fabs(p.y) > limit) clamped = true;
         p.x = std::max(-limit, std::min(limit, p.x));
         p.y = std::max(-limit, std::min(limit, p.y));
         return to_fixed(p);
@@ -56,7 +58,11 @@ fixed_outline make_outline(const std::vector<outline_command>& commands, const m
         }
     }
     o.end();
-    if (!ok) return {};
+    if (!ok) {
+        detail::loggers::raster().warning("the transformation gives a NaN or infinite coordinate: nothing is drawn");
+        return {};
+    }
+    if (clamped) detail::loggers::raster().warning("the transformation moves a coordinate beyond +-%g pixels: it is moved to that limit", double(limit));
     return o;
 }
 
@@ -69,13 +75,18 @@ void rasterize_fill(const outline& p, fill_rule rule, const matrix& m, const cli
 }
 
 void rasterize_stroke(const outline& p, const stroke_style& style, const matrix& m, const clip_rect& clip, span_sink sink) {
-    if (p.empty() || !(style.width > 0.f) || !std::isfinite(style.width)) return;
+    if (p.empty() || !(style.width > 0.f) || !std::isfinite(style.width)) {
+        if (!p.empty() && !std::isfinite(style.width)) detail::loggers::raster().warning("the stroke width is NaN or infinite: nothing is drawn");
+        return;
+    }
 
     std::vector<outline_command> cubics = detail::to_cubic_commands(p);
 
     // Dashes are cut in the outline's own space, before the matrix.
     if (detail::valid_dashes(style.dashes.data(), style.dashes.size()) && std::isfinite(style.dash_offset)) {
         cubics = detail::dash_commands(cubics, style.dashes.data(), style.dashes.size(), style.dash_offset);
+    } else if (!style.dashes.empty()) {
+        detail::loggers::raster().warning("the dash pattern is not usable (a negative or non-finite length, a zero sum, or a non-finite offset): the line is solid");
     }
 
     const fixed_outline center = make_outline(cubics, m);
@@ -91,6 +102,7 @@ void rasterize_stroke(const outline& p, const stroke_style& style, const matrix&
     const fixed radius = fixed(width * 0.5 * 64.0);
     if (radius <= 0) return;
 
+    if (!std::isfinite(style.miter_limit)) detail::loggers::raster().warning("the miter limit is NaN or infinite: 1 is used");
     const float miter = std::isfinite(style.miter_limit) ? style.miter_limit : 1.f;
     const fixed miter_limit = fixed(std::min(miter, 1.0e6f) * 65536.f);
 

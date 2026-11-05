@@ -25,6 +25,7 @@
 #include "stb/util.hpp"
 
 #include "font/truetype/truetype.hpp"
+#include "util/log.hpp"
 
 namespace stb {
 
@@ -403,6 +404,13 @@ text_size font::measure(std::string_view utf8, float px) const {
 text_bitmap font::render(std::string_view utf8, float px, std::size_t max_bytes) const {
     check_px(px);
     const layout L = do_layout(*impl_, utf8_decode(utf8), px);
+    if (detail::loggers::font().is_enabled_for(logging::level::debug)) {
+        std::size_t missing = 0;
+        for (const auto& it : L.items) missing += it.gid == 0 ? 1 : 0;
+        if (missing != 0)
+            detail::loggers::font().debug("render: %zu of %zu glyph(s) are not in the font (its .notdef glyph is drawn)", missing,
+                                          L.items.size());
+    }
 
     // Rasterise each distinct character once.
     std::unordered_map<int, glyph> cache;

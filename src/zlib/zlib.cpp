@@ -11,6 +11,7 @@
 
 #include "stb/error.hpp"
 #include "codec/codec.hpp"
+#include "util/log.hpp"
 
 namespace stb {
 namespace {
@@ -28,12 +29,18 @@ std::vector<std::uint8_t> zlib_compress(const void* data, std::size_t size, int 
     if (level < -1 || level > 9) throw std::invalid_argument("level must be in -1..9");
     if (level == -1) level = default_zlib_level;
     check_args(data, size);
-    if (level == 0) return codec::zlib_store(static_cast<const std::uint8_t*>(data), size);
-    if (size == 0) return {0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01};  // what zlib gives for ""
-
-    // The compressor's effort table has 11 entries: 1..8 map to themselves and 9 to its strongest (10).
-    const int effort = level == 9 ? 10 : level;
-    return codec::zlib_deflate(static_cast<const std::uint8_t*>(data), size, effort);
+    std::vector<std::uint8_t> out;
+    if (level == 0) {
+        out = codec::zlib_store(static_cast<const std::uint8_t*>(data), size);
+    } else if (size == 0) {
+        out = {0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01};  // what zlib gives for ""
+    } else {
+        // The compressor's effort table has 11 entries: 1..8 map to themselves and 9 to its strongest (10).
+        const int effort = level == 9 ? 10 : level;
+        out = codec::zlib_deflate(static_cast<const std::uint8_t*>(data), size, effort);
+    }
+    detail::loggers::zlib().debug("compressed %zu -> %zu bytes (level %d)", size, out.size(), level);
+    return out;
 }
 
 std::vector<std::uint8_t> zlib_compress(const std::vector<std::uint8_t>& data, int level) {
@@ -74,6 +81,7 @@ std::vector<std::uint8_t> zlib_decompress(const void* data, std::size_t size, st
                                          : 0;
     if (size < 6 || want != codec::adler32(out.data.data(), out.data.size()))
         throw decode_error("zlib: checksum mismatch, or the stream is truncated or followed by other data");
+    detail::loggers::zlib().debug("decompressed %zu -> %zu bytes (max_bytes %zu)", size, out.data.size(), limit);
     return std::move(out.data);
 }
 

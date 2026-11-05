@@ -8,6 +8,13 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- libstb says what it did and why, through its own loggers: `libstb.decode`, `libstb.encode`, `libstb.resize`,
+  `libstb.zlib`, `libstb.font`, `libstb.raster`, `libstb.simd`, `libstb.threads`. At `debug`: one record per call (the
+  SIMD backend, the threads a resize uses, the size of a decode, encode or zlib call, glyphs a font lacks). At `warning`:
+  only when libstb changed what was asked (NaN or infinite coordinates, a coordinate moved to the limit, an unusable dash
+  pattern, a NaN stroke width or miter limit, a thread that could not be started). Silent at the default level, and a
+  failure is an exception, never also a record. See `docs/adr/0003-logging-policy.md`.
+- `docs/adr/`: architecture decision records for the logging module, its Python bridge and the logging policy.
 - Python: libstb's log records go to Python's `logging`. `import libstb` installs a bridge, so `logging.getLogger("libstb")`
   and its children (`libstb.simd`, `libstb.threads`) work like any other logger (same level numbers, same hierarchy; the
   level and handlers are yours to set). `libstb.logging_bridge(False)` removes it and libstb returns to its own output

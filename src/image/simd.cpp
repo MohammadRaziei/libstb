@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "stb/logging.hpp"
+#include "util/log.hpp"
 #include "stb/util.hpp"
 #include "stb/image.hpp"
 
@@ -84,8 +85,15 @@ std::size_t initial() {
     return 0;
 }
 
+// The first choice, said once (at DEBUG) so that a diagnosis can tell which backend ran.
+std::size_t initial_logged() {
+    const std::size_t i = initial();
+    detail::loggers::simd().debug("backend %s selected (%zu available)", entries()[i].name, entries().size());
+    return i;
+}
+
 std::atomic<std::size_t>& current() {
-    static std::atomic<std::size_t> c{initial()};
+    static std::atomic<std::size_t> c{initial_logged()};
     return c;
 }
 
@@ -124,6 +132,7 @@ bool set_simd(std::string_view name) noexcept {
     const std::size_t i = find(name);
     if (i == npos) return false;
     current().store(i, std::memory_order_relaxed);
+    detail::loggers::simd().debug("backend set to %s for the process", entries()[i].name);
     return true;
 }
 

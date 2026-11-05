@@ -110,3 +110,39 @@ def test_libstb_log_is_kept_when_set():
         "libstb_py._log('libstb', 40, 'error line')",
         LIBSTB_LOG="error")
     assert "error line" in out.stderr and "info line" not in out.stderr
+
+
+def test_the_library_logs_its_calls_at_debug_under_its_areas(caplog):
+    import numpy as np
+
+    img = stb.Image(np.zeros((6, 8, 3), np.uint8))
+    with caplog.at_level(logging.DEBUG, logger="libstb"):
+        png = img.to_png()
+        back = stb.Image.open(png)
+        back.resize(4, 3)
+        stb.zlib_decompress(stb.zlib_compress(png))
+    names = [r.name for r in caplog.records if r.name.startswith("libstb")]
+    for area in ("libstb.encode", "libstb.decode", "libstb.resize", "libstb.zlib"):
+        assert area in names
+    assert all(r.levelno == logging.DEBUG for r in caplog.records if r.name.startswith("libstb"))
+
+
+def test_the_library_says_nothing_at_the_default_level(caplog):
+    import numpy as np
+
+    with caplog.at_level(logging.WARNING, logger="libstb"):
+        img = stb.Image(np.zeros((6, 8, 3), np.uint8))
+        stb.Image.open(img.to_png()).resize(4, 3)
+    assert [r for r in caplog.records if r.name.startswith("libstb")] == []
+
+
+def test_a_nan_coordinate_is_one_warning(caplog):
+    import numpy as np
+
+    img = stb.Image(np.zeros((6, 8, 3), np.uint8))
+    nan = float("nan")
+    p = stb.Outline().move_to(nan, 0).line_to(4, 0).line_to(4, 4).close()
+    with caplog.at_level(logging.WARNING, logger="libstb"):
+        img.fill_outline(p, "white")
+    [rec] = [r for r in caplog.records if r.name == "libstb.raster"]
+    assert rec.levelno == logging.WARNING and "NaN or infinite" in rec.getMessage()
