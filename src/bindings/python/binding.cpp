@@ -29,4 +29,5 @@ NB_MODULE(libstb_py, m) {
     bind_font(m);
     bind_outline(m);
     bind_zlib(m);
+    bind_logging(m);
 }

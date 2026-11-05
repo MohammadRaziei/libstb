@@ -1,136 +1,149 @@
-# handoff.md (وضعیت پروژه برای ادامه‌ی کار در سشن بعدی)
+# handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 
-تاریخ: 2026-11-02. ریپو: mohammadraziei/libstb (از 0.9.0، کامیت `48bfda8`). این فایل untracked است
-(قبل از push حذفش کن). کارهای جدول زیر commit شده‌اند؛ تغییرات «بازنامگذاری 2026-11-04» پایین‌تر هنوز commit نشده‌اند (working tree عمداً
-dirty است؛ قبل از commit با `git status` ببین).
+تاریخ: 2026-11-04. ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
+این فایل untracked است (قبل از push حذفش کن). **تغییرات بخش «کارهای commit نشده» پایین هنوز commit نشده‌اند**
+(working tree عمداً dirty است: 55 مسیر در `git status`).
 
-## کامیت‌های این سشن (به ترتیب)
+## قاعده‌های کاربر (حتماً رعایت شود)
 
-| کامیت | چه شد |
-|---|---|
-| `0f3c5d0` | issue #1: `stb::rgba_to_premultiplied_argb` / `premultiplied_argb_to_rgba` (کرنل‌های SIMD، `src/image/kernels.hpp`، `ops.cpp`) |
-| `685f126` | threading هوشمند: `stb::thread_count / set_threads / thread_scope`، پایتون `threads(n)`، env `LIBSTB_THREADS`، `src/util/parallel.hpp`، `src/util/threads.cpp`؛ فقط `resize` ازش استفاده می‌کند |
-| `8e76e18` | `stb::sformat / vsformat / sformat_to` در `include/stb/util.hpp`؛ پیام‌های خطای دستی به آن‌ها تبدیل شدند |
-| `657ae77` | API گلیف-ایندکس `stb::font` (بخش الف درخواست novasvg) |
+- پاسخ‌ها فارسی. در پایان هر کار **کل پروژه zip شود** (نه patch/diff) و با `present_files` داده شود.
+- **em dash (U+2014) ممنوع** (در کد، متن، مستندات، کامنت). به‌جایش دونقطه، ویرگول، پرانتز یا خط تیره‌ی ساده `-`.
+- فقط با **CMake** build و تست شود، هیچ‌وقت g++ مستقیم.
+- **قبل از پیاده‌سازی هر API جدید، API پیشنهادی را توضیح بده و منتظر تأیید بمان** (این بار هم برای logging همین شد).
+- در API عمومی `std::shared_ptr` / `std::make_shared` نباید دیده شود (مالکیت را داخل شیء پنهان کن).
+- کاربر این‌ها را **نخواست**: `stb::format` ({}-style؛ `sformat` کافی است) و کلاس `stb::file::path` (`std::filesystem::path` کافی است).
+- ویندوز: `<windows.h>` ماکروهای `near`، `far`، `small`، `min`، `max` دارد؛ این‌ها را اسم تابع یا متغیر نگذار.
 
-## بازنامگذاری 2026-11-04 (commit نشده)
+## کارهای commit نشده (به ترتیب پیشنهادی commit)
 
-هدف: `path` فقط به معنی مسیر فایل بماند. همه با CMake بیلد و تست شد (C++ پاس، پایتون 1394 پاس و 4 skip).
+همه با CMake بیلد و تست شده‌اند: C++ 390 تست پاس، `ctest` کامل پاس، پایتون 1394 پاس و 4 skip (torch و uharfbuzz نصب نبود).
 
-- هندسه‌ی برداری: `stb::path` شد `stb::outline` (`include/stb/outline.hpp`، `src/draw/outline.cpp`)، همراه `outline_op`،
-  `outline_command`، `outline_item`، `canvas::add_outline`. پایتون: `Outline`، `CanvasOutline`، `Image.fill_outline` و
-  `stroke_outline`، `Canvas.add_outline`. نوع داخلی ثابت‌نقطه‌ی قبلی شد `detail::fixed_outline` (`src/draw/raster/fixed_outline.hpp`).
-  این نام‌ها فقط در بخش Unreleased بودند، پس چیزی از نسخه‌ی منتشرشده نمی‌شکند.
-- `include/stb/shaping.hpp` شد `include/stb/rtl.hpp` (و `src/font/shaping.cpp` شد `rtl.cpp`)؛ توابع همان‌اند. این **یک
-  شکست API نسبت به 0.9.0** است (فقط نام هدر؛ `stb.h` همان را include می‌کند).
-- ساختار فایل‌ها: انکودرها و deflate رفتند به `src/codec/encode/`؛ `src/font/truetype/raster.cpp` شد `glyph_raster.cpp`؛
-  `bind_raster.cpp` شد `bind_outline.cpp`؛ `src/image/resize/simd.hpp` شد `simd_vec.hpp`.
-- **عمداً دست نخورد:** `stb::shape`، `draw_shape`، `shape_item`، پایتون `CanvasShape` (API منتشرشده؛ اگر قرار است عوض شود، کاربر
-  بگوید: پیشنهاد قبلی `draw_primitive`). `include/stb/export.hpp` هم که `STB_MIN/STB_MAX` را دارد جابه‌جا نشد.
-- `CHANGELOG.md` بخش Unreleased/Changed این تغییرها را ثبت می‌کند. نام تست‌ها و مثال‌ها (`examples/cpp/outlines.cpp`،
-  `examples/python/12_vector_outlines.py`) هم عوض شدند.
+1. **بازنامگذاری** (فقط نام، بدون تغییر رفتار):
+   - هندسه‌ی برداری `stb::path` شد `stb::outline` (`include/stb/outline.hpp`، `src/draw/outline.cpp`) با `outline_op`،
+     `outline_command`، `outline_item`، `canvas::add_outline`. پایتون: `Outline`، `CanvasOutline`، `Image.fill_outline` و
+     `stroke_outline`، `Canvas.add_outline`. نوع داخلی rasterizer شد `detail::fixed_outline`
+     (`src/draw/raster/fixed_outline.hpp`). این نام‌ها فقط در Unreleased بودند.
+   - `include/stb/shaping.hpp` شد `include/stb/rtl.hpp` (و `src/font/shaping.cpp` شد `rtl.cpp`). **یک شکست API نسبت به 0.9.0**
+     (فقط نام هدر؛ `stb.h` همان را include می‌کند).
+   - ساختار فایل: انکودرها و deflate رفتند `src/codec/encode/`؛ `src/font/truetype/raster.cpp` شد `glyph_raster.cpp`؛
+     `bind_raster.cpp` شد `bind_outline.cpp`؛ `src/image/resize/simd.hpp` شد `simd_vec.hpp`.
+   - **عمداً دست نخورد:** `stb::shape`، `draw_shape`، `shape_item`، پایتون `CanvasShape` (API منتشرشده). اگر کاربر خواست عوض شود،
+     پیشنهاد قبلی `draw_primitive` بود. `include/stb/export.hpp` (دارای `STB_MIN/STB_MAX`) هم جابه‌جا نشد.
+2. **اصلاح CI ویندوز:** در `tests/cpp/test_font_outline.cpp` تابع `near` شد `close_to`؛ در `examples/cpp/tour.cpp` متغیر `small`
+   شد `tiny`. **روی CI ویندوز هنوز اجرا نشده**؛ بعد از push لاگ را بررسی کن (در لاگ قبلی فقط همان یک خطای C2062 بود؛
+   بقیه warning بودند: C4244 در `bidi.cpp`، C4996 برای `fopen`/`getenv`).
+3. **`stb::logging`** (جدید، کامل در C++): `include/stb/logging.hpp` + `src/util/logging.cpp` + `tests/cpp/test_logging.cpp` (19 تست).
+   - مدل Python `logging`: `get_logger("libstb.simd")` با سلسله‌ی نقطه‌ای، `logger` (سطح مؤثر از جدّ، `propagate`، printf-style
+     `debug/info/warning/error/critical/log/vlog` روی `sformat`)، `handler` (`stream_handler`، `file_handler`، `callback_handler`،
+     `null_handler` یا کلاس دلخواه با override کردن `emit`)، `formatter` (الگوی Python: `%(asctime)s [%(levelname)-8s] %(name)s: %(message)s`)،
+     `basic_config`. سطح‌ها همان عددهای Python (10 تا 50) و `notset`.
+   - `logger::add_handler(H)` handler را **by value** می‌گیرد و `H&` برمی‌گرداند (shared_ptr فقط داخل است)؛ `remove_handler(h)`.
+   - registry داخل `.cpp` است (نه header، چون کتابخانه shared است) و هرگز نابود نمی‌شود. logging هیچ‌وقت exception نمی‌دهد.
+   - «last resort» مثل Python: اگر هیچ handler در سلسله نباشد، warning به بالا روی stderr می‌رود به‌شکل `<logger>: <message>`.
+   - `LIBSTB_LOG=debug|info|warning|error|critical|<عدد>` سطح logger `libstb` را تنظیم می‌کند.
+   - دو هشدار قبلی stderr (`LIBSTB_SIMD`، `LIBSTB_THREADS`) حالا از `libstb.simd` و `libstb.threads` رد می‌شوند. **تغییر خروجی:** پیشوند
+     قبلی `libstb: ` شد `libstb.threads: ` / `libstb.simd: `.
+   - از aixlog (https://github.com/badaix/aixlog، v1.5.0، MIT) فقط **ایده** گرفته شد (مفهوم sink، sinkهای پلتفرمی)؛ **هیچ کدی کپی نشده**،
+     پس `NOTICE.md` دست نخورده. aixlog را در `/tmp/aixlog` clone کرده بودم (موقت است؛ دوباره clone کن).
+   - مستندات: `docs/guide.md` (بخش Logging)، `CHANGELOG.md` (Added و Changed در Unreleased)، `checklist.md`.
 
-## کار با build و تست (همه با CMake، طبق قاعده‌ی کاربر)
+4. **پل پایتون برای logging** (تمام شد، commit نشده): `src/bindings/python/bind_logging.cpp` + `tests/python/test_logging.py` (15 تست).
+   با `import libstb` خودکار نصب می‌شود (تأیید کاربر)؛ یک `callback_handler` روی `libstb` که رکورد را با GIL به
+   `logging.getLogger(name).log(levelno, message)` می‌دهد. سطح C++ روی `debug` باز می‌شود مگر `LIBSTB_LOG` تنظیم باشد. تنها تابع عمومی:
+   `libstb.logging_bridge(enabled)`؛ `libstb_py._log(name, level, msg)` خصوصی و فقط برای تست است. `Py_IsFinalizing` در stable ABI نیست
+   (فقط `Py_IsInitialized`). **نکته:** اگر روزی thread کارگر libstb log کند، callback روی GIL منتظر می‌ماند و ممکن است با thread صدازننده‌ای که
+   GIL را نگه داشته و join می‌کند deadlock شود؛ الان فقط دو هشدار env روی thread صدازننده log می‌شوند.
 
-```
-pip install cmake ninja nanobind pytest numpy pillow fonttools --break-system-packages
-cmake -S . -B /tmp/b -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=OFF
-cmake --build /tmp/b --target stb_test_cpp                 # تست C++ (utest)
-cmake --build /tmp/b --target stb_bench_premultiply        # بنچمارک premultiply (آرگومان اول = اندازه، مثل 512)
-# بدون dispatch AVX2:  -DCMAKE_CXX_FLAGS=-DSTB_NO_SIMD_DISPATCH
-# پایتون:  cmake -S . -B /tmp/b3 -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=ON
-#          cmake --build /tmp/b3 --target stb_test_python
-# TSan:    -DCMAKE_CXX_FLAGS="-fsanitize=thread -g" (و linker flags) سپس test_stb_cpp --filter=libstb_threads_tests.*
-```
-
-آخرین نتیجه‌ها: C++ حدود 314 تست پاس (هر دو حالت dispatch)، پایتون 1366 پاس و 4 skip (قبل از
-افزودن API فونت؛ API فونت بایندینگ پایتون ندارد). TSan روی تست‌های thread بدون هشدار.
-`nproc` ماشین قبلی 1 بود، پس سرعت واقعی چندهسته‌ای اندازه‌گیری نشده.
-
-## تصمیم‌ها و قواعد کاربر
-
-- در پایان هر کار کل پروژه zip شود (نه patch). em dash (U+2014) ممنوع (در کد، متن، مستندات). فقط با CMake build/تست شود
-  (نه g++ مستقیم). قبل از پیاده‌سازی هر API جدید، API پیشنهادی توضیح داده شود و تأیید گرفته شود.
-- ذخیره‌ی پیش‌فرض `stb::image` همیشه straight RGBA می‌ماند (نه permuted/premultiplied). فرمت opt-in premultiplied
-  فقط اگر بنچمارک واقعی novasvg لازمش کرد.
-- premultiply: امضا همان امضای خود issue است (`dst, dst_stride, src, src_stride, width, height`، stride بایتی، درجا مجاز).
-  ورودی نامعتبر (`c > a`) در جهت معکوس مثل ذخیره‌ی `uint8_t` wrap می‌شود. **فرض من: مرجع novasvg هم همین است، تأیید نشده.**
-- thread: پیش‌فرض auto (CPUهای مجاز: affinity و cgroup)، سقف است نه الزام؛ هر thread اضافه حدود 250us کار می‌خواهد؛
-  بدون pool؛ خروجی بایت‌به‌بایت با تک‌thread یکی. ثابت‌های تخمین (1.0 ns به‌ازای هر نمونه، 0.3 برای nearest) از اندازه‌گیری
-  تک‌هسته‌ی ماشین قبلی و محافظه‌کارانه‌اند؛ باید روی ماشین چندهسته‌ای تنظیم شوند. `parallel_for` فعلاً مصرف‌کننده ندارد.
-- ویندوز: `<windows.h>` ماکروهای `near`، `far`، `small`، `min`، `max` دارد؛ این‌ها را اسم تابع یا متغیر نگذار (CI ویندوز با `near` در
-  `test_font_outline.cpp` شکست خورد؛ شد `close_to`).
-- نام‌ها: `sformat` (نه printf در نام). نسخه‌ی `{}`-style (`stb::format`) فقط اگر خواسته شود.
+پیشنهاد commit: چهار commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون).
 
 ## کارهای باز (به ترتیب پیشنهادی)
 
-1. **API فونت، بخش ب:** `font::shape(utf8, shape_options)` با `shaped_glyph {glyph, cluster (آفست بایت), x_advance, x_offset, y_offset}`،
-   `shape_options {direction auto/ltr/rtl, kerning_mode, ligatures}`. خط لوله روی کدپوینت کار می‌کند و باید منبع هر گلیف را از
-   bidi، mirror، joining عربی و ligatureهای چندبه‌یک عبور دهد. معنی ligatures=false: `liga/clig` بسته شوند، `rlig` و joining نه.
-   GPOS فعلاً فقط pair adjustment دارد. `unicode-bidi: embed/override` پشتیبانی نمی‌شود. اول API را پیشنهاد بده و تأیید بگیر.
-2. **WOFF/WOFF2:** libstb اصلاً ندارد (`from_memory` احتمالاً `decode_error`). WOFF1 ارزان است (zlib خودمان)، WOFF2 به Brotli نیاز دارد.
-   فقط اگر novasvg خودش decode نکند.
-3. بایندینگ پایتون برای API فونت (outline، glyph_index، ...)؛ فعلاً عمداً نیست.
-4. kernel دستی SSE2 برای premultiply (الان auto-vectorize؛ جهت مستقیم روی alpha نیمه‌شفاف فقط ~1.3x مرجع)، NEON/arm64/MSVC/ویندوز اجرا نشده.
-5. thread برای کارهای دیگر (blend با حالت‌های float، JPEG encode) فقط بعد از اندازه‌گیری روی ماشین چندهسته‌ای.
-   کارهای حافظه‌محور (premultiply، flip، convert) عمداً بدون thread.
-6. بایندینگ‌های تصویر پایتون موقع کار سنگین GIL را آزاد نمی‌کنند (فقط فونت‌ها می‌کنند).
-7. **سیستم لاگ:** libstb ندارد (aixlog هم در ریپو و تاریخچه‌اش نیست؛ شاید در ریپوی دیگری باشد). پیشنهاد من: hook کوچک خودمان
-   (`stb::set_log_handler` و `LIBSTB_LOG=off|warn|debug`، اتصال به `logging` پایتون، و دو هشدار stderr فعلی `LIBSTB_SIMD` و
-   `LIBSTB_THREADS` از همان مسیر). منتظر تصمیم کاربر؛ vendor کردن aixlog با مسیر 0.9.0 (حذف وابستگی‌های vendored) جور نیست.
-8. **سؤال آخر کاربر (بی‌پاسخ مانده): آیا `font` هنوز باید pimpl باشد؟** نظر من: بله. دلیل قدیمی (پنهان کردن `stb_truetype.h`)
-   از بین رفته، ولی pimpl هنوز سه کار می‌کند: (الف) هدرهای داخلی (`truetype::face`، otl، arabic، `once_flag` برای GSUB lazy)
-   را از هدر عمومی و نصب بیرون نگه می‌دارد؛ (ب) ABI کتابخانه‌ی shared و اشیای export شده را پایدار می‌کند؛ (ج) `shared_ptr<const impl>` همان
-   معنای «کپی ارزان، immutable، thread-safe» را می‌دهد که novasvg روی آن حساب کرده (کش و قفل خودش را حذف می‌کند). هزینه‌اش یک
-   اشاره‌گر اضافه در هر فراخوانی است که کنار کار هر گلیف ناچیز است.
-   **کامنت‌های کهنه (اصلاح نشده، چون گفته شد کدی عوض نشود):** `include/stb/font.hpp` خطوط 3 تا 6 و 238
-   (stb_truetype / stbtt_fontinfo / "no bounds checking") و `src/font/font.cpp` خط 62 هنوز از stb_truetype حرف می‌زنند؛
-   باید به «موتور TrueType/CFF خود libstb (`src/font/truetype/`)» اصلاح شوند. (متن `docs/guide.md` اصلاح شده است.)
-9. `checklist.md` تعداد تست‌ها و بخش «قدیمی‌ها» را کامل به‌روز نکرده‌ام (فقط آیتم‌های جدید اضافه شده).
+1. **handlerهای پلتفرمی از aixlog** (`syslog`، `android`، `debugstring`، `unified`، `eventlog`): هر کد کپی‌شده از aixlog (MIT) باید در
+   `NOTICE.md` ثبت شود. همچنین ثبت مکان (`__FILE__`/`__LINE__`) و `exception()` فقط اگر کاربر خواست.
+2. **API فونت، بخش ب (درخواست novasvg):** `font::shape(utf8, shape_options)` با `shaped_glyph {glyph, cluster (آفست بایت), x_advance,
+   x_offset, y_offset}`، `shape_options {direction auto/ltr/rtl, kerning_mode, ligatures}`. خط لوله روی کدپوینت کار می‌کند و باید منبع هر
+   گلیف را از bidi، mirror، joining عربی و ligatureهای چندبه‌یک عبور دهد. معنی ligatures=false: `liga/clig` بسته شوند، `rlig` و joining نه.
+   GPOS فعلاً فقط pair adjustment دارد. `unicode-bidi: embed/override` پشتیبانی نمی‌شود. **اول API را پیشنهاد بده و تأیید بگیر.**
+3. **WOFF/WOFF2:** libstb اصلاً ندارد. WOFF1 ارزان است (zlib خودمان)، WOFF2 به Brotli نیاز دارد؛ فقط اگر novasvg خودش decode نکند.
+4. **بایندینگ پایتون برای API فونت** (outline، glyph_index و ...) و برای `Outline(font.outline(g))`؛ فعلاً عمداً نیست.
+6. kernel دستی SSE2 برای premultiply (الان auto-vectorize؛ جهت مستقیم روی alpha نیمه‌شفاف فقط حدود 1.3x مرجع)؛ NEON/arm64/MSVC/ویندوز اجرا نشده.
+7. thread برای کارهای دیگر (blend با حالت‌های float، JPEG encode) فقط بعد از اندازه‌گیری روی ماشین چندهسته‌ای. کارهای حافظه‌محور
+   (premultiply، flip، convert) عمداً بدون thread. `nproc` ماشین قبلی 1 بود.
+8. بایندینگ‌های تصویر پایتون موقع کار سنگین GIL را آزاد نمی‌کنند (فقط فونت‌ها می‌کنند).
+9. بنچمارک rasterizer (fill/stroke نسبت به plutovg و Pillow/cairo)؛ تأیید novasvg روی goldenهای خودش (باید با تلرانس 0 برابر باشد؛ اگر
+   نبود اول تفاوت FMA/پرچم کامپایل را بررسی کن).
+10. **سؤال بی‌پاسخ: آیا `font` هنوز باید pimpl باشد؟** نظر من: بله (هدرهای داخلی را از هدر عمومی بیرون نگه می‌دارد؛ ABI پایدار؛
+    `shared_ptr<const impl>` یعنی «کپی ارزان، immutable، thread-safe»، که novasvg روی آن حساب کرده). **کامنت‌های کهنه (اصلاح نشده):**
+    `include/stb/font.hpp` خطوط 3 تا 6 و 238 (stb_truetype / stbtt_fontinfo) و `src/font/font.cpp` خط 62 باید به «موتور TrueType/CFF خود libstb
+    (`src/font/truetype/`)» اصلاح شوند.
+11. `checklist.md`: تعداد تست‌ها و بخش «قدیمی‌ها» کامل به‌روز نشده (فقط آیتم‌های جدید اضافه شده‌اند).
+
+## کار با build و تست (همه با CMake)
+
+```
+pip install cmake ninja nanobind pytest numpy pillow fonttools --break-system-packages
+cmake -S . -B /tmp/b -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=ON -DSTB_BUILD_EXAMPLES=ON
+cmake --build /tmp/b -- -j2                       # همه چیز (یک هسته: چند دقیقه؛ آن را detach کن: setsid nohup ... &)
+cmake --build /tmp/b --target test_stb_cpp        # فقط تست C++ (utest)
+cd /tmp/b && ctest                                # کل ctest
+PYTHONPATH=/tmp/b/python/install python3 -m pytest tests/python -q     # تست پایتون روی ماژول بیلدشده
+./tests/cpp/test_stb_cpp --filter='libstb_logging_tests.*'              # فیلتر utest
+# بنچمارک premultiply:  cmake --build /tmp/b --target stb_bench_premultiply
+# بدون dispatch AVX2:   -DCMAKE_CXX_FLAGS=-DSTB_NO_SIMD_DISPATCH
+# TSan: -DCMAKE_CXX_FLAGS="-fsanitize=thread -g" (و linker flags) سپس test_stb_cpp --filter=libstb_threads_tests.*
+```
+
+نکته: `pgrep -f "cmake --build"` در یک دستور bash خودش را هم پیدا می‌کند؛ برای دیدن اجرای build از `pgrep -x ninja` استفاده کن.
+
+## تصمیم‌ها از چت‌های قبل
+
+- ذخیره‌ی پیش‌فرض `stb::image` همیشه straight RGBA می‌ماند (نه permuted/premultiplied). فرمت opt-in premultiplied فقط اگر بنچمارک واقعی novasvg لازمش کرد.
+- premultiply: امضا همان امضای issue #1 (`dst, dst_stride, src, src_stride, width, height`، stride بایتی، درجا مجاز). ورودی نامعتبر
+  (`c > a`) در جهت معکوس مثل ذخیره‌ی `uint8_t` wrap می‌شود. **فرض من: مرجع novasvg هم همین است، تأیید نشده.**
+- thread: پیش‌فرض auto (CPUهای مجاز: affinity و cgroup)، سقف است نه الزام؛ هر thread اضافه حدود 250us کار می‌خواهد؛ بدون pool؛ خروجی
+  بایت‌به‌بایت با تک‌thread یکی. ثابت‌های تخمین (1.0 ns به‌ازای هر نمونه، 0.3 برای nearest) از تک‌هسته‌ی ماشین قبلی‌اند و باید روی چندهسته‌ای تنظیم شوند.
+  `parallel_for` فعلاً مصرف‌کننده ندارد.
+- نام‌ها: `sformat` (نه printf در نام). `STB_MIN/STB_MAX` (در `stb/export.hpp`) جای `(std::min)(...)` در کل ریپو.
+- commitهای قبلی: `0f3c5d0` issue #1 (`rgba_to_premultiplied_argb` / `premultiplied_argb_to_rgba`، SIMD)، `685f126` threading
+  (`thread_count/set_threads/thread_scope`، `LIBSTB_THREADS`، `src/util/parallel.hpp`)، `8e76e18` `sformat/vsformat/sformat_to`،
+  `657ae77` API گلیف-ایندکس `stb::font` (بخش الف novasvg)، `8845b4d` و `0e84241` issue #2 (rasterizer برداری).
 
 ## نکته‌های فنی که زمان تلف می‌کنند
 
-- utest: `UTEST_PRINTF` آکولاد ندارد (داخل `if` همیشه چاپ می‌کند: `{}` بگذار)؛ `ASSERT_EQ` روی `std::string` کار نمی‌کند
-  (از `==` استفاده کن)؛ عبارت assert نباید `%` داشته باشد (utest آن را فرمت printf می‌کند)؛ `<< message` ندارد.
-- فونت‌های تست مصنوعی: `tests/data/make_test_font.py` (قدیمی) و `make_outline_test_fonts.py` (جدید: curves + composite + GPOS و kern،
-  CFF، `.ttc`)؛ با `pip install fonttools` بازتولید می‌شوند.
+- utest: `UTEST_PRINTF` آکولاد ندارد (داخل `if` همیشه چاپ می‌کند: `{}` بگذار)؛ `ASSERT_EQ` روی `std::string` کار نمی‌کند (از `==` یا یک ماکروی
+  `ASSERT_SAME` محلی استفاده کن)؛ عبارت assert نباید `%` داشته باشد؛ `<< message` ندارد. داخل ماکروی assert کاما در `point{0, 0}` ممنوع است (از `pt(x, y)`).
+- فونت‌های تست مصنوعی: `tests/data/make_test_font.py` و `make_outline_test_fonts.py` (curves، composite، GPOS و kern، CFF، `.ttc`)؛ با `pip install fonttools` بازتولید می‌شوند.
 - `metrics(px)` مقیاس را از (ascent - descent) می‌گیرد، نه `units_per_em`؛ برای em در SVG از `design_metrics().units_per_em` استفاده کن.
-- `glyph_kerning(automatic)`: اگر فونت GPOS دارد فقط GPOS (حتی اگر جفت نداشته باشد و `kern` داشته باشد)؛ `kern_table` فقط جدول kern.
-- `face_count(path)` کل فایل را می‌خواند. `glyph_info` عمداً `noexcept` نیست (CFF ممکن است تخصیص بدهد).
+- `glyph_kerning(automatic)`: اگر فونت GPOS دارد فقط GPOS؛ `kern_table` فقط جدول kern. `face_count(path)` کل فایل را می‌خواند. `glyph_info` عمداً `noexcept` نیست.
+- هدر `export.hpp` در MSVC هشدارهای C4251/C4275 را خاموش می‌کند؛ کلاس‌های export شده می‌توانند عضو `std::` داشته باشند.
+- برای printf-check روی متد عضو، اندیس‌ها یکی بیشتر است (`this` آرگومان 1): `STB_FORMAT_CHECK(2, 3)`.
 
-## issue #2: rasterizer برداری (تمام شد، منتظر review)
+## rasterizer برداری (issue #2): تمام شد، commit شده
 
-مسئله: https://github.com/MohammadRaziei/libstb/issues/2. همه‌ی گام‌ها انجام شد؛ جزئیات و کارهای باقی‌مانده در `checklist.md`.
+مسئله: https://github.com/MohammadRaziei/libstb/issues/2. کارهای باقی‌مانده بالا (بنچمارک، تأیید novasvg) هستند.
 
 ### API (C++ و پایتون هم‌نام)
-- `stb/path.hpp`: `matrix` (قرارداد SVG، `translate/scale/rotate/shear` به نقطه اول اعمال می‌شوند و زنجیره‌ای‌اند، `then`، `map`،
-  `inverse`)، `path` (`move_to/line_to/quad_to/cubic_to/close`، `add_rect/add_rounded_rect/add_ellipse/add_circle`،
-  `add_path/add_commands(…, matrix)`، `transform/transformed`، `dashed`، `bounds`، `current_point`).
-- `stb/raster.hpp`: `fill(image&, path, color, fill_rule, draw_options)`, `stroke(image&, path, color, stroke_style, draw_options)`,
-  و سطح پایین `rasterize_fill/rasterize_stroke(path, …, matrix, clip_rect, span_sink)` که coverage را به صورت `span_view` دسته‌ای
-  گزارش می‌کنند. `draw_options` = matrix + blend + opacity. `canvas::add_path` → `path_item`.
-- پایتون: `Matrix`, `Path`, `Image.fill_path/stroke_path` (کپی برمی‌گردانند)، `Path.fill_mask/stroke_mask` (تصویر gray)، `Canvas.add_path`.
+- `stb/outline.hpp`: `matrix` (قرارداد SVG، `translate/scale/rotate/shear` به نقطه‌ی اول اعمال می‌شوند و زنجیره‌ای‌اند، `then`، `map`، `inverse`)،
+  `outline` (`move_to/line_to/quad_to/cubic_to/close`، `add_rect/add_rounded_rect/add_ellipse/add_circle`، `add_outline/add_commands(..., matrix)`،
+  `transform/transformed`، `dashed`، `bounds`، `current_point`).
+- `stb/raster.hpp`: `fill(image&, outline, color, fill_rule, draw_options)`، `stroke(image&, outline, color, stroke_style, draw_options)` و سطح پایین
+  `rasterize_fill/rasterize_stroke(outline, ..., matrix, clip_rect, span_sink)` که coverage را به‌صورت `span_view` دسته‌ای گزارش می‌کنند.
+  `draw_options` = matrix + blend + opacity. `canvas::add_outline` → `outline_item`.
+- پایتون: `Matrix`، `Outline`، `Image.fill_outline/stroke_outline` (کپی برمی‌گردانند)، `Outline.fill_mask/stroke_mask` (تصویر gray)، `Canvas.add_outline`.
 
-### تصمیم‌ها (و تفاوت با پیشنهاد اولیه)
-- الگوریتم‌ها پورت FreeType (از طریق plutovg) هستند، نه vendored. نتیجه روی ۳۱۹ صحنه (شامل ۲۴۰ صحنه‌ی fuzz) بایت‌به‌بایت با plutovg
-  برابر است. حساب ثابت‌نقطه با `int64` است، پس روی همه‌ی پلتفرم‌ها یکسان؛ کل `src/draw` با `-ffp-contract=off` ساخته می‌شود.
-- حذف‌شده‌ها: بخش conic (در plutovg هم ورودی conic نیست)، memory pool و band بندی (با `std::vector`؛ نتیجه یکی است).
-- `path::stroked()` که در پیشنهاد اولیه بود **نیست**: stroke در فضای پیکسل با دقت 1/64 پیکسل ساخته می‌شود (مثل plutovg)، پس بازگرداندنش
-  به path ی با مختصات float دقت را خراب می‌کرد. به‌جایش `rasterize_stroke` و `stroke` هست. `path::dashed` در فضای خود path کار می‌کند.
-- عرض stroke با میانگین scale ماتریس ضرب می‌شود و dash قبل از ماتریس بریده می‌شود (رفتار plutovg، برای تطابق با novasvg).
+### تصمیم‌ها
+- الگوریتم‌ها پورت FreeType (از طریق plutovg) هستند، نه vendored. روی 319 صحنه (شامل 240 صحنه‌ی fuzz) بایت‌به‌بایت با plutovg برابر است.
+  حساب ثابت‌نقطه با `int64` است (روی همه‌ی پلتفرم‌ها یکسان)؛ کل `src/draw` با `-ffp-contract=off` ساخته می‌شود.
+- حذف‌شده‌ها: بخش conic، memory pool و band بندی (با `std::vector`؛ نتیجه یکی است).
+- `outline::stroked()` عمداً **نیست**: stroke در فضای پیکسل با دقت 1/64 پیکسل ساخته می‌شود (مثل plutovg). به‌جایش `rasterize_stroke` و `stroke` هست.
+  `outline::dashed` در فضای خود outline کار می‌کند.
+- عرض stroke با میانگین scale ماتریس ضرب می‌شود و dash قبل از ماتریس بریده می‌شود (رفتار plutovg).
 - مختصات NaN/بی‌نهایت: چیزی کشیده نمی‌شود؛ بزرگ‌تر از 1e6 به 1e6 محدود می‌شود. dash نامعتبر (منفی، NaN، مجموع 0) = خط پر.
-- `STB_MIN`/`STB_MAX` (در `stb/export.hpp`) جایگزین `(std::min)(...)` در کل ریپو شد (درخواست کاربر).
 - هر چیز مخصوص SVG (parse path، arc، gradient، clip-path، mask) عمداً در novasvg می‌ماند.
 
 ### تست
-- `tests/cpp/test_path.cpp`, `test_raster.cpp`, `test_raster_reference.cpp`; `tests/python/test_path.py`.
-- مرجع plutovg: `tests/tools/raster_reference/` (`gen_scenes.py` → `scenes.h`، `reference.c` با plutovg → `reference_hashes.h`). برای
-  بازتولید: دستور بالای `reference.c` را اجرا کن، خروجی را در `reference_hashes.h` بگذار. برای پیدا کردن اولین پیکسل متفاوت:
+- `tests/cpp/test_outline.cpp`، `test_raster.cpp`، `test_raster_reference.cpp`؛ `tests/python/test_outline.py`.
+- مرجع plutovg: `tests/tools/raster_reference/` (`gen_scenes.py` → `scenes.h`، `reference.c` با plutovg → `reference_hashes.h`). برای بازتولید:
+  دستور بالای `reference.c` را اجرا کن و خروجی را در `reference_hashes.h` بگذار. برای پیدا کردن اولین پیکسل متفاوت:
   `STB_RASTER_DUMP=dir ./test_stb_cpp` و `./reference dir2` و فایل‌های `.bin` را مقایسه کن.
-- ASan/UBSan روی تست‌های raster/path/matrix تمیز بود. یک یافته‌ی UBSan از قبل در کد resize/SIMD هست (store ناهم‌تراز `double` در
-  `emmintrin.h`)؛ ربطی به این تغییر ندارد و دست نزدم.
-- CI ویندوز (MSVC): `near` ماکرو است (`windef.h`)، پس در تست‌ها نباید اسم `near`/`min`/`max` گذاشت؛ داخل ماکروی `EXPECT_TRUE` هم
-  `point{0, 0}` با کاما ممنوع (از `pt(x, y)` استفاده شد). روی ویندوز اجرا نشده؛ CI تأیید نهایی است.
-
-## کارهای باقی‌مانده از قبل
-font part B (`font::shape`)، WOFF/WOFF2، بایندینگ پایتون برای font outline، `set_log_handler`، مرتب‌سازی `checklist.md`؛ جزئیات در همین فایل بالاتر.
+- ASan/UBSan روی تست‌های raster/outline/matrix تمیز بود. یک یافته‌ی UBSan از قبل در کد resize/SIMD هست (store ناهم‌تراز `double` در `emmintrin.h`)؛ ربطی به این تغییرها ندارد.

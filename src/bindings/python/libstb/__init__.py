@@ -38,7 +38,7 @@ from .libstb_py import (Align, BlendMode, Canvas, CanvasImage, CanvasOutline, Ca
                         Error, LimitError, Matrix, Outline, Resizer)
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
-from .libstb_py import set_threads, thread_count
+from .libstb_py import logging_bridge, set_threads, thread_count
 
 _pkg_dir = _os.path.dirname(__file__)
 
@@ -160,7 +160,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "imresize",
+    "Image", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "logging_bridge", "imresize",
     "Resizer",
     "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "Align", "FontMetrics", "Glyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",

@@ -13,6 +13,7 @@
 #include <string_view>
 #include <thread>
 
+#include "stb/logging.hpp"
 #include "stb/util.hpp"
 #include "util/parallel.hpp"
 
@@ -55,7 +56,8 @@ int initial_setting() noexcept {
         if (text.empty()) return 0;
         int n = 0;
         if (parse_threads_setting(text, n)) return n;
-        std::fprintf(stderr, "libstb: LIBSTB_THREADS=%s is not auto, off or a number of threads; using auto\n", text.c_str());
+        stb::logging::get_logger("libstb.threads")
+            .warning("LIBSTB_THREADS=%s is not auto, off or a number of threads; using auto", text.c_str());
     } catch (...) {
     }
     return 0;

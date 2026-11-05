@@ -526,14 +526,53 @@ opacity work as everywhere else. The coordinate, matrix, dash and precision rule
 under "Vector outlines" in the Python section above. The geometry is fixed-point (`src/draw/raster/`), so there is
 no platform-dependent rounding.
 
+### Logging
+
+`<stb/logging.hpp>` is a small copy of Python's `logging`: the same names, the same level numbers, the same tree of
+dotted logger names. libstb itself logs through `libstb` and `libstb.<part>` (`libstb.simd`, `libstb.threads`).
+
+```cpp
+auto& lg = stb::logging::get_logger("libstb.simd");           // logging.getLogger("libstb.simd")
+lg.warning("backend %s is not available, using %s", want, got);   // printf style: stb::sformat, checked by -Wformat
+
+stb::logging::basic_config(stb::logging::level::info);        // logging.basicConfig: a handler on stderr
+auto& libstb = stb::logging::get_logger("libstb");
+libstb.set_level(stb::logging::level::debug);
+auto& fh = libstb.add_handler(stb::logging::file_handler("stb.log"));   // the logger owns it: no shared_ptr to write
+fh.set_formatter(stb::logging::formatter("%(asctime)s [%(levelname)-8s] %(name)s: %(message)s"));
+libstb.remove_handler(fh);
+```
+
+- **Levels** are `debug` 10, `info` 20, `warning` 30, `error` 40, `critical` 50 (any number in between works), and
+  `notset` for "use the parent's". A logger's effective level is the first one set going up the tree; the root
+  is `warning`. `LIBSTB_LOG=debug|info|warning|error|critical|<number>` sets the level of `libstb` at start.
+- **Handlers** are `stream_handler` (stderr by default, colored by level on a terminal), `file_handler`,
+  `callback_handler` (a function that gets each `record`), `null_handler`, or your own class derived from
+  `stb::logging::handler` that overrides `emit`. A record goes to the logger's handlers and then, while
+  `propagate()` is true (the default), to those of its parents. A handler has its own level, a formatter and filters.
+- **Formatter** patterns use Python's `%(field)s` syntax: `asctime`, `created`, `msecs`, `levelname`, `levelno`,
+  `name`, `message`, `thread`, `process`, with widths and alignment (`%(levelname)-8s`).
+- **No handler anywhere:** warnings and worse still reach stderr as `<logger>: <message>` (Python's "last resort"),
+  so the messages libstb prints today (a bad `LIBSTB_THREADS` or `LIBSTB_SIMD`) are not lost, and a program can
+  silence or redirect them with a handler or a level.
+- **Python:** `import libstb` connects libstb to Python's `logging`: the records of `libstb`, `libstb.simd`,
+  `libstb.threads` arrive in `logging.getLogger(<that name>)` with the same level numbers, so
+  `logging.basicConfig(level=logging.DEBUG)` or `logging.getLogger("libstb").setLevel(...)` is all a program needs.
+  With no handler configured, Python's own last resort prints warnings and worse. `libstb.logging_bridge(False)`
+  disconnects it (libstb then writes as described above) and `logging_bridge(True)` reconnects it. If `LIBSTB_LOG`
+  is set it keeps deciding what libstb emits, whatever the Python level.
+- **Threads and failures:** every call is thread safe, a handler writes one record at a time, and logging never
+  throws (an exception from a handler is swallowed, as in Python). The loggers live in the library and are never
+  destroyed, so logging during program exit is safe.
+
 Or `cmake --install build` and `find_package(libstb)` as usual.
 
 ## Layout (mirrors httpp / ctoon)
 
 ```
 include/stb.h               umbrella header, owns LIBSTB_VERSION_* (single source of truth)
-include/stb/*.hpp           public API (error, util, color, image, outline, raster, font, rtl, draw, zlib); never includes stb
-src/util/                   file I/O helpers, UTF-8
+include/stb/*.hpp           public API (error, util, color, image, outline, raster, font, rtl, draw, zlib, logging); never includes stb
+src/util/                   file I/O helpers, UTF-8, logging (logging.cpp)
 src/image/                  image, editing ops, resize, EXIF, SIMD kernels and their dispatch
 src/codec/                  every format: decode/ (one file per format, from stb_image), encode/ (PNG / JPEG / BMP /
                             TGA encoders, deflate)

@@ -8,6 +8,19 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- Python: libstb's log records go to Python's `logging`. `import libstb` installs a bridge, so `logging.getLogger("libstb")`
+  and its children (`libstb.simd`, `libstb.threads`) work like any other logger (same level numbers, same hierarchy; the
+  level and handlers are yours to set). `libstb.logging_bridge(False)` removes it and libstb returns to its own output
+  (`LIBSTB_LOG`, stderr). While the bridge is on, `LIBSTB_LOG`, if set, still decides what libstb emits.
+- `stb/logging.hpp` (`stb::logging`): a logging module modelled on Python's `logging`: `get_logger("libstb.simd")`
+  with a tree of dotted names, `logger` (levels with the Python numbers, `propagate`, printf-style `debug` / `info` /
+  `warning` / `error` / `critical` built on `stb::sformat`), `handler` (`stream_handler`, `file_handler`,
+  `callback_handler`, `null_handler`, or your own class), `formatter` (`%(asctime)s [%(levelname)s] %(name)s: %(message)s`
+  patterns), `basic_config`. `logger::add_handler` takes the handler by value and owns it, so no `shared_ptr` shows.
+  `LIBSTB_LOG=debug|info|warning|error|critical` sets the level of `libstb`. The registry lives in the library.
+  The two messages libstb printed on stderr (a bad `LIBSTB_THREADS` or `LIBSTB_SIMD`) now go through it: with no
+  handler they still reach stderr, now as `libstb.threads: ...` / `libstb.simd: ...`, and a program can silence or
+  redirect them.
 - **Vector outlines (issue #2).** `stb/raster.hpp`: anti-aliased `stb::fill` and `stb::stroke` of a `stb::outline` onto an
   image (`fill_rule`, `stroke_style` with width, `line_cap`, `line_join`, `miter_limit`, dashes and a dash offset,
   `draw_options` with matrix, blend mode and opacity), and the low-level `rasterize_fill` / `rasterize_stroke` that

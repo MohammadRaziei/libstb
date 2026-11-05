@@ -195,3 +195,9 @@
 - [ ] بنچمارک rasterizer (سرعت fill/stroke نسبت به plutovg و Pillow/cairo) و بهینه‌سازی در صورت لزوم.
 - [ ] بایندینگ پایتون برای `font.outline` تا `Outline(font.outline(g))` مستقیم کار کند.
 - [ ] تأیید novasvg روی goldenهای خودش (باید با تلرانس 0 برابر باشد؛ اگر نبود اول تفاوت FMA/پرچم کامپایل را بررسی کن).
+
+## Logging (stb::logging)
+- [x] `stb/logging.hpp` + `src/util/logging.cpp`: `logger`، `handler` (`stream`، `file`، `callback`، `null`)، `formatter`، `level`، `get_logger`، `basic_config`، `LIBSTB_LOG`؛ دو هشدار stderr از `libstb.simd` و `libstb.threads` رد می‌شوند.
+- [x] `tests/cpp/test_logging.cpp` (19 تست: سطح‌ها، سلسله‌مراتب، propagate، handlerها، formatter، چند thread)، `docs/guide.md`، `CHANGELOG.md`.
+- [x] پل پایتون (`bind_logging.cpp`): `callback_handler` روی `libstb` که به `logging.getLogger(name).log(levelno, message)` می‌رود؛ با `import libstb` خودکار نصب می‌شود؛ تنها تابع عمومی `libstb.logging_bridge(enabled)`؛ `_log` خصوصی برای تست؛ `tests/python/test_logging.py`.
+- [ ] handlerهای پلتفرمی از aixlog (`syslog`، `android`، `debugstring`، `unified`، `eventlog`) و ثبتشان در `NOTICE.md`.

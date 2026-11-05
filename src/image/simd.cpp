@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "stb/logging.hpp"
 #include "stb/util.hpp"
 #include "stb/image.hpp"
 
@@ -77,8 +78,9 @@ std::size_t initial() {
         if (want == entries()[i].name) return i;
     std::string have;
     for (const entry& en : entries()) have += (have.empty() ? "" : ", ") + std::string(en.name);
-    std::fprintf(stderr, "libstb: LIBSTB_SIMD=%s is not an available SIMD backend (available: %s); using %s\n", e.c_str(),
-                 have.c_str(), entries().front().name);
+    stb::logging::get_logger("libstb.simd")
+        .warning("LIBSTB_SIMD=%s is not an available SIMD backend (available: %s); using %s", e.c_str(), have.c_str(),
+                 entries().front().name);
     return 0;
 }
 
