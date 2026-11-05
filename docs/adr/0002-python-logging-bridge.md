@@ -17,7 +17,10 @@ their handlers.
 `logging.getLogger(record.name).log(levelno, message)`. Level numbers are the same in both worlds and
 the dotted names become the same hierarchy, so nothing is translated. While the bridge is on, the C++
 logger is opened to `debug` (unless `LIBSTB_LOG` is set, which keeps deciding what libstb emits), and
-Python's level and handlers decide what is shown.
+Python's level and handlers decide what is shown. For each record the bridge keeps Python's `Logger`
+object per name (never its level) and asks `isEnabledFor` before it builds the Python strings, so a record
+that Python filters out costs one cached lookup and one call, and a level changed later takes effect at
+once.
 
 The only public function is `libstb.logging_bridge(enabled)`: `False` removes the handler and puts the
 C++ level back, `True` installs it again. `libstb_py._log(name, level, message)` exists for the tests
@@ -42,9 +45,11 @@ its own levels and formatters, for no gain.
 
 The Python audience's expectation is decisive, so A. The price is that the C++ side cannot know
 Python's level (there is no hook on `Logger.setLevel`), so it is held open at `debug` and Python
-filters. Measured on a build with the bridge on and Python's level at WARNING, a logged call costs
-about 2.5 microseconds (a PNG decode of 8x6 pixels: 5.5 to 8.0) and 5 microseconds for a tiny resize
-(1.9 to 7.3); for an image of ordinary size that is far below one percent.
+filters. Measured with the bridge on and Python's level at WARNING (best of five runs, 8x6-pixel
+images, the worst case): a logged call costs about 0.6 microseconds (a decode 3.0 to 3.6, a resize 1.25
+to 1.9). The first version, which looked the logger up and built the strings on every record, cost
+2.5 to 5 microseconds; caching the loggers and filtering before building the strings removed most of
+it. For an image of ordinary size the remaining cost is far below one percent.
 
 ## Consequences
 
@@ -53,9 +58,12 @@ about 2.5 microseconds (a PNG decode of 8x6 pixels: 5.5 to 8.0) and 5 microsecon
   `lineno` fields of a record are those of the Python caller, because libstb does not record locations.
 - Harder: the callback takes the GIL, so a record must never be written from a worker thread that a
   GIL-holding thread is waiting for (see [ADR-0003](0003-logging-policy.md), rule 5).
-- At interpreter shutdown only `Py_IsInitialized` is checked (`Py_IsFinalizing` is not in the stable ABI).
-- Revisit: a loop over tiny images where those microseconds count can call `logging_bridge(False)`; if
-  that turns out to be common, sync the C++ level from Python's instead of keeping it open.
+- At interpreter shutdown only `Py_IsInitialized` is checked (`Py_IsFinalizing` is not in the stable ABI),
+  and the bridge's small state (the logger cache) is deliberately never freed, so a late record cannot touch
+  a destroyed object.
+- Revisit: a loop over tiny images where even 0.6 microseconds count can call `logging_bridge(False)`.
+  Syncing the C++ level from Python's was rejected: Python has no hook on `setLevel`, so a level set
+  after `import libstb` (the usual order with `basicConfig`) would silently lose records.
 
 ## Action Items
 1. [x] `src/bindings/python/bind_logging.cpp`, `tests/python/test_logging.py`

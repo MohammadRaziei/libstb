@@ -73,7 +73,7 @@ result is not what the caller asked for and no exception told them.
 
 - Easier: diagnosing a slow or odd run with `LIBSTB_LOG=debug` or `logging.getLogger("libstb").setLevel(DEBUG)`.
 - Cost: a disabled DEBUG call is one level check; with the Python bridge on, every logged call crosses
-  into Python (about 2.5 to 5 microseconds, [ADR-0002](0002-python-logging-bridge.md)).
+  into Python (about 0.6 microseconds, [ADR-0002](0002-python-logging-bridge.md)).
 - Tests: `tests/cpp/test_library_logging.cpp` and `tests/python/test_logging.py` pin the default
   silence, the one-record-per-call rule, the absence of records for failures, and each WARNING.
 - Revisit: INFO, if libstb ever gains a long-running component.

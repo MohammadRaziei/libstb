@@ -539,7 +539,7 @@ an ignored `LIBSTB_SIMD` or `LIBSTB_THREADS`, a NaN or infinite coordinate (the 
 moved to the 1,000,000 limit, a dash pattern it cannot use (the line is solid), a thread it could not start. A failure
 is an exception and never also a record. The rules and the full table are in
 [ADR-0003](adr/0003-logging-policy.md). A disabled `debug` call costs one level check; with the Python bridge on
-and Python's level above `debug`, a logged call costs a few microseconds (see [ADR-0002](adr/0002-python-logging-bridge.md)),
+and Python's level above `debug`, a logged call costs about 0.6 microseconds (see [ADR-0002](adr/0002-python-logging-bridge.md)),
 which only matters for tiny images in a hot loop: `libstb.logging_bridge(False)` removes it.
 
 ```cpp

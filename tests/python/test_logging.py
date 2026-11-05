@@ -146,3 +146,28 @@ def test_a_nan_coordinate_is_one_warning(caplog):
         img.fill_outline(p, "white")
     [rec] = [r for r in caplog.records if r.name == "libstb.raster"]
     assert rec.levelno == logging.WARNING and "NaN or infinite" in rec.getMessage()
+
+
+def test_a_level_changed_after_records_were_sent_takes_effect(caplog):
+    # The bridge keeps Python's Logger objects, never their level: each record asks again.
+    lg = logging.getLogger("libstb.cachetest")
+    with caplog.at_level(logging.DEBUG, logger="libstb"):  # (this also opens caplog's own handler)
+        lg.setLevel(logging.WARNING)
+        libstb_py._log("libstb.cachetest", 10, "one")
+        lg.setLevel(logging.DEBUG)
+        libstb_py._log("libstb.cachetest", 10, "two")
+        lg.setLevel(logging.ERROR)
+        libstb_py._log("libstb.cachetest", 10, "three")
+        lg.setLevel(logging.NOTSET)
+    assert [r.getMessage() for r in caplog.records if r.name == "libstb.cachetest"] == ["two"]
+
+
+def test_logging_disable_silences_the_bridge(caplog):
+    with caplog.at_level(logging.DEBUG, logger="libstb"):
+        logging.disable(logging.CRITICAL)
+        try:
+            libstb_py._log("libstb", 40, "muted")
+        finally:
+            logging.disable(logging.NOTSET)
+        libstb_py._log("libstb", 40, "heard")
+    assert [r.getMessage() for r in caplog.records if r.name == "libstb"] == ["heard"]

@@ -20,15 +20,36 @@ namespace {
 stb::logging::callback_handler* g_bridge = nullptr;                     // owned by the "libstb" logger
 stb::logging::level g_previous_level = stb::logging::level::notset;     // the logger's level before install
 
+// What a record needs from Python, made once. Python's own loggers are looked up once per name and kept,
+// and a record is built into Python strings only when that logger is enabled for it: when Python's level
+// filters it out (the usual case at WARNING) the cost is one cached dict lookup and one isEnabledFor call.
+// The object is never freed: a record can arrive while the interpreter shuts down, and a destructor that
+// runs after it would touch a dead interpreter. (One small leak at exit, no more.)
+struct bridge_state {
+    nb::object get_logger;  // logging.getLogger
+    nb::dict loggers;       // record name -> logging.Logger
+};
+bridge_state* g_state = nullptr;
+
 void forward(const stb::logging::record& r) {
     // Never throw into libstb (a logger must not make the call that logs fail), never touch Python once
     // it is shut down (Py_IsFinalizing is not in the stable ABI the extension is built for;
     // Py_IsInitialized turns false early enough in Py_FinalizeEx).
-    if (!Py_IsInitialized()) return;
+    if (!Py_IsInitialized() || g_state == nullptr) return;
     try {
         nb::gil_scoped_acquire gil;
-        nb::object lg = nb::module_::import_("logging").attr("getLogger")(std::string(r.name));
-        lg.attr("log")(static_cast<int>(r.levelno), std::string(r.message));
+        const nb::str name(r.name.data(), r.name.size());
+        nb::object lg;
+        if (PyObject* hit = PyDict_GetItemWithError(g_state->loggers.ptr(), name.ptr())) {  // borrowed
+            lg = nb::borrow(hit);
+        } else {
+            if (PyErr_Occurred()) throw nb::python_error();
+            lg = g_state->get_logger(name);
+            g_state->loggers[name] = lg;
+        }
+        const int level = static_cast<int>(r.levelno);
+        if (!nb::cast<bool>(lg.attr("isEnabledFor")(level))) return;
+        lg.attr("log")(level, nb::str(r.message.data(), r.message.size()));
     } catch (...) {
     }
 }
@@ -59,5 +80,6 @@ void bind_logging(nb::module_& m) {
         stb::logging::get_logger(name).log(static_cast<stb::logging::level>(level), "%s", message.c_str());
     });
 
+    g_state = new bridge_state{nb::module_::import_("logging").attr("getLogger"), nb::dict()};
     set_bridge(true);
 }

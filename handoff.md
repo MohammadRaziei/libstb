@@ -58,7 +58,7 @@
    و فراخوانی‌ها در `image.cpp` (decode/encode)، `resize.cpp`، `simd.cpp`، `threads.cpp`، `zlib.cpp`، `font.cpp` (glyph گمشده)،
    `draw/raster.cpp` و `draw/raster/dash.cpp` (هشدارها). سیاست در `docs/adr/0003-logging-policy.md`: DEBUG یعنی «چه تصمیمی گرفتم»،
    WARNING فقط وقتی از درخواست منحرف شدم، بدون INFO/ERROR، هیچ log از thread کارگر `parallel.hpp` (خطر deadlock روی GIL)،
-   خطا فقط exception است. هزینه‌ی پل: حدود 2.5 تا 5 میکروثانیه به‌ازای هر فراخوانی log‌شده (اندازه‌گیری در ADR-0002). تست‌ها:
+   خطا فقط exception است. هزینه‌ی پل: حدود 0.6 میکروثانیه به‌ازای هر فراخوانی log‌شده (پل loggerهای پایتون را cache می‌کند و قبل از ساختن رشته‌ها `isEnabledFor` می‌پرسد؛ قبلاً 2.5 تا 5 بود؛ اندازه‌گیری در ADR-0002؛ سطح C++ عمداً همیشه DEBUG می‌ماند چون پایتون hook برای setLevel ندارد). تست‌ها:
    `tests/cpp/test_library_logging.cpp` (6) و سه تست در `tests/python/test_logging.py`. ADRها: `docs/adr/0001..0003`
    (0001 بعد از کد و از روی طراحی موجود نوشته شد). نکته: `to_cubic_commands` مختصات NaN را پیش از `make_outline` دور می‌ریزد، پس
    هشدار مختصات ورودی آنجاست و هشدار `make_outline` فقط برای ماتریس NaN است. باگ MSVC در `test_logging.cpp` (`each` در lambda) هم اصلاح شد.
