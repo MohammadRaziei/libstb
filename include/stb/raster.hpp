@@ -59,7 +59,7 @@ struct stroke_style {
     line_cap cap = line_cap::butt;
     line_join join = line_join::miter;
     float miter_limit = 4.f;
-    std::vector<float> dashes;
+    std::vector<float> dashes{};  // (an initializer, so that `stroke_style{width}` is not a missing-initializer warning)
     float dash_offset = 0.f;
 };
 

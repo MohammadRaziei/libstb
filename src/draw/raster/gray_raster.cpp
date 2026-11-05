@@ -646,7 +646,7 @@ void worker::sweep() {
             const cell& cl = cells_[std::size_t(c)];
 
             // The run of pixels between the previous cell and this one has the accumulated cover.
-            if (cl.x > x && cover != 0) hline(x, yindex, cover * (one_pixel * 2), cl.x - x);
+            if (cl.x > x && cover != 0) hline(x, yindex, cover * (one_pixel * 2), int(cl.x - x));
 
             cover += cl.cover;
             const coord area = cover * (one_pixel * 2) - cl.area;

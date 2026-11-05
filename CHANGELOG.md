@@ -82,6 +82,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   stb_bench_premultiply` times them.
 
 ### Changed
+- `stb::stroke_style::dashes` has an initializer, so `stroke_style{width}` no longer is a missing-initializer warning for users.
 - Names, so that `path` means a file path everywhere: the vector geometry type is now `stb::outline`
   (`stb/outline.hpp`, `src/draw/outline.cpp`), with `outline_op`, `outline_command`, `outline_item`,
   `canvas::add_outline`; Python `Outline`, `CanvasOutline`, `Image.fill_outline` / `stroke_outline`,

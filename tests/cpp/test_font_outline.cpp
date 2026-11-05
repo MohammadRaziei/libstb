@@ -157,8 +157,8 @@ UTEST(libstb_font_outline_tests, test_a_contour_of_only_off_curve_points_starts_
         ends.insert({o[i].p[1].x, o[i].p[1].y});
     }
     // the four off-curve points of the glyph are the controls; the implied on-curve points between them are where it passes
-    ASSERT_TRUE((controls == std::set<std::pair<float, float>>{{0, 0}, {1000, 0}, {1000, 1000}, {0, 1000}}));
-    ASSERT_TRUE((ends == std::set<std::pair<float, float>>{{500, 0}, {1000, 500}, {500, 1000}, {0, 500}}));
+    ASSERT_TRUE((controls == std::set<std::pair<float, float>>{{0.f, 0.f}, {1000.f, 0.f}, {1000.f, 1000.f}, {0.f, 1000.f}}));
+    ASSERT_TRUE((ends == std::set<std::pair<float, float>>{{500.f, 0.f}, {1000.f, 500.f}, {500.f, 1000.f}, {0.f, 500.f}}));
     ASSERT_TRUE(o.front().p[0] == o[4].p[1]);  // closed: the last curve ends where the contour began
 }
 

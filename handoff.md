@@ -63,6 +63,8 @@
    (0001 بعد از کد و از روی طراحی موجود نوشته شد). نکته: `to_cubic_commands` مختصات NaN را پیش از `make_outline` دور می‌ریزد، پس
    هشدار مختصات ورودی آنجاست و هشدار `make_outline` فقط برای ماتریس NaN است. باگ MSVC در `test_logging.cpp` (`each` در lambda) هم اصلاح شد.
 
+6. **CI ویندوز و warningها** (تمام شد، commit نشد): تست `test_file_handler...` روی ویندوز fail بود چون `file_handler` در حالت text می‌نویسد (CRLF، مثل `FileHandler` پایتون) ولی `slurp` باینری می‌خواند؛ `slurp` حالا text می‌خواند. warningها از ریشه درست شدند، نه خاموش: `stroke_style::dashes{}`، `int(cl.x - x)` در gray_raster، تبدیل صریح `level_` در bidi، `if constexpr ... else` به‌جای کد بعد از `return` در `composite_row`، تغییر نام `code` محلی در jpeg، و در تست‌ها `ofstream`/`stb::env`/`tmpfile_s` به‌جای fopen/getenv/tmpfile. تست‌هایی که عمداً ورودی بد می‌دهند حالا هشدار libstb را با `testutil::log_capture` می‌گیرند و می‌شمارند (خروجی تست ساکت است). بیلد تمیز gcc: صفر warning. ویندوز را نتوانستم اجرا کنم.
+
 پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها).
 
 ## کارهای باز (به ترتیب پیشنهادی)

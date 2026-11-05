@@ -1,6 +1,7 @@
 #include <atomic>
 #include <cerrno>
 #include <filesystem>
+#include <fstream>
 #include <thread>
 
 #include "test_common.hpp"
@@ -197,10 +198,9 @@ UTEST(libstb_image_tests, test_open_and_read_file) {
     const auto path = std::filesystem::temp_directory_path() / "libstb_test_open.ppm";
     const std::string d = red_over_green();
     {
-        FILE* f = std::fopen(path.string().c_str(), "wb");
-        ASSERT_TRUE(f != nullptr);
-        std::fwrite(d.data(), 1, d.size(), f);
-        std::fclose(f);
+        std::ofstream f(path, std::ios::binary);
+        ASSERT_TRUE(bool(f));
+        f.write(d.data(), std::streamsize(d.size()));
     }
     stb::image img = stb::image::open(path);
     ASSERT_EQ(255, img(0, 0, 0));

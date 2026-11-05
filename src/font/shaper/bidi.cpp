@@ -298,7 +298,8 @@ private:
         reverse_by_level(cl);
         result out;
         out.order.reserve(n_);
-        out.level.assign(level_.begin(), level_.end());
+        out.level.reserve(level_.size());
+        for (const int lv : level_) out.level.push_back(static_cast<std::uint8_t>(lv));  // levels are 0..126
         for (const cluster& c : cl)
             for (std::size_t k = c.begin; k < c.end; ++k) out.order.push_back(static_cast<std::uint32_t>(k));
         return out;

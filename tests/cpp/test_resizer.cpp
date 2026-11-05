@@ -90,7 +90,7 @@ UTEST(libstb_resizer_tests, test_errors) {
     stb::resize_options tiny;  // (not "small": <windows.h> #defines that as char)
     tiny.max_bytes = 100;
     ASSERT_THROWS(stb::resizer(tiny).resize(gradient(2, 2, 3), 10, 10), stb::limit_error);   // 300 bytes
-    ASSERT_EQ(100, stb::resizer(tiny).resize(gradient(2, 2, 1), 10, 10).size_bytes());          // exactly 100
+    ASSERT_EQ(std::size_t(100), stb::resizer(tiny).resize(gradient(2, 2, 1), 10, 10).size_bytes());          // exactly 100
 
     stb::resize_options bad;
     bad.filter = static_cast<stb::resize_filter>(99);

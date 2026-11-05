@@ -22,6 +22,45 @@
 
 namespace testutil {
 
+// Collects the records of the "libstb" logger tree at `at` and above while it lives (and puts the logger back
+// as it was). A test that feeds libstb bad input on purpose uses it to say what libstb answered: with no
+// handler, a warning would go to stderr and into the test output.
+struct log_capture {
+    struct entry {
+        std::string name;
+        stb::logging::level level;
+        std::string message;
+    };
+    stb::logging::logger& lib = stb::logging::get_logger("libstb");
+    stb::logging::level before;
+    std::vector<entry> records;
+    stb::logging::handler* handler;
+
+    explicit log_capture(stb::logging::level at) : before(lib.get_level()) {
+        lib.set_level(at);
+        handler = &lib.add_handler(stb::logging::callback_handler([this](const stb::logging::record& r) {
+            records.push_back({std::string(r.name), r.levelno, std::string(r.message)});
+        }));
+    }
+    ~log_capture() {
+        lib.remove_handler(*handler);
+        lib.set_level(before);
+    }
+    log_capture(const log_capture&) = delete;
+    log_capture& operator=(const log_capture&) = delete;
+
+    int count(const char* name) const {
+        int n = 0;
+        for (const entry& e : records) n += e.name == name ? 1 : 0;
+        return n;
+    }
+    const entry* first(const char* name) const {
+        for (const entry& e : records)
+            if (e.name == name) return &e;
+        return nullptr;
+    }
+};
+
 // Binary PPM (P6): the simplest format stb_image reads, so decode tests need
 // no encoding step (and no binary fixtures).
 inline std::string ppm(int w, int h, const std::vector<std::uint8_t>& rgb) {

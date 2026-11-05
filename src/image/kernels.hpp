@@ -83,32 +83,32 @@ template <int SC, int DC>
 STB_INLINE void composite_row(const std::uint8_t* s, std::uint8_t* d, std::size_t n) {
     if constexpr (SC == 4 && DC == 4) {
         composite_rgba_row(s, d, n);
-        return;
-    }
-    constexpr bool dst_alpha = DC == 2 || DC == 4;
-    constexpr int NC = DC <= 2 ? 1 : 3;  // colour channels of the destination
-    for (std::size_t i = 0; i < n; ++i, s += SC, d += DC) {
-        const int sa = s[SC - 1];
-        int sc[NC];
-        if constexpr (NC == 1) {
-            sc[0] = SC == 2 ? s[0] : luma(s[0], s[1], s[2]);
-        } else {
-            for (int k = 0; k < 3; ++k) sc[k] = SC == 2 ? s[0] : s[k];
-        }
-        if constexpr (!dst_alpha) {
-            for (int k = 0; k < NC; ++k) d[k] = std::uint8_t((sc[k] * sa + int(d[k]) * (255 - sa) + 127) / 255);
-        } else {
-            const int da = d[DC - 1];
-            const int ws = sa * 255, wd = da * (255 - sa), den = ws + wd, half = den / 2;
-            const float fden = float(den + int(den == 0));
-            for (int k = 0; k < NC; ++k) {
-                const int dk = d[k];
-                const float q = float((sc[k] - dk) * ws + half) / fden;
-                int t = int(q);  // truncates toward zero
-                t -= int(float(t) > q);
-                d[k] = std::uint8_t(dk + t);
+    } else {
+        constexpr bool dst_alpha = DC == 2 || DC == 4;
+        constexpr int NC = DC <= 2 ? 1 : 3;  // colour channels of the destination
+        for (std::size_t i = 0; i < n; ++i, s += SC, d += DC) {
+            const int sa = s[SC - 1];
+            int sc[NC];
+            if constexpr (NC == 1) {
+                sc[0] = SC == 2 ? s[0] : luma(s[0], s[1], s[2]);
+            } else {
+                for (int k = 0; k < 3; ++k) sc[k] = SC == 2 ? s[0] : s[k];
             }
-            d[DC - 1] = std::uint8_t((den + 127) / 255);
+            if constexpr (!dst_alpha) {
+                for (int k = 0; k < NC; ++k) d[k] = std::uint8_t((sc[k] * sa + int(d[k]) * (255 - sa) + 127) / 255);
+            } else {
+                const int da = d[DC - 1];
+                const int ws = sa * 255, wd = da * (255 - sa), den = ws + wd, half = den / 2;
+                const float fden = float(den + int(den == 0));
+                for (int k = 0; k < NC; ++k) {
+                    const int dk = d[k];
+                    const float q = float((sc[k] - dk) * ws + half) / fden;
+                    int t = int(q);  // truncates toward zero
+                    t -= int(float(t) > q);
+                    d[k] = std::uint8_t(dk + t);
+                }
+                d[DC - 1] = std::uint8_t((den + 127) / 255);
+            }
         }
     }
 }

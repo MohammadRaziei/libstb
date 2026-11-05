@@ -125,7 +125,7 @@ public:
 int huffman_table::build(int *count)
 {
    int i,j,k=0;
-   unsigned int code;
+   unsigned int next_code;
    // build size list for each symbol (from JPEG spec)
    for (i=0; i < 16; ++i) {
       for (j=0; j < count[i]; ++j) {
@@ -136,19 +136,19 @@ int huffman_table::build(int *count)
    size[k] = 0;
 
    // compute actual symbols (from jpeg spec)
-   code = 0;
+   next_code = 0;
    k = 0;
    for(j=1; j <= 16; ++j) {
       // compute delta to add to code to compute symbol id
-      delta[j] = k - code;
+      delta[j] = k - next_code;
       if (size[k] == j) {
          while (size[k] == j)
-            this->code[k++] = (std::uint16_t) (code++);
-         if (code-1 >= (1u << j)) return fail("bad code lengths","Corrupt JPEG");
+            this->code[k++] = (std::uint16_t) (next_code++);
+         if (next_code-1 >= (1u << j)) return fail("bad code lengths","Corrupt JPEG");
       }
       // compute largest code + 1 for this size, preshifted as needed later
-      maxcode[j] = code << (16-j);
-      code <<= 1;
+      maxcode[j] = next_code << (16-j);
+      next_code <<= 1;
    }
    maxcode[j] = 0xffffffff;
 

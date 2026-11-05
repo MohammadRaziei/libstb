@@ -482,10 +482,13 @@ UTEST(libstb_gsub_tests, test_unsupported_and_empty_tables_do_nothing) {
 UTEST(libstb_gsub_tests, test_a_truncated_table_never_reads_out_of_range) {
     const bytes t = make_gsub({{kTest, {0, 1}}}, {{1, 0, {single_delta({10}, 1)}},
                                                   {4, 0x08, {ligature(50, {{{51}, 60}})}}});
+    std::size_t shaped = 0;
     for (std::size_t n = 0; n <= t.size(); ++n) {
         const bytes cut(t.begin(), t.begin() + std::ptrdiff_t(n));
-        (void)run_feature(cut, run_of({10, 50, 51, 10}));
+        (void)run_feature(cut, run_of({10, 50, 51, 10}));  // wrong or not, it must come back
+        ++shaped;
     }
+    ASSERT_EQ(shaped, t.size() + 1);  // every prefix of the table, the empty one and the whole one included
 }
 
 // Damages the GSUB and GDEF tables of a real font in many ways and shapes text with it: the result

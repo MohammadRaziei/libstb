@@ -36,11 +36,23 @@ lg::callback_handler into(collector& c) {
 
 std::filesystem::path tmp(const char* name) { return std::filesystem::temp_directory_path() / name; }
 
+// The file as text: a file_handler writes native line ends (CRLF on Windows, as Python's FileHandler does), and
+// reading in text mode gives them back as "\n".
 std::string slurp(const std::filesystem::path& p) {
-    std::ifstream f(p, std::ios::binary);
+    std::ifstream f(p);
     std::ostringstream s;
     s << f.rdbuf();
     return s.str();
+}
+
+// A temporary FILE for a stream_handler (tmpfile_s is the form MSVC asks for).
+std::FILE* temp_file() {
+#if defined(_MSC_VER)
+    std::FILE* f = nullptr;
+    return tmpfile_s(&f) == 0 ? f : nullptr;
+#else
+    return std::tmpfile();
+#endif
 }
 
 lg::record make_record(const char* name, lg::level lv, const char* message, std::chrono::milliseconds since_epoch) {
@@ -266,8 +278,8 @@ UTEST(libstb_logging_tests, test_a_custom_handler_uses_its_formatter_and_a_faili
 }
 
 UTEST(libstb_logging_tests, test_stream_handler_writes_a_line_and_colors_only_when_asked) {
-    std::FILE* plain = std::tmpfile();
-    std::FILE* colored = std::tmpfile();
+    std::FILE* plain = temp_file();
+    std::FILE* colored = temp_file();
     ASSERT_TRUE(plain != nullptr && colored != nullptr);
 
     lg::logger& log = lg::get_logger("test.logging.stream");

@@ -14,40 +14,8 @@ namespace {
 
 namespace lg = stb::logging;
 
-struct entry {
-    std::string name;
-    lg::level level;
-    std::string message;
-};
-
-// Collects every record of the "libstb" tree at the given level, and puts the logger back as it was.
-struct capture {
-    lg::logger& lib = lg::get_logger("libstb");
-    lg::level before;
-    std::vector<entry> records;
-    lg::handler* handler;
-
-    explicit capture(lg::level at) : before(lib.get_level()) {
-        lib.set_level(at);
-        handler = &lib.add_handler(lg::callback_handler([this](const lg::record& r) {
-            records.push_back({std::string(r.name), r.levelno, std::string(r.message)});
-        }));
-    }
-    ~capture() {
-        lib.remove_handler(*handler);
-        lib.set_level(before);
-    }
-    int count(const char* name) const {
-        int n = 0;
-        for (const entry& e : records) n += e.name == name ? 1 : 0;
-        return n;
-    }
-    const entry* first(const char* name) const {
-        for (const entry& e : records)
-            if (e.name == name) return &e;
-        return nullptr;
-    }
-};
+using entry = testutil::log_capture::entry;
+using capture = testutil::log_capture;
 
 stb::image small_image() {
     stb::image img(8, 6, stb::pixel_format::rgb);

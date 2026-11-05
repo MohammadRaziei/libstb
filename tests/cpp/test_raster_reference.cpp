@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -70,7 +71,8 @@ std::vector<unsigned char> coverage_of(const ref_scene& s) {
 }  // namespace
 
 UTEST(stb_raster_reference, every_scene_matches_plutovg_pixel_for_pixel) {
-    const char* dump = std::getenv("STB_RASTER_DUMP");
+    const std::string dump = stb::env("STB_RASTER_DUMP");
+    testutil::log_capture log(stb::logging::level::warning);  // one scene has an unusable dash pattern on purpose
     const int golden_count = int(sizeof(ref_hashes) / sizeof(ref_hashes[0]));
     ASSERT_EQ(golden_count, ref_scene_count);
 
@@ -80,12 +82,9 @@ UTEST(stb_raster_reference, every_scene_matches_plutovg_pixel_for_pixel) {
         ASSERT_TRUE(std::strcmp(s.name, ref_hashes[i].name) == 0);
 
         const std::vector<unsigned char> cov = coverage_of(s);
-        if (dump) {
-            const std::string file = std::string(dump) + "/" + s.name + ".bin";
-            if (std::FILE* f = std::fopen(file.c_str(), "wb")) {
-                std::fwrite(cov.data(), 1, cov.size(), f);
-                std::fclose(f);
-            }
+        if (!dump.empty()) {
+            std::ofstream out(dump + "/" + s.name + ".bin", std::ios::binary);
+            out.write(reinterpret_cast<const char*>(cov.data()), std::streamsize(cov.size()));
         }
         if (fnv1a(cov) != ref_hashes[i].hash) {
             std::printf("scene %s differs from the plutovg reference\n", s.name);
@@ -93,4 +92,5 @@ UTEST(stb_raster_reference, every_scene_matches_plutovg_pixel_for_pixel) {
         }
     }
     EXPECT_EQ(mismatches, 0);
+    EXPECT_EQ(log.count("libstb.raster"), 1);
 }

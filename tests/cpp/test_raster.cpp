@@ -172,6 +172,7 @@ UTEST(stb_raster, the_matrix_moves_the_outline) {
 UTEST(stb_raster, nan_and_infinity_draw_nothing_and_huge_values_are_survivable) {
     const float nan = std::numeric_limits<float>::quiet_NaN();
     const float inf = std::numeric_limits<float>::infinity();
+    testutil::log_capture log(stb::logging::level::warning);  // one warning per call that had to ignore or move something
 
     outline a;
     a.move_to(1, 1).line_to(nan, 5).line_to(10, 10).close();
@@ -188,8 +189,11 @@ UTEST(stb_raster, nan_and_infinity_draw_nothing_and_huge_values_are_survivable) 
 
     outline huge;
     huge.add_rect(-1e30f, -1e30f, 2e30f, 2e30f);
+    const int warnings_before_huge = log.count("libstb.raster");
     const coverage_map h = fill_map(huge, fill_rule::non_zero, 12, 12);
     EXPECT_EQ(int(h.at(5, 5)), 255);
+    EXPECT_EQ(warnings_before_huge, 4);        // the NaN outline (filled and stroked), the infinite one, the NaN matrix
+    EXPECT_EQ(log.count("libstb.raster"), 5);  // and the coordinates moved to the limit
 }
 
 UTEST(stb_raster, a_stroke_of_a_horizontal_line_covers_its_width) {
@@ -258,7 +262,11 @@ UTEST(stb_raster, width_zero_negative_or_not_a_number_draws_nothing) {
     p.move_to(1, 5).line_to(15, 5);
     EXPECT_EQ(count_nonzero(stroke_map(p, stroke_style{0.f}, 20, 10)), 0);
     EXPECT_EQ(count_nonzero(stroke_map(p, stroke_style{-2.f}, 20, 10)), 0);
-    EXPECT_EQ(count_nonzero(stroke_map(p, stroke_style{std::nanf("")}, 20, 10)), 0);
+    {
+        testutil::log_capture log(stb::logging::level::warning);
+        EXPECT_EQ(count_nonzero(stroke_map(p, stroke_style{std::nanf("")}, 20, 10)), 0);
+        EXPECT_EQ(log.count("libstb.raster"), 1);  // only a NaN width is said: zero and negative are just "nothing"
+    }
 }
 
 UTEST(stb_raster, dashes_cut_the_line_into_pieces) {
@@ -298,12 +306,14 @@ UTEST(stb_raster, an_unusable_dash_pattern_gives_a_solid_line) {
     p.move_to(0, 5).line_to(24, 5);
     stroke_style solid{2.f};
     const int expected = count_nonzero(stroke_map(p, solid, 24, 10));
+    testutil::log_capture log(stb::logging::level::warning);
     for (const std::vector<float>& d : {std::vector<float>{}, std::vector<float>{0.f, 0.f}, std::vector<float>{3.f, -1.f},
                                         std::vector<float>{std::nanf(""), 2.f}}) {
         stroke_style st{2.f};
         st.dashes = d;
         EXPECT_EQ(count_nonzero(stroke_map(p, st, 24, 10)), expected);
     }
+    EXPECT_EQ(log.count("libstb.raster"), 3);  // the empty pattern is a solid line by request; the other three are said
 }
 
 UTEST(stb_raster, outline_dashed_returns_straight_dashes) {
