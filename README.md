@@ -4,7 +4,7 @@
 
 # libstb
 
-**Decode, encode, resize, edit, draw text and compress, from Python and C++.**<br/>
+**Shaped Typography & Bitmaps: decode, encode, resize, edit, draw text and compress, from Python and C++.**<br/>
 No system libraries and no Python dependencies.
 
 [![CI](https://github.com/MohammadRaziei/libstb/actions/workflows/cmake.yml/badge.svg)](https://github.com/MohammadRaziei/libstb/actions/workflows/cmake.yml)
@@ -12,10 +12,11 @@ No system libraries and no Python dependencies.
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](CMakeLists.txt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
 
-[Quick start](#quick-start) ·
+[Installation](#installation) ·
+[Examples](#examples) ·
 [Command line](#command-line) ·
-[C++ with CMake](#c-with-cmake) ·
-[What is from stb](#what-is-from-stb-and-what-is-not) ·
+[Configuration](#configuration) ·
+[Lineage](#lineage) ·
 [Guide](docs/guide.md) ·
 [Changelog](CHANGELOG.md)
 
@@ -26,36 +27,41 @@ No system libraries and no Python dependencies.
 ```python
 import libstb as stb
 
-img = stb.Image.open("photo.jpg")          # PNG, JPEG, BMP, TGA, GIF, ... or bytes
+img = stb.Image.open("photo.jpg")                  # PNG, JPEG, BMP, TGA, GIF, ... or bytes
 img.resize(320, 240, "cubic").write("small.png")   # the format comes from the extension
 ```
 
 > [!NOTE]
-> **libstb inherits a lot from [stb](https://github.com/nothings/stb), and it is a complete
-> refactor.** The decoders, encoders, resizer and font rasterizer descend from Sean Barrett's stb
-> libraries, which is where the name comes from. But no stb header is vendored: the code is
-> reorganised into classes and one file per topic, parts are redesigned around a modern, typed
-> API (explicit ownership, typed errors, no hidden copies), and several hot paths are faster.
-> See [what is from stb, and what is not](#what-is-from-stb-and-what-is-not).
+> **libstb stands for Shaped Typography & Bitmaps.** It descends from Sean Barrett's
+> [stb](https://github.com/nothings/stb) libraries (the decoders, encoders, resizer and font
+> rasterizer), and the letters of the name still read as *stb*. But the code has been refactored
+> so heavily that it is no longer stb, which is why it has its own name instead of calling itself
+> a version of it. No stb header is vendored: the code is reorganised into classes and one file
+> per topic, parts are redesigned around a modern, typed API (explicit ownership, typed errors,
+> no hidden copies), and several hot paths are faster. See [Lineage](#lineage).
 
 ## Highlights
 
 - **Python and C++, one library.** The same operations in `stb::image` (C++17) and
-  `libstb.Image` (nanobind). The Linux x86-64 wheel is about 0.5 MB.
+  `libstb.Image` (nanobind). The Linux x86-64 wheel is under 1 MB.
 - **Many formats in, four out.** Decodes PNG, JPEG, BMP, TGA, GIF and more; encodes PNG, JPEG,
   BMP and TGA.
 - **Editing, not just I/O.** Crop, pad, flips, rotation, thumbnail, channel conversion, alpha
-  blend modes, fill, masks, stacking, EXIF orientation, vector outlines (anti-aliased fill and stroke with caps,
-  joins and dashes) and a canvas for text, shapes and outlines.
-- **Text, including Persian and Arabic.** TrueType and CFF fonts, GSUB shaping and bidi
-  reordering (no GPOS), plus a text size estimate that needs no font file.
+  blend modes, fill, masks, stacking, EXIF orientation, vector outlines (anti-aliased fill and
+  stroke with caps, joins and dashes) and a canvas for text, shapes and outlines.
+- **Text, including Persian and Arabic.** TrueType and CFF fonts, GSUB shaping, bidi reordering
+  and pair kerning (marks are not placed from GPOS anchors, see the [guide](docs/guide.md)), plus a
+  text size estimate that needs no font file.
 - **zlib as an API.** `zlib_compress` and `zlib_decompress`, with bounded output so a zip bomb
   is a `LimitError`.
 - **Safe by default.** Size limits are checked from the header before pixel memory is allocated,
   errors are typed (`DecodeError`, `EncodeError`, `LimitError`), and EXIF parsing checks every
   offset.
 - **Fast where it pays.** SIMD kernels (AVX2, SSE2, scalar) picked at run time with identical
-  results, decoded buffers adopted instead of copied, the GIL released in Python calls.
+  results, decoded buffers adopted instead of copied, the GIL released in Python calls, and big
+  resizes split over threads (the pixels never depend on the thread count).
+- **Logging that fits both worlds.** `stb::logging` in C++, modelled on Python's `logging`; in
+  Python, libstb's messages arrive in the `logging` module you already configure.
 
 ## Installation
 
@@ -68,41 +74,362 @@ pip install libstb
 | `pip install "libstb[numpy]"` | `Image.numpy()`, `imread`, `imresize` (zero-copy views). |
 | `pip install "libstb[pillow]"` | `Image.to_pil()` and `Image.from_pil()`. |
 
-C++ projects use CMake: see [C++ with CMake](#c-with-cmake).
+C++ projects use CMake (3.21+, C++17). Fetch the source:
 
-## Quick start
+```cmake
+include(FetchContent)
+FetchContent_Declare(libstb GIT_REPOSITORY https://github.com/MohammadRaziei/libstb.git GIT_TAG master)
+FetchContent_MakeAvailable(libstb)
+
+target_link_libraries(my_app PRIVATE libstb::libstb)
+```
+
+Or use the prebuilt library from `pip install libstb`:
+
+```cmake
+execute_process(COMMAND libstb --cmake-dir
+                OUTPUT_VARIABLE libstb_DIR OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)
+find_package(libstb CONFIG REQUIRED)
+
+target_link_libraries(my_app PRIVATE libstb::libstb)
+```
+
+`libstb` must be on the `PATH` (the Python environment where you ran `pip install`); otherwise
+use `python -m libstb --cmake-dir`. `find_package(libstb CONFIG)` also works after
+`cmake --install`.
+
+The namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target
+(`libstb::libstb`) and the Python package (`libstb`) keep the project name. The core is a shared
+library. No stb header is included from a public header, and stb symbols do not leak from the
+library, so it links next to your own copy of stb.
+
+## Examples
+
+Every task is shown in Python and in C++. The C++ snippets are function bodies: they assume
+`#include <stb.h>` (plus `<iostream>`, `<filesystem>` and `<fstream>` where used) and run next to
+the files they name. All of them were built with CMake and run before they went into this README.
+
+### Open, inspect and resize
+
+Read the header without decoding, decode with the EXIF rotation applied, then resize and save.
+The filter is a name (`nearest`, `linear`, `cubic`, `mitchell`, `box`, ...) or an enum.
+
+**Python**
 
 ```python
 import libstb as stb
 
-img = stb.Image.open("photo.jpg")                 # PNG, JPEG, BMP, TGA, GIF, ... (or bytes)
-img.width, img.height, img.channels               # 640, 480, 3
+info = stb.iminfo("photo.jpg")                      # header only: no pixel is decoded
+print(info.width, info.height, info.format)
 
-small = img.resize(320, 240, "cubic")             # filter by name: nearest, linear, cubic, mitchell, box...
-small.write("small.png")                          # format from the extension (png, jpg, bmp, tga)
-small.write_jpg("small.jpg", quality=80)          # or choose the format and its settings
-data = small.to_png(compression=9)                # -> bytes
+img = stb.Image.open("photo.jpg", orient=True)      # apply the EXIF rotation while decoding
+img.resize(320, 240, "mitchell").write("small.png")           # the format comes from the extension
+img.thumbnail(256, 256).write_jpg("thumb.jpg", quality=80)    # fits the box, never enlarges
+```
 
-thumb = img.thumbnail(256, 256)                   # fits the box, never enlarges
-img.crop(10, 10, 200, 100).rotate90().convert(stb.PixelFormat.GRAY)  # every edit returns a new Image
+**C++**
 
-pixels = img.numpy()                              # zero-copy view (needs numpy); DLPack works too
-photo = stb.Image.open("IMG_0001.jpg", orient=True)   # apply the EXIF rotation while decoding
+```cpp
+const stb::image_info info = stb::image_info::read_file("photo.jpg");   // header only: no pixel is decoded
+std::cout << info.width << "x" << info.height << "\n";
 
-font = stb.Font.open("font.ttf")                  # trusted fonts only
-labeled = img.draw_text("Hello", font, 32, 10, 10, color=(255, 255, 255))   # text onto a copy
-centred = img.draw_text("Hello", font, 32, img.width // 2, 10, align="center")  # x is the centre of the line
-font.render("Hello", 32).bitmap.write("hello.png")
-# Persian / Arabic text works as typed: GSUB shaping and bidi reordering (no GPOS, see docs/guide.md)
-stb.estimate_text("Hello", 16)                    # text size with no font file at all
+stb::load_options opt;
+opt.orient = true;                                    // apply the EXIF rotation while decoding
+stb::image img = stb::image::open("photo.jpg", opt);
 
-# Vector outlines: anti-aliased fill and stroke (width, caps, joins, dashes), no extra dependency
+img.resize(320, 240, "mitchell").write("small.png");  // the format comes from the extension
+img.thumbnail(256, 256).write_jpg("thumb.jpg", 80);   // fits the box, never enlarges
+```
+
+### Thumbnails for a whole folder
+
+`thumbnail` fits the image inside the box and never enlarges. Big resizes use extra threads on
+their own, so a loop like this needs no thread code.
+
+**Python**
+
+```python
+from pathlib import Path
+
+import libstb as stb
+
+Path("thumbs").mkdir(exist_ok=True)
+for path in Path("photos").glob("*.jpg"):
+    thumb = stb.Image.open(path, orient=True).thumbnail(256, 256)
+    thumb.write(f"thumbs/{path.stem}.png")
+```
+
+**C++**
+
+```cpp
+namespace fs = std::filesystem;
+fs::create_directories("thumbs");
+for (const auto& entry : fs::directory_iterator("photos")) {
+    if (entry.path().extension() != ".jpg") continue;
+    stb::image thumb = stb::image::open(entry.path()).thumbnail(256, 256);
+    thumb.write(fs::path("thumbs") / (entry.path().stem().string() + ".png"));
+}
+```
+
+### Contact sheet and watermark
+
+`hstack` and `vstack` put images side by side with a gap and a background; `blend` composites
+one image over another with a blend mode (`normal`, `multiply`, `screen`, ...) and an opacity.
+In Python every call returns a new `Image`; in C++ `blend` and `fill` change the image they are
+called on (call `copy()` first to keep the original).
+
+**Python**
+
+```python
+import libstb as stb
+
+a = stb.Image.open("a.jpg").thumbnail(200, 200)
+b = stb.Image.open("b.jpg").thumbnail(200, 200)
+sheet = stb.Image.hstack([a, b], gap=8, background=(255, 255, 255), align="center")
+sheet.write("sheet.png")
+
+photo = stb.Image.open("photo.jpg")
+logo = stb.Image.open("logo.png")                   # RGBA: the alpha channel is honoured
+marked = photo.blend(logo, x=photo.width - logo.width - 16, y=16, opacity=0.6)
+marked.write("marked.jpg")
+```
+
+**C++**
+
+```cpp
+stb::image a = stb::image::open("a.jpg").thumbnail(200, 200);
+stb::image b = stb::image::open("b.jpg").thumbnail(200, 200);
+stb::image::hstack({&a, &b}, 8, "white", stb::align::center).write("sheet.png");
+
+stb::image photo = stb::image::open("photo.jpg");
+stb::image logo = stb::image::open("logo.png");       // RGBA: the alpha channel is honoured
+photo.blend(logo, photo.width() - logo.width() - 16, 16, stb::blend_mode::normal, 0.6f);  // changes photo
+photo.write("marked.jpg");
+```
+
+### Text, labels and cards
+
+`draw_text` puts one text on a copy of the image. A `Canvas` collects shapes, texts and images
+and draws them on one copy, in order, when you call `finish()`. Load fonts you trust only.
+
+**Python**
+
+```python
+import libstb as stb
+
+photo = stb.Image.open("photo.jpg")
+font = stb.Font.open("font.ttf")                    # trusted fonts only
+
+# One text onto a copy of the image:
+photo.draw_text("Hello", font, 32, 10, 10, color="white").write("hello.png")
+
+# Several shapes and texts on ONE copy: a canvas draws them in order.
+c = stb.Canvas(photo)
+c.set_font(font, 48).set_color("white")
+c.add_rect(10, 10, 360, 70).fill("#222").radius(12).stroke(2, "white")
+c.add_text("Title", 24, 18)
+c.add_text("subtitle", photo.width // 2, photo.height - 60).align("center").size(24).bg_color("#222").padding(6)
+c.finish().write("card.png")
+```
+
+**C++**
+
+```cpp
+stb::image photo = stb::image::open("photo.jpg");
+stb::font font = stb::font::open("font.ttf");         // trusted fonts only
+
+// One text onto a copy of the image:
+font.draw_text(photo, "Hello", 32, 10, 10, stb::color("white")).write("hello.png");
+
+// Several shapes and texts on ONE copy: a canvas draws them in order.
+stb::canvas c(photo);
+c.set_font(font, 48).set_color("white");
+c.add_rect(10, 10, 360, 70).fill("#222").radius(12).stroke(2, "white");
+c.add_text("Title", 24, 18);
+c.add_text("subtitle", photo.width() / 2, photo.height() - 60)
+    .align(stb::text_align::center).size(24).bg_color("#222").padding(6);
+c.finish().write("card.png");
+```
+
+### Persian and Arabic text
+
+Write the text as you would type it. Shaping (joining forms, ligatures) and bidi reordering are
+done for you, and mixed Persian and Latin text lays out in the right order.
+
+**Python**
+
+```python
+import libstb as stb
+
+font = stb.Font.open("Vazirmatn.ttf")               # any font that has Arabic-script glyphs
+canvas = stb.Image.open("photo.jpg").fill("white")
+text = "سلام دنیا، libstb 2026"                      # typed as is: shaping and bidi reordering are done for you
+canvas.draw_text(text, font, 48, 20, 20, color="black").write("persian.png")
+```
+
+**C++**
+
+```cpp
+stb::font font = stb::font::open("Vazirmatn.ttf");    // any font that has Arabic-script glyphs
+stb::image canvas = stb::image::open("photo.jpg").fill("white");
+// UTF-8 as is: shaping and bidi reordering are done for you.
+font.draw_text(canvas, "سلام دنیا، libstb 2026", 48, 20, 20, stb::color("black")).write("persian.png");
+```
+
+### Vector shapes
+
+An outline is a list of lines and curves. Fill it (`non_zero` by default, or `even_odd`), or
+stroke it with a width, caps, joins and dashes; the edges are anti-aliased and there is no extra
+dependency. `fill_mask` gives the coverage as a gray image for your own compositing.
+
+**Python**
+
+```python
+import libstb as stb
+
 heart = stb.Outline().move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close()
-art = img.fill_outline(heart, "#e63946").stroke_outline(heart, "white", 3, join="round", dashes=[8, 4])
-mask = heart.fill_mask(100, 100)                  # the coverage as a gray Image, for your own compositing
+big = heart.transformed(stb.Matrix().scale(3, 3).translate(40, 40))    # scale, then move
 
-packed = stb.zlib_compress(data)                  # zlib streams: the compressor that writes PNG
-data = stb.zlib_decompress(packed, max_bytes=64 << 20)   # output is bounded: a zip bomb is a LimitError
+img = stb.Image.open("photo.jpg")
+art = img.fill_outline(big, "#e63946").stroke_outline(big, "white", 3, join="round", dashes=[8, 4])
+art.write("heart.png")
+heart.fill_mask(100, 100).write("heart_mask.png")    # the coverage as a gray Image, for your own compositing
+```
+
+**C++**
+
+```cpp
+stb::outline heart;
+heart.move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close();
+const stb::outline big = heart.transformed(stb::matrix().scale(3, 3).translate(40, 40));   // scale, then move
+
+stb::image img = stb::image::open("photo.jpg");
+stb::fill(img, big, stb::color("#e63946"));           // anti-aliased, in place
+
+stb::stroke_style style;
+style.width = 3.f;
+style.join = stb::line_join::round;
+style.dashes = {8.f, 4.f};
+stb::stroke(img, big, stb::color("white"), style);
+img.write("heart.png");
+```
+
+### In memory, NumPy and Pillow
+
+Encode to bytes and decode from bytes with no file. In Python the pixels are also a zero-copy
+NumPy view, and Pillow images convert both ways.
+
+**Python**
+
+```python
+import numpy as np
+from PIL import Image as PILImage
+
+import libstb as stb
+
+pixels = stb.imread("photo.jpg")                    # uint8 ndarray (H, W, C)
+small = stb.imresize(pixels, 160, 120)              # ndarray in, ndarray out
+stb.imwrite("small.jpg", small, quality=85)
+
+img = stb.Image.open("photo.jpg")
+view = img.numpy()                                  # zero-copy view of the pixels
+print(view.mean(axis=(0, 1)))
+pil = img.to_pil()                                  # needs Pillow
+back = stb.Image.from_pil(pil.rotate(90, expand=True))
+```
+
+**C++**
+
+```cpp
+stb::image img = stb::image::open("photo.jpg");
+std::vector<std::uint8_t> png = img.to_png(9);        // the bytes of a whole file, e.g. for a socket
+stb::image back = stb::image::decode(png.data(), png.size());   // and back, from memory
+std::cout << back.width() << "x" << back.height() << ", " << png.size() << " bytes\n";
+```
+
+### Untrusted input and zlib
+
+Decoding refuses to allocate more than `max_bytes`, and that is decided from the header, before
+any pixel memory exists. Errors are typed, so a bad upload is an exception you can name. The same
+bound applies to `zlib_decompress`.
+
+**Python**
+
+```python
+from pathlib import Path
+
+import libstb as stb
+
+data = Path("photo.jpg").read_bytes()               # say, an upload from a user
+try:
+    img = stb.Image.open(data, max_bytes=64 << 20)  # the size limit is checked from the header, before any pixel memory
+except stb.LimitError:
+    print("too big")
+except stb.DecodeError:
+    print("not an image libstb can read")
+
+packed = stb.zlib_compress(data, level=9)
+raw = stb.zlib_decompress(packed, max_bytes=64 << 20)   # a zip bomb is a LimitError
+```
+
+**C++**
+
+```cpp
+std::ifstream in("photo.jpg", std::ios::binary);      // say, an upload from a user
+std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), {});
+
+try {
+    stb::load_options opt;
+    opt.max_bytes = 64u << 20;                        // checked from the header, before any pixel memory
+    stb::image img = stb::image::decode(data.data(), data.size(), opt);
+} catch (const stb::limit_error&) {
+    std::cerr << "too big\n";
+} catch (const stb::decode_error&) {
+    std::cerr << "not an image libstb can read\n";
+}
+
+std::vector<std::uint8_t> packed = stb::zlib_compress(data, 9);
+std::vector<std::uint8_t> raw = stb::zlib_decompress(packed, 64u << 20);   // a zip bomb is a limit_error
+```
+
+### SIMD, threads and logging
+
+You do not need to set any of this: the fastest SIMD backend is picked at run time and threads
+are used only where the work pays for them. When you do want control (a library, a thread pool,
+a diagnosis), a scope changes one thread only, and the previous setting comes back on exit.
+libstb's messages go to Python's `logging` (the logger is `libstb`, with children such as
+`libstb.simd`); in C++ you add handlers to `stb::logging::get_logger("libstb")`.
+
+**Python**
+
+```python
+import logging
+
+import libstb as stb
+
+logging.basicConfig(level=logging.INFO)             # libstb's own messages arrive in Python's logging
+logging.getLogger("libstb").setLevel(logging.DEBUG)
+
+print(stb.simd_name(), stb.simd_backends(), stb.thread_count())
+with stb.threads(1), stb.simd("scalar"):            # for this thread and this block only
+    small = stb.Image.open("photo.jpg").resize(320, 240)
+```
+
+**C++**
+
+```cpp
+namespace lg = stb::logging;
+lg::logger& lib = lg::get_logger("libstb");
+lib.set_level(lg::level::debug);
+lib.add_handler(lg::stream_handler(stderr)).set_formatter(lg::formatter("%(levelname)s %(name)s: %(message)s"));
+
+std::cout << stb::simd_name() << " " << stb::thread_count() << "\n";
+{
+    stb::thread_scope threads(1);                     // for this thread and this scope only
+    stb::simd_scope simd("scalar");
+    stb::image small = stb::image::open("photo.jpg").resize(320, 240);
+}
 ```
 
 ## Command line
@@ -121,70 +448,23 @@ libstb --cmake-dir                                         # also --include-dir,
 The output format of `convert` comes from the extension of the destination. Exit status is 0 on
 success, 1 when a file could not be read or written, and 2 for a usage error.
 
-## C++ with CMake
+## Configuration
 
-```cmake
-include(FetchContent)
-FetchContent_Declare(libstb GIT_REPOSITORY https://github.com/MohammadRaziei/libstb.git GIT_TAG master)
-FetchContent_MakeAvailable(libstb)
+Nothing here is needed for normal use. The variables are read once, the first time they are needed, and are meant for
+diagnosis: comparing two runs of a program you do not want to edit.
 
-target_link_libraries(my_app PRIVATE libstb::libstb)    # CMake 3.21+, C++17
-```
+| Variable | Values | Effect |
+| --- | --- | --- |
+| `LIBSTB_SIMD` | `auto`, `off`, or a backend name (`avx2`, `sse2`, `neon`, `scalar`) | Initial SIMD backend. An unknown name prints one line and falls back to `auto`. |
+| `LIBSTB_THREADS` | `auto`, `off`, or a number | Most threads one call may use (a ceiling, not a demand). |
+| `LIBSTB_LOG` | `debug`, `info`, `warning`, `error`, `critical` or a number | Level of the `libstb` logger. When it is set, it keeps deciding what libstb emits, whatever the Python level. |
 
-Or use the prebuilt library from `pip install libstb`:
-
-```cmake
-execute_process(COMMAND libstb --cmake-dir
-                OUTPUT_VARIABLE libstb_DIR OUTPUT_STRIP_TRAILING_WHITESPACE
-                COMMAND_ERROR_IS_FATAL ANY)
-find_package(libstb CONFIG REQUIRED)
-
-target_link_libraries(my_app PRIVATE libstb::libstb)
-```
-
-`libstb` must be on the `PATH` (the Python environment where you ran `pip install`); otherwise
-use `python -m libstb --cmake-dir`. `find_package(libstb CONFIG)` also works after
-`cmake --install`.
-
-```cpp
-#include <stb.h>
-
-stb::image img = stb::image::open("photo.jpg");          // throws stb::error subclasses
-stb::image small = img.resize(320, 240, "cubic");        // or stb::resize_filter::mitchell
-stb::image gray = small.convert(stb::pixel_format::gray);  // gray, gray_alpha, rgb or rgba
-small.write("small.png");                                // format from the extension
-small.write_jpg("small.jpg", 80);
-std::vector<std::uint8_t> bytes = small.to_png(9);
-
-stb::font f = stb::font::open("font.ttf");               // cheap to copy, thread-safe
-stb::image labeled = f.draw_text(img, "Hello", 32, 10, 10, stb::color("white"));
-stb::image centred = f.draw_text(img, "Hello", 32, img.width() / 2, 10, stb::color(), stb::text_align::center);
-stb::text_bitmap t = f.render("Hello", 32);
-stb::text_size est = stb::estimate_text("Hello", 16);    // no font file needed
-
-stb::outline heart;                                          // <stb/outline.hpp>, <stb/raster.hpp>
-heart.move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close();
-stb::fill(img, heart, stb::color("#e63946"));             // anti-aliased, in place
-stb::stroke(img, heart, stb::color("white"), stb::stroke_style{3.f});   // width, caps, joins, dashes
-
-std::vector<std::uint8_t> z = stb::zlib_compress(bytes);                 // <stb/zlib.hpp>, level 0..9 like zlib
-std::vector<std::uint8_t> back = stb::zlib_decompress(z, 64u << 20);     // throws limit_error past max_bytes
-```
-
-The namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target
-(`libstb::libstb`) and the Python package (`libstb`) keep the project name. The core is a shared
-library. No stb header is included from a public header, and stb symbols do not leak from the
-library, so it links next to your own copy of stb.
-
-## What is from stb, and what is not
+## Lineage
 
 libstb is not a wrapper around stb. Its image decoders, encoders, resizer and font reader are
 **derived from stb's algorithms and rewritten as libstb's own code**; everything around them is
 new. Each derived file says so in its header, and [`NOTICE.md`](NOTICE.md) has the lineage and
 the license (stb is public domain or MIT; libstb uses the MIT option).
-
-**Descended from stb** (same algorithms, reorganised: one file per format or topic, classes for
-stateful code, bounds-checked reads, no global state):
 
 | Area | From | Lives in |
 | :--- | :--- | :--- |
@@ -193,20 +473,12 @@ stateful code, bounds-checked reads, no global state):
 | Resizer, all filters | `stb_image_resize2` v2.18 | `src/image/resize/` |
 | Font file, glyph outlines (TrueType and CFF), rasterizer, atlas packer | `stb_truetype` v1.26, `stb_rect_pack` v1.01 | `src/font/truetype/` |
 
-**Written for libstb** (no stb counterpart):
+Written for libstb, with no stb counterpart: the public API (`stb::image`, `stb::font`,
+`stb::canvas`, typed errors, the whole Python package), editing and blending, the SIMD kernels,
+EXIF, text shaping and bidi, vector outlines, logging, threads and the tooling. The full list is in
+the [guide](docs/guide.md#what-is-from-stb-and-what-is-not).
 
-| Area | What |
-| :--- | :--- |
-| Public API | `stb::image`, `stb::font`, `stb::resizer`, `stb::canvas`, typed errors, explicit ownership; the whole Python package (nanobind) |
-| Editing | crop, pad, flips, rotation, thumbnail, channel conversion, flatten, `blend` modes, `fill`, alpha masks, `hstack` / `vstack` |
-| SIMD kernels | `convert`, `flatten` and `blend` with AVX2, SSE2 and scalar backends, picked at run time (`src/image/`) |
-| EXIF | orientation reader for JPEG and PNG, written for untrusted input |
-| Text | GSUB shaping, OpenType layout, bidi (UAX #9), Arabic joining, `draw_text`, `estimate_text` (`src/font/shaper/`) |
-| Drawing | colours, shapes and the canvas (`src/draw/`) |
-| zlib | the public `zlib_compress` / `zlib_decompress` API on top of the codec code |
-| Tooling | the command line, the CMake package, the tests and the benchmarks |
-
-**What changed on the inherited parts:**
+What changed on the inherited parts:
 
 - **Faster encoders.** The PNG deflate uses 4-byte hash chains, lazy matching and dynamic Huffman
   blocks; the JPEG encoder has a buffered bit writer, a vectorisable DCT and an SSE2 colour
@@ -217,9 +489,6 @@ stateful code, bounds-checked reads, no global state):
   slower than zlib on very compressible text, so use zlib if inflate speed is what you need.
 - **Safer.** Header-based size limits, bounds-checked reads in the font reader (stb_truetype did
   not check), and typed errors. The font reader has not been fuzzed: prefer fonts you trust.
-- **Refactor checks.** `tests/tools/snapshot.py` and `decode_snapshot.py` compare a new build
-  against an old one operation by operation, and `jpeg_vs_upstream.py` compares the JPEG encoder
-  with upstream.
 
 Performance numbers against Pillow and OpenCV, including where libstb is slower (JPEG encoding
 is one), are in [`benchmarks/`](benchmarks/README.md). They depend on the machine, so run them
@@ -227,9 +496,10 @@ on yours.
 
 ## Documentation
 
-- [`docs/guide.md`](docs/guide.md): the full reference (every call, SIMD, EXIF, DLPack, Pillow,
-  errors, design and source layout).
+- [`docs/guide.md`](docs/guide.md): the full reference (every call, SIMD, threads, EXIF, DLPack,
+  Pillow, errors, logging, design and source layout).
 - `docs/`: the Sphinx (Python) and Doxygen (C++) sources of the documentation site.
+- [`examples/`](examples): runnable Python scripts, C++ programs and notebooks.
 - [`CHANGELOG.md`](CHANGELOG.md) and [`NOTICE.md`](NOTICE.md).
 
 ## Build and test

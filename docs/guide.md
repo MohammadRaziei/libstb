@@ -567,6 +567,55 @@ libstb.remove_handler(fh);
 
 Or `cmake --install build` and `find_package(libstb)` as usual.
 
+## What is from stb, and what is not
+
+libstb is not a wrapper around stb. Its image decoders, encoders, resizer and font reader are
+**derived from stb's algorithms and rewritten as libstb's own code**; everything around them is
+new. Each derived file says so in its header, and [`NOTICE.md`](NOTICE.md) has the lineage and
+the license (stb is public domain or MIT; libstb uses the MIT option).
+
+**Descended from stb** (same algorithms, reorganised: one file per format or topic, classes for
+stateful code, bounds-checked reads, no global state):
+
+| Area | From | Lives in |
+| :--- | :--- | :--- |
+| Decoders: PNG, JPEG, BMP, TGA, GIF, PSD, HDR, PIC, PNM, and the inflater | `stb_image` v2.30 | `src/codec/decode/` |
+| Encoders: PNG, JPEG, BMP, TGA, and the zlib compressor | `stb_image_write` v1.16 (the JPEG encoder is based on jo_jpeg) | `src/codec/encode/` |
+| Resizer, all filters | `stb_image_resize2` v2.18 | `src/image/resize/` |
+| Font file, glyph outlines (TrueType and CFF), rasterizer, atlas packer | `stb_truetype` v1.26, `stb_rect_pack` v1.01 | `src/font/truetype/` |
+
+**Written for libstb** (no stb counterpart):
+
+| Area | What |
+| :--- | :--- |
+| Public API | `stb::image`, `stb::font`, `stb::resizer`, `stb::canvas`, typed errors, explicit ownership; the whole Python package (nanobind) |
+| Editing | crop, pad, flips, rotation, thumbnail, channel conversion, flatten, `blend` modes, `fill`, alpha masks, `hstack` / `vstack` |
+| SIMD kernels | `convert`, `flatten` and `blend` with AVX2, SSE2 and scalar backends, picked at run time (`src/image/`) |
+| EXIF | orientation reader for JPEG and PNG, written for untrusted input |
+| Text | GSUB shaping, OpenType layout, bidi (UAX #9), Arabic joining, `draw_text`, `estimate_text` (`src/font/shaper/`) |
+| Drawing | colours, shapes and the canvas (`src/draw/`) |
+| zlib | the public `zlib_compress` / `zlib_decompress` API on top of the codec code |
+| Tooling | the command line, the CMake package, the tests and the benchmarks |
+
+**What changed on the inherited parts:**
+
+- **Faster encoders.** The PNG deflate uses 4-byte hash chains, lazy matching and dynamic Huffman
+  blocks; the JPEG encoder has a buffered bit writer, a vectorisable DCT and an SSE2 colour
+  conversion. The compressor measured 1.2x to 1.9x faster than zlib level 6 with 0.4% to 3.3%
+  larger output on the project's own samples (source code, a binary, image pixels). Measure on
+  your data.
+- **Inflate is not faster.** The decompressor is the stb_image-derived inflater: about 2.5x
+  slower than zlib on very compressible text, so use zlib if inflate speed is what you need.
+- **Safer.** Header-based size limits, bounds-checked reads in the font reader (stb_truetype did
+  not check), and typed errors. The font reader has not been fuzzed: prefer fonts you trust.
+- **Refactor checks.** `tests/tools/snapshot.py` and `decode_snapshot.py` compare a new build
+  against an old one operation by operation, and `jpeg_vs_upstream.py` compares the JPEG encoder
+  with upstream.
+
+Performance numbers against Pillow and OpenCV, including where libstb is slower (JPEG encoding
+is one), are in [`benchmarks/`](benchmarks/README.md). They depend on the machine, so run them
+on yours.
+
 ## Layout (mirrors httpp / ctoon)
 
 ```
