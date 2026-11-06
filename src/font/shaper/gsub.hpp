@@ -25,6 +25,11 @@ struct glyph_record {
     char32_t cp = 0;                         // first source character of the cluster
     std::uint32_t mask = 1;                  // features that may act on this glyph (see shaping_plan)
     std::uint8_t gclass = gc_unclassified;  // glyph_class
+    // Index (in the text being shaped) of the first source character of the cluster. A ligature
+    // keeps the cluster of its first component and a glyph that a lookup splits in several pieces
+    // gives each piece its own cluster: substitution never changes this field, so it always says
+    // where a glyph came from.
+    std::uint32_t cluster = 0;
 };
 
 class lookup;

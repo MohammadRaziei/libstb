@@ -8,7 +8,10 @@
 //   3. the rest of the font's GSUB features run over each Arabic run (ccmp, rlig, calt, liga ...);
 //   4. the line is ordered with the bidirectional algorithm, brackets are mirrored, and a
 //      letter's marks stay after it.
-// Lines without a right-to-left letter come back as one glyph per character.
+// Lines without a right-to-left letter come back as one glyph per character (unless the paragraph
+// direction is forced to right-to-left).
+// Every glyph carries the index of the character it came from (visual_glyph::cluster), through
+// joining, ligatures, mirroring and reordering.
 //
 // Internal header: included only from src/font/.
 #pragma once
@@ -17,6 +20,7 @@
 #include <string_view>
 #include <vector>
 
+#include "bidi.hpp"
 #include "gsub.hpp"
 #include "otl.hpp"
 
@@ -30,6 +34,7 @@ struct arabic_layout {
     otl::gdef defs;
     otl::gsub_table gsub;
     otl::shaping_plan plan;
+    otl::shaping_plan plan_plain;  // the same without the optional ligatures (liga, clig): shape_options::ligatures = false
     bool usable = false;       // the font has GSUB lookups for Arabic (or default) script
     bool has_forms = false;    // GSUB defines any of isol, fina, medi, init: then it decides every shape
     bool has_rlig = false;     // required ligatures (lam-alef) come from GSUB
@@ -50,25 +55,35 @@ public:
     virtual const arabic_layout* arabic() const { return nullptr; }
 };
 
-struct shaped_glyph {
-    std::uint32_t gid;  // 0: none, draw `cp` as it is (or nothing for '\n')
-    char32_t cp;        // the character this glyph stands for (first one, for a ligature)
+// A glyph of the result, in visual order.
+struct visual_glyph {
+    std::uint32_t gid;      // 0: none, draw `cp` as it is (or nothing for '\n')
+    char32_t cp;            // the character this glyph stands for (first one, for a ligature)
+    std::uint32_t cluster;  // index in the text of the first character this glyph stands for
+};
+
+struct shaper_options {
+    bidi::base_dir direction = bidi::base_dir::automatic;
+    bool ligatures = true;  // false: the optional ligature features (liga, clig) do not run; rlig, joining and the rest do
 };
 
 class text_shaper {
 public:
     explicit text_shaper(const glyph_source& source) : src_(source) {}
 
-    // Shapes `text`; every '\n' becomes a glyph with gid 0 and cp '\n' and starts a new line.
-    std::vector<shaped_glyph> shape(std::u32string_view text) const;
+    // Shapes `text`; every '\n' becomes a glyph with gid 0 and cp '\n' (its own cluster) and starts
+    // a new line.
+    std::vector<visual_glyph> shape(std::u32string_view text, const shaper_options& options = {}) const;
 
 private:
-    // One line (no '\n') appended to `out`.
-    void shape_line(std::u32string_view line, std::vector<shaped_glyph>& out) const;
+    // One line (no '\n') appended to `out`; `first` is the index of its first character in the text.
+    void shape_line(std::u32string_view line, std::size_t first, const shaper_options& options,
+                    std::vector<visual_glyph>& out) const;
     // Steps 1-2 of shape_line: one glyph per character in logical order, with Arabic forms chosen.
-    std::vector<otl::glyph_record> to_glyphs(std::u32string_view line, const arabic_layout* al) const;
+    std::vector<otl::glyph_record> to_glyphs(std::u32string_view line, std::size_t first, const arabic_layout* al) const;
     // Step 4: the glyphs in visual order, with brackets mirrored inside right-to-left runs.
-    void append_in_visual_order(const std::vector<otl::glyph_record>& g, std::vector<shaped_glyph>& out) const;
+    void append_in_visual_order(const std::vector<otl::glyph_record>& g, bidi::base_dir direction,
+                                std::vector<visual_glyph>& out) const;
 
     const glyph_source& src_;
 };

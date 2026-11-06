@@ -132,8 +132,9 @@ bool neutral(cls c) { return c == cls::WS || c == cls::ON; }
 // One line, resolved rule by rule in the order of UAX #9. Single use: construct, run().
 class resolver {
 public:
-    explicit resolver(const std::vector<cls>& original)
-        : original_(original), n_(original.size()), t_(original), paragraph_(paragraph_level(original)),
+    resolver(const std::vector<cls>& original, base_dir base)
+        : original_(original), n_(original.size()), t_(original),
+          paragraph_(base == base_dir::automatic ? paragraph_level(original) : (base == base_dir::rtl ? 1 : 0)),
           sos_(paragraph_ ? cls::R : cls::L) {}  // no explicit embeddings: sos = eos = the paragraph direction
 
     result run() {
@@ -323,6 +324,6 @@ private:
 
 }  // namespace
 
-result resolve(const std::vector<cls>& original) { return resolver(original).run(); }
+result resolve(const std::vector<cls>& original, base_dir base) { return resolver(original, base).run(); }
 
 }  // namespace stb::bidi

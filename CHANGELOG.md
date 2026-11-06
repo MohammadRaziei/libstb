@@ -8,6 +8,23 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **`font::shape`**: UTF-8 text to positioned glyphs, in visual order and in font units (y up), for a vector
+  renderer that draws glyph outlines itself. It makes the decisions `draw_text` makes (joined letter shapes, GSUB
+  ligatures, mirrored brackets, the bidirectional order, kerning) and returns, per glyph (`shaped_glyph`), the glyph
+  index, the `cluster` (the byte offset of the first character it stands for, carried through joining, ligatures,
+  mirroring and reordering), `x_advance` (kerning folded in) and `x_offset` / `y_offset` (the harakat are centred on
+  their letter and stacked, as `draw_text` does but unrounded). `shape_options`: `direction`
+  (`text_direction::{automatic, ltr, rtl}`, the paragraph direction), `kerning` (`kerning_mode`) and `ligatures`
+  (`false` skips the optional `liga` / `clig` features; `rlig` and the joining shapes always run). A `'\n'` is a glyph 0
+  with its own cluster. Nothing about `draw_text` changes. The internal shaper type `shaped_glyph` became
+  `visual_glyph` (the public name is now taken) and `bidi::resolve` takes an optional forced direction.
+- **Operating system log handlers** (`stb/logging_os.hpp`): `syslog_handler` (POSIX syslog), `android_handler`
+  (logcat, the tag is the logger's name unless given), `unified_log_handler` (Apple os_log, the category is the
+  logger's name), `debug_string_handler` (Windows `OutputDebugStringW`, UTF-8 converted) and `event_log_handler`
+  (Windows Event Log). A class exists only where its facility does, and `STB_LOG_HAS_SYSLOG`, `STB_LOG_HAS_ANDROID`,
+  `STB_LOG_HAS_UNIFIED`, `STB_LOG_HAS_DEBUGSTRING` and `STB_LOG_HAS_EVENTLOG` say which (1 or 0). Each maps the levels
+  to the five severities of its system and leaves the time and level out of the default pattern, which the system
+  adds itself. The library now links `advapi32` on Windows and `log` on Android.
 - **WOFF 1.0 fonts.** `font::open` and `font::from_memory` (and Python `Font.open`) read a `.woff` file: a WOFF is a
   TrueType/OpenType font with its tables zlib-compressed one by one, and libstb unpacks it, in memory, with its own
   zlib (`src/font/woff.cpp`) into the font file it holds, which the rest of the font code reads unchanged. A WOFF has

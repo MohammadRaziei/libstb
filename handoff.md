@@ -2,7 +2,7 @@
 
 تاریخ: 2026-11-06 (WOFF1 و اصلاح تست numpy بعد از 2026-11-04 اضافه شدند). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
 این فایل untracked است (قبل از push حذفش کن). **تغییرات بخش «کارهای commit نشده» پایین هنوز commit نشده‌اند**
-(working tree عمداً dirty است: 77 مسیر در `git status`).
+(working tree عمداً dirty است: حدود 90 مسیر در `git status`).
 
 ## قاعده‌های کاربر (حتماً رعایت شود)
 
@@ -76,17 +76,30 @@
 8. **اصلاح CI ویندوز ARM (wheel):** سه تست `tests/python/test_logging.py` مستقیم `import numpy` می‌کردند و روی runner بدون numpy fail
    شدند؛ حالا `pytest.importorskip("numpy")` داخل همان سه تست است (نه سطح ماژول، تا بقیه‌ی تست‌های logging اجرا شوند).
 
-پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها)، بعد دو commit کوچک
-(WOFF1، اصلاح تست numpy).
+پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها)، بعد commitهای کوچک
+(WOFF1، اصلاح تست numpy، `font::shape`، handlerهای OS log).
 
 ## کارهای باز (به ترتیب پیشنهادی)
 
-1. **handlerهای پلتفرمی از aixlog** (`syslog`، `android`، `debugstring`، `unified`، `eventlog`): هر کد کپی‌شده از aixlog (MIT) باید در
-   `NOTICE.md` ثبت شود. همچنین ثبت مکان (`__FILE__`/`__LINE__`) و `exception()` فقط اگر کاربر خواست.
-2. **API فونت، بخش ب (درخواست novasvg):** `font::shape(utf8, shape_options)` با `shaped_glyph {glyph, cluster (آفست بایت), x_advance,
-   x_offset, y_offset}`، `shape_options {direction auto/ltr/rtl, kerning_mode, ligatures}`. خط لوله روی کدپوینت کار می‌کند و باید منبع هر
-   گلیف را از bidi، mirror، joining عربی و ligatureهای چندبه‌یک عبور دهد. معنی ligatures=false: `liga/clig` بسته شوند، `rlig` و joining نه.
-   GPOS فعلاً فقط pair adjustment دارد. `unicode-bidi: embed/override` پشتیبانی نمی‌شود. **اول API را پیشنهاد بده و تأیید بگیر.**
+1. **اول CI را بررسی کن:** دو کار بعدی (`font::shape` و handlerهای OS log) **بدون هیچ بیلد و اجرا** نوشته شدند (به درخواست کاربر؛ او خطاها
+   را از CI می‌آورد). هر خطای کامپایل یا تست قرمز از اینهاست تا ثابت شود نه. احتمال بیشتر: متن تست‌های `tests/cpp/test_font_shape.cpp`
+   (انتظارهای clusterهای فارسی با فونت `libstb-fa-gsub-test.ttf` از روی استدلال نوشته شد، نه اجرا)، و `src/util/logging_os.cpp` روی macOS
+   (os_log) و ویندوز (Event Log). Android هیچ CI ندارد و فقط نوشته شده.
+2. **`font::shape` (انجام شد، اجرا نشده):** `include/stb/font.hpp` (`text_direction`، `shape_options`، `shaped_glyph`، `font::shape`)،
+   پیاده‌سازی در `src/font/font.cpp`. خط لوله: `glyph_record::cluster` (`gsub.hpp`) تا آخر می‌رود؛ نوع داخلی `shaped_glyph` شد `visual_glyph`
+   (نام عمومی آزاد شود) و حالا `cluster` دارد؛ `text_shaper::shape(text, shaper_options{direction, ligatures})`؛ `bidi::resolve(classes,
+   base_dir)`؛ `arabic_layout::plan_plain` همان plan بدون `liga/clig` است. تصمیم‌ها: مکان marks از ink boxها در واحد فونت (همان قاعده‌ی
+   `do_layout` بدون گرد کردن، پس تا حدود یک پیکسل با `draw_text` فرق دارد و عمداً `do_layout` به `shape` تبدیل نشد تا pixel goldenها نشکنند)؛
+   kerning به `x_advance` گلیف اول جفت اضافه می‌شود؛ markها جفت را نمی‌شکنند؛ `'\n'` گلیف 0 با cluster خودش؛ `'\r'` حذف؛ هر خط جدا.
+   **محدودیت شناخته‌شده:** GSUB فقط برای متن راست‌به‌چپ اجرا می‌شود (مثل `draw_text`)، پس `ligatures` روی متن لاتین اثری ندارد (liga لاتین
+   هنوز اجرا نمی‌شود)؛ mark positioning از GPOS نیست؛ `unicode-bidi: embed/override` پشتیبانی نمی‌شود. بایندینگ پایتون عمداً ندارد.
+   تست: `tests/cpp/test_font_shape.cpp`.
+2b. **handlerهای OS log (انجام شد، اجرا نشده):** `include/stb/logging_os.hpp` (`syslog_handler`، `android_handler`، `unified_log_handler`،
+   `debug_string_handler`، `event_log_handler`، ماکروهای `STB_LOG_HAS_*`)، `src/util/logging_os.cpp`، `src/util/logging_os_rank.hpp` (نگاشت سطح به
+   ۵ severity، قابل تست روی همه‌ی پلتفرم‌ها)، لینک `advapi32` (ویندوز) و `log` (اندروید) در `libstb_apply_core_build_settings`. **کد از aixlog
+   کپی نشده** (از API خود سیستم‌عامل‌ها نوشته شد)، پس در `NOTICE.md` چیزی ثبت نشد؛ اگر خواستید نام الهام را ذکر کنید بگویید. ثبت مکان و `exception()`
+   اضافه نشد (فقط اگر کاربر خواست). تست: `tests/cpp/test_logging_os.cpp`. نکته: syslog یک اتصال برای کل پروسه دارد (`openlog`)؛ در Event Viewer
+   بدون message file متن بعد از «description cannot be found» می‌آید.
 3. **WOFF2:** نیاز به Brotli (decoder حدود چند صد KB داده‌ی دیکشنری)؛ فقط اگر novasvg خودش decode نکند. (WOFF1 تمام شد، بالا ببین.)
 4. **بایندینگ پایتون برای API فونت** (outline، glyph_index و ...) و برای `Outline(font.outline(g))`؛ فعلاً عمداً نیست.
 6. kernel دستی SSE2 برای premultiply (الان auto-vectorize؛ جهت مستقیم روی alpha نیمه‌شفاف فقط حدود 1.3x مرجع)؛ NEON/arm64/MSVC/ویندوز اجرا نشده.

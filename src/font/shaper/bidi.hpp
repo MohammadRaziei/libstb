@@ -18,13 +18,17 @@ char32_t mirrored(char32_t cp);
 // True if the text has a right-to-left letter or an Arabic-Indic digit.
 bool has_rtl(std::u32string_view text);
 
+// The paragraph direction: automatic is that of the first strong character (UAX #9, P2 and P3).
+enum class base_dir : std::uint8_t { automatic, ltr, rtl };
+
 struct result {
     std::vector<std::uint32_t> order;  // visual position -> logical index
     std::vector<std::uint8_t> level;   // embedding level of every logical index
 };
 
 // Resolves one line given the class of each logical character. A character of class NSM stays
-// right after the character before it (a letter and its marks travel together).
-result resolve(const std::vector<cls>& original);
+// right after the character before it (a letter and its marks travel together). `base` forces the
+// paragraph direction instead of reading it off the text.
+result resolve(const std::vector<cls>& original, base_dir base = base_dir::automatic);
 
 }  // namespace stb::bidi

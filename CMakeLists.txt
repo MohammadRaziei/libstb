@@ -114,6 +114,15 @@ function(libstb_apply_core_build_settings target)
     )
     apply_optimization_flags(${target})
 
+    # The operating system log handlers (src/util/logging_os.cpp) call into system libraries: the
+    # Event Log of Windows lives in advapi32 and Android's logcat in liblog. Elsewhere the C library
+    # has everything (syslog, os_log).
+    if(WIN32)
+        target_link_libraries(${target} PRIVATE advapi32)
+    elseif(ANDROID)
+        target_link_libraries(${target} PRIVATE log)
+    endif()
+
     # Everything under src/draw (shapes, paths, the rasterizer) does floating point and must give
     # the same pixels on every platform (the C++ and Python canvas tests compare against fixed
     # hashes), so no fused multiply-add contraction: GCC and Clang would otherwise use FMA on ARM

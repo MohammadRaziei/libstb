@@ -112,8 +112,7 @@
       `glyph_kerning(l, r, kerning_mode)` و `font::face_count`. روی `truetype::face` ساخته شد (فقط
       `units_per_em`، bbox فونت، `num_glyphs`، `kern_table_advance`، `font_count` اضافه شد). اندیس بیرون از
       بازه exception نمی‌ده. تست: `tests/cpp/test_font_outline.cpp` (۱۷ تست، با فونت‌های مصنوعی جدید: منحنی +
-      composite + GPOS/kern، CFF و `.ttc`؛ دو جهش عمدی گرفته شد). **باز: بخش ب (shape با cluster و
-      `shape_options`).**
+      composite + GPOS/kern، CFF و `.ttc`؛ دو جهش عمدی گرفته شد). بخش ب (`font::shape`) پایین انجام شد.
 - [x] **WOFF1.** `font::open` / `font::from_memory` (و `Font.open` در پایتون) فایل `.woff` را در حافظه با zlib خودمان به sfnt باز
       می‌کنند (`src/font/woff.cpp`، `woff.hpp`)؛ `face_count` برای آن ۱ است؛ WOFF2 با `decode_error` و پیام روشن رد می‌شود.
       فایل خراب `decode_error`، فونتی که بیش از ۵۱۲ MiB باز شود `limit_error`، و حافظه به‌حرف فیلد طول رزرو نمی‌شود. تست:
@@ -137,10 +136,10 @@
 
 ## قابلیت‌ها
 
-- [ ] shaping با cluster: `font::shape(utf8, shape_options)` → گلیف + cluster (آفست بایت) + x_advance/offset،
-      با direction و سوئیچ‌های kerning/ligatures (liga/clig خاموش بشه، rlig و joining عربی نه). خط لوله الان
-      روی کدپوینت کار می‌کنه و باید منبع هر گلیف رو از bidi، mirror، joining و ligatureها عبور بده.
-      GPOS الان فقط pair adjustment داره (mark positioning نه).
+- [x] shaping با cluster: `font::shape(utf8, shape_options)` → `shaped_glyph {glyph, cluster (آفست بایت), x_advance, x_offset, y_offset}` به
+      واحد فونت و y رو به بالا؛ `shape_options {direction, kerning, ligatures}` (ligatures=false: `liga/clig` بسته، `rlig` و joining نه). `cluster`
+      از bidi، mirror، joining و ligatureها رد می‌شود (`glyph_record::cluster`). **نوشته شد ولی اجرا نشده (CI اولین اجراست).** تست:
+      `tests/cpp/test_font_shape.cpp`. باز: mark positioning از GPOS، GSUB برای متن لاتین (الان فقط راست‌به‌چپ)، بایندینگ پایتون.
 - [ ] WOFF2 (Brotli لازم؛ احتمالاً نه) فقط اگه novasvg خودش decode نکنه. (WOFF1 تموم شد.)
 - [ ] thread برای کارهای دیگه (blend با حالت‌های float، کدگذاری JPEG) فقط بعد از اندازه‌گیری روی ماشین
       چندهسته‌ای؛ کارهای حافظه‌محور (premultiply، flip، convert) عمداً بدون thread‌ن. بایندینگ‌های تصویر پایتون
@@ -209,5 +208,7 @@
 - [x] `stb/logging.hpp` + `src/util/logging.cpp`: `logger`، `handler` (`stream`، `file`، `callback`، `null`)، `formatter`، `level`، `get_logger`، `basic_config`، `LIBSTB_LOG`؛ دو هشدار stderr از `libstb.simd` و `libstb.threads` رد می‌شوند.
 - [x] `tests/cpp/test_logging.cpp` (19 تست: سطح‌ها، سلسله‌مراتب، propagate، handlerها، formatter، چند thread)، `docs/guide.md`، `CHANGELOG.md`.
 - [x] پل پایتون (`bind_logging.cpp`): `callback_handler` روی `libstb` که به `logging.getLogger(name).log(levelno, message)` می‌رود؛ با `import libstb` خودکار نصب می‌شود؛ تنها تابع عمومی `libstb.logging_bridge(enabled)`؛ `_log` خصوصی برای تست؛ `tests/python/test_logging.py`.
-- [ ] handlerهای پلتفرمی از aixlog (`syslog`، `android`، `debugstring`، `unified`، `eventlog`) و ثبتشان در `NOTICE.md`.
+- [x] handlerهای OS log (`include/stb/logging_os.hpp`: `syslog`، `android`، `unified` (os_log)، `debug_string`، `event_log`) با ماکروهای `STB_LOG_HAS_*`،
+      `src/util/logging_os.cpp`، تست `tests/cpp/test_logging_os.cpp`. **نوشته شد ولی اجرا نشده (CI اولین اجراست؛ Android بدون CI).** کد از aixlog کپی نشد،
+      پس چیزی در `NOTICE.md` نرفت.
 - [x] logging خود کتابخانه (`src/util/log.hpp` و فراخوانی‌ها)، `tests/cpp/test_library_logging.cpp`، `docs/adr/0001..0003`.

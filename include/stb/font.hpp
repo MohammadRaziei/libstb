@@ -120,6 +120,35 @@ struct font_design_metrics {
 //               text rendering use)
 enum class kerning_mode { none, kern_table, automatic };
 
+// ------------------------------------------------------------------------ shaping
+//
+// font::shape turns UTF-8 text into the glyphs to draw, in font units like the outline API above,
+// so a vector renderer can place them without going through pixels.
+
+// The direction of the paragraph (UAX #9): automatic is that of the first strong letter, which is
+// what draw_text does. Forcing it matters for text that starts with a neutral or a number, or when
+// the caller knows better (a Persian UI string that opens with a Latin word).
+enum class text_direction { automatic, ltr, rtl };
+
+struct shape_options {
+    text_direction direction = text_direction::automatic;
+    kerning_mode kerning = kerning_mode::automatic;
+    // false: the optional ligature features of the font (liga, clig) do not run, so Latin-style
+    // ligatures such as the Allah glyph stay as separate letters. The required ones (rlig: lam
+    // + alef) and the joining shapes always do: without them Arabic script is wrong, not plain.
+    bool ligatures = true;
+};
+
+// One glyph of the result, with the pen implied: a glyph is drawn at (pen.x + x_offset, pen.y +
+// y_offset) and the pen then moves right by x_advance. All in font units, y up.
+struct shaped_glyph {
+    std::uint32_t glyph = 0;    // glyph index of the font (what outline() and glyph_info() take); 0 for a line break
+    std::uint32_t cluster = 0;  // byte offset in the UTF-8 text of the first character this glyph stands for
+    float x_advance = 0;        // the glyph's advance plus the kerning to the next glyph; 0 for a mark
+    float x_offset = 0;         // mark placement: from the pen to where the glyph is drawn
+    float y_offset = 0;
+};
+
 // A TrueType/OpenType font. Cheap to copy (copies share one immutable
 // parsed font) and safe to use from many threads at once.
 //
@@ -180,6 +209,32 @@ public:
 
     // Throws invalid_argument on malformed UTF-8.
     text_size measure(std::string_view utf8, float pixel_height) const;
+
+    // Shapes `utf8` into positioned glyphs in VISUAL order (left to right on the page), in font
+    // units with y up. It makes the same decisions as draw_text (and shape_glyphs): joined letter
+    // shapes, ligatures and the other GSUB features of the font, mirrored brackets, the
+    // right-to-left order, and kerning; what differs is that nothing is rounded to pixels.
+    //
+    //   - cluster says where a glyph came from, so a caller can map a glyph back to the text (a caret,
+    //     a selection, a link). It is the byte offset of the first character the glyph stands for:
+    //     a ligature takes the offset of its first letter, and in a right-to-left run the offsets
+    //     go down as the glyphs go right. A character that no glyph carries on its own (the second
+    //     letter of a ligature) is the part of the text between one cluster and the next one in
+    //     text order. Zero width joiners and the other invisible bidi controls disappear from a
+    //     right-to-left line, and '\r' always does; no glyph names them.
+    //   - A '\n' is a glyph with glyph 0, no advance and a cluster of its own: the caller starts the
+    //     next line (its pitch is design_metrics() ascent - descent + line_gap) and the pen goes
+    //     back to 0. Each line is shaped and ordered on its own.
+    //   - Kerning (options.kerning) is added to the advance of the first glyph of the pair, so the
+    //     pen needs nothing else. Marks (the harakat of Arabic script) take no advance and do not
+    //     break a pair; they are centred on the ink of the letter before them and stacked above or
+    //     below it with x_offset and y_offset. The font's GPOS mark attachment is not read, and a
+    //     mark may therefore sit up to a pixel off where draw_text puts it, which snaps it to its
+    //     pixel grid.
+    //
+    // Only right-to-left scripts get the GSUB treatment so far: other text is one glyph per
+    // character. Throws invalid_argument on malformed UTF-8, limit_error for text over 4 GiB.
+    std::vector<shaped_glyph> shape(std::string_view utf8, const shape_options& options = {}) const;
 
     // The glyph indices of the font that `utf8` is drawn with, in visual order ('\n' is 0 and
     // starts a new line). This is what shaping decides: joined letter shapes, ligatures, mirrored

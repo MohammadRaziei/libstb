@@ -475,6 +475,35 @@ for (char32_t cp : codepoints) {
 const int faces = stb::font::face_count("fonts.ttc");        // 1 for a .ttf or .woff, the number of faces for a .ttc
 ```
 
+**Shaped text as data.** `font::shape` does the layout work `draw_text` does, but returns it instead of drawing it:
+the glyphs in visual order (left to right), in font units with y up, each with its pen movement and where it came from.
+
+```cpp
+stb::shape_options opt;                     // direction: automatic | ltr | rtl, kerning: kerning_mode, ligatures: bool
+opt.direction = stb::text_direction::rtl;   // e.g. a Persian label that starts with a Latin word
+const std::string text = "\u0633\u0644\u0627\u0645 world\nsecond line";
+float pen = 0;
+for (const stb::shaped_glyph& g : f.shape(text, opt)) {
+    if (text[g.cluster] == '\n') {            // a line break: glyph 0, no advance
+        pen = 0;                              // and y moves down by ascent - descent + line_gap
+        continue;
+    }
+    // draw outline(g.glyph) at (pen + g.x_offset, g.y_offset) * scale
+    pen += g.x_advance;                       // kerning is already in x_advance; a mark has x_advance 0
+    // g.cluster: byte offset in the UTF-8 text of the first character of this glyph (selection, caret, links)
+}
+```
+
+`cluster` follows each glyph through joining, ligatures, mirrored brackets and the bidirectional reordering, so
+in a right-to-left run the offsets go down as the glyphs go right, and a ligature (lam + alef, the Allah glyph)
+has the offset of its first letter. `'\n'` is a glyph 0 with its own cluster and no advance; `'\r'` and the invisible
+bidi controls of a right-to-left line have no glyph. `ligatures = false` stops only the optional ligature
+features (`liga`, `clig`): lam + alef and the joining shapes are required and stay. Marks are placed from the
+ink boxes (centred on the letter before them, stacked above or below), not from the GPOS mark attachment, so
+they can sit up to a pixel from where `draw_text`, which snaps them to its pixel grid, puts them. As in
+`draw_text`, only right-to-left scripts go through the font's GSUB table so far; other text is one glyph per
+character.
+
 `kerning_mode::automatic` (the default) is what `kerning()` and text rendering use: GPOS pair
 adjustment if the font has GPOS, else the legacy `kern` table. `kern_table` looks at the `kern` table
 alone, for code that must match a renderer that ignores GPOS; `none` is no kerning.
@@ -567,6 +596,21 @@ libstb.remove_handler(fh);
   `callback_handler` (a function that gets each `record`), `null_handler`, or your own class derived from
   `stb::logging::handler` that overrides `emit`. A record goes to the logger's handlers and then, while
   `propagate()` is true (the default), to those of its parents. A handler has its own level, a formatter and filters.
+- **Operating system logs** (`<stb/logging_os.hpp>`): `syslog_handler` (POSIX), `android_handler` (logcat),
+  `unified_log_handler` (macOS and iOS), `debug_string_handler` (Windows debugger output) and `event_log_handler`
+  (Windows Event Log). A class exists only on the platforms that have its facility, and `STB_LOG_HAS_SYSLOG`,
+  `STB_LOG_HAS_ANDROID`, `STB_LOG_HAS_UNIFIED`, `STB_LOG_HAS_DEBUGSTRING` and `STB_LOG_HAS_EVENTLOG` (1 or 0) say which, so
+  portable code writes `#if STB_LOG_HAS_SYSLOG ... #endif`. They map the levels to the five severities every system
+  has, and their default pattern leaves out what the system adds itself (time, level, process). syslog has one
+  connection per process, so use one `syslog_handler` per program.
+
+  ```cpp
+  #if STB_LOG_HAS_SYSLOG
+  stb::logging::get_logger("libstb").add_handler(stb::logging::syslog_handler("myapp"));
+  #elif STB_LOG_HAS_ANDROID
+  stb::logging::get_logger("libstb").add_handler(stb::logging::android_handler());  // tag = logger name: adb logcat libstb.simd:D *:S
+  #endif
+  ```
 - **Formatter** patterns use Python's `%(field)s` syntax: `asctime`, `created`, `msecs`, `levelname`, `levelno`,
   `name`, `message`, `thread`, `process`, with widths and alignment (`%(levelname)-8s`).
 - **No handler anywhere:** warnings and worse still reach stderr as `<logger>: <message>` (Python's "last resort"),

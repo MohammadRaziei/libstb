@@ -31,7 +31,7 @@ std::u32string shape_for_display(std::u32string_view logical, const std::functio
     const identity_source source(has_glyph);
     std::u32string out;
     out.reserve(logical.size());
-    for (const shaped_glyph& g : text_shaper(source).shape(logical)) out.push_back(g.gid ? char32_t(g.gid) : g.cp);
+    for (const visual_glyph& g : text_shaper(source).shape(logical)) out.push_back(g.gid ? char32_t(g.gid) : g.cp);
     return out;
 }
 

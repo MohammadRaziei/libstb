@@ -22,17 +22,27 @@ arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offse
                         rlig = make_tag('r', 'l', 'i', 'g');
     // The order of the Arabic shaping model: decomposition first, then the four shapes, then the
     // required ligatures, contextual alternates and the optional ligatures.
-    const std::vector<otl::stage_request> stages = {
-        {{make_tag('c', 'c', 'm', 'p'), make_tag('l', 'o', 'c', 'l')}, mask_all},
-        {{isol}, mask_isol},
-        {{fina}, mask_fina},
-        {{medi, make_tag('m', 'e', 'd', '2')}, mask_medi},
-        {{init}, mask_init},
-        {{rlig}, mask_all},
-        {{make_tag('c', 'a', 'l', 't')}, mask_all},
-        {{make_tag('l', 'i', 'g', 'a'), make_tag('c', 'l', 'i', 'g'), make_tag('r', 'c', 'l', 't')}, mask_all},
+    const auto stages = [&](bool ligatures) {
+        std::vector<otl::stage_request> s = {
+            {{make_tag('c', 'c', 'm', 'p'), make_tag('l', 'o', 'c', 'l')}, mask_all},
+            {{isol}, mask_isol},
+            {{fina}, mask_fina},
+            {{medi, make_tag('m', 'e', 'd', '2')}, mask_medi},
+            {{init}, mask_init},
+            {{rlig}, mask_all},
+            {{make_tag('c', 'a', 'l', 't')}, mask_all},
+        };
+        // The last stage: the optional ligatures and the required contextual alternates. Without
+        // ligatures only the required ones are left.
+        if (ligatures)
+            s.push_back({{make_tag('l', 'i', 'g', 'a'), make_tag('c', 'l', 'i', 'g'), make_tag('r', 'c', 'l', 't')}, mask_all});
+        else
+            s.push_back({{make_tag('r', 'c', 'l', 't')}, mask_all});
+        return s;
     };
-    r.plan = r.gsub.make_plan({make_tag('a', 'r', 'a', 'b'), make_tag('D', 'F', 'L', 'T')}, 0, stages);
+    const std::initializer_list<std::uint32_t> scripts = {make_tag('a', 'r', 'a', 'b'), make_tag('D', 'F', 'L', 'T')};
+    r.plan = r.gsub.make_plan(scripts, 0, stages(true));
+    r.plan_plain = r.gsub.make_plan(scripts, 0, stages(false));
     r.usable = !r.plan.stages().empty();
     r.has_forms = r.plan.has_feature(isol) || r.plan.has_feature(fina) || r.plan.has_feature(medi) ||
                   r.plan.has_feature(init);
@@ -42,14 +52,14 @@ arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offse
 
 // ------------------------------------------------------------- text_shaper
 
-std::vector<shaped_glyph> text_shaper::shape(std::u32string_view text) const {
-    std::vector<shaped_glyph> out;
+std::vector<visual_glyph> text_shaper::shape(std::u32string_view text, const shaper_options& options) const {
+    std::vector<visual_glyph> out;
     out.reserve(text.size());
     for (std::size_t pos = 0; pos <= text.size();) {
         std::size_t end = text.find(U'\n', pos);
         if (end == std::u32string_view::npos) end = text.size();
-        shape_line(text.substr(pos, end - pos), out);
-        if (end < text.size()) out.push_back({0, U'\n'});
+        shape_line(text.substr(pos, end - pos), pos, options, out);
+        if (end < text.size()) out.push_back({0, U'\n', static_cast<std::uint32_t>(end)});
         pos = end + 1;
     }
     return out;
@@ -69,7 +79,7 @@ std::uint32_t form_bit(arabic::form f) {
 
 // Runs the font's GSUB features over every stretch of Arabic text of the line (a stretch ends at
 // a left-to-right letter, so Latin words are never touched by Arabic features).
-void apply_gsub(const arabic_layout& al, std::vector<otl::glyph_record>& g) {
+void apply_gsub(const arabic_layout& al, const otl::shaping_plan& plan, std::vector<otl::glyph_record>& g) {
     for (std::size_t a = 0; a < g.size();) {
         if (bidi::classify(g[a].cp) == bidi::cls::L) {
             ++a;
@@ -83,7 +93,7 @@ void apply_gsub(const arabic_layout& al, std::vector<otl::glyph_record>& g) {
         }
         if (arabic_text) {
             std::vector<otl::glyph_record> run(g.begin() + std::ptrdiff_t(a), g.begin() + std::ptrdiff_t(b));
-            al.gsub.apply(al.plan, run, &al.defs);
+            al.gsub.apply(plan, run, &al.defs);
             g.erase(g.begin() + std::ptrdiff_t(a), g.begin() + std::ptrdiff_t(b));
             g.insert(g.begin() + std::ptrdiff_t(a), run.begin(), run.end());
             b = a + run.size();
@@ -97,7 +107,7 @@ void apply_gsub(const arabic_layout& al, std::vector<otl::glyph_record>& g) {
 namespace {
 
 // Shadda goes first among the marks of one letter, so a vowel sign stacks above it.
-void shadda_first(std::vector<shaped_glyph>& out, std::size_t first) {
+void shadda_first(std::vector<visual_glyph>& out, std::size_t first) {
     for (std::size_t i = first; i < out.size();) {
         if (!arabic::is_mark(out[i].cp)) {
             ++i;
@@ -106,14 +116,15 @@ void shadda_first(std::vector<shaped_glyph>& out, std::size_t first) {
         std::size_t j = i;
         while (j < out.size() && arabic::is_mark(out[j].cp)) ++j;
         std::stable_partition(out.begin() + std::ptrdiff_t(i), out.begin() + std::ptrdiff_t(j),
-                              [](const shaped_glyph& s) { return s.cp == 0x0651; });
+                              [](const visual_glyph& s) { return s.cp == 0x0651; });
         i = j;
     }
 }
 
 }  // namespace
 
-std::vector<otl::glyph_record> text_shaper::to_glyphs(std::u32string_view line, const arabic_layout* al) const {
+std::vector<otl::glyph_record> text_shaper::to_glyphs(std::u32string_view line, std::size_t first,
+                                                      const arabic_layout* al) const {
     const bool gsub = al && al->usable;
     const bool presentation_ligatures = !(gsub && al->has_rlig);
     const std::vector<arabic::form> forms = arabic::joining_forms(line);
@@ -135,7 +146,7 @@ std::vector<otl::glyph_record> text_shaper::to_glyphs(std::u32string_view line, 
             const bool joined_before = forms[i] == arabic::form::medi;
             if (const char32_t lig = arabic::lam_alef_ligature(line[i + 1], joined_before)) {
                 if (const std::uint32_t gid = src_.glyph(lig)) {
-                    g.push_back({gid, c, mask_all, glyph_class(gid, c)});
+                    g.push_back({gid, c, mask_all, glyph_class(gid, c), static_cast<std::uint32_t>(first + i)});
                     ++i;
                     continue;
                 }
@@ -155,19 +166,20 @@ std::vector<otl::glyph_record> text_shaper::to_glyphs(std::u32string_view line, 
             }
         }
         if (!gid) gid = src_.glyph(c);
-        g.push_back({gid, c, mask, glyph_class(gid, c)});
+        g.push_back({gid, c, mask, glyph_class(gid, c), static_cast<std::uint32_t>(first + i)});
     }
     return g;
 }
 
-void text_shaper::append_in_visual_order(const std::vector<otl::glyph_record>& g, std::vector<shaped_glyph>& out) const {
+void text_shaper::append_in_visual_order(const std::vector<otl::glyph_record>& g, bidi::base_dir direction,
+                                          std::vector<visual_glyph>& out) const {
     // A glyph is classified by the character it stands for.
     std::vector<bidi::cls> classes(g.size());
     for (std::size_t k = 0; k < g.size(); ++k) classes[k] = bidi::classify(g[k].cp);
-    const bidi::result order = bidi::resolve(classes);
+    const bidi::result order = bidi::resolve(classes, direction);
 
     for (std::uint32_t k : order.order) {
-        shaped_glyph s{g[k].gid, g[k].cp};
+        visual_glyph s{g[k].gid, g[k].cp, g[k].cluster};
         if (s.cp == 0x200E || s.cp == 0x200F) continue;  // LRM, RLM: only steered the order
         if (order.level[k] & 1) {
             const char32_t m = bidi::mirrored(s.cp);
@@ -180,19 +192,22 @@ void text_shaper::append_in_visual_order(const std::vector<otl::glyph_record>& g
     }
 }
 
-void text_shaper::shape_line(std::u32string_view line, std::vector<shaped_glyph>& out) const {
-    if (!bidi::has_rtl(line)) {
-        for (char32_t c : line) out.push_back({src_.glyph(c), c});
+void text_shaper::shape_line(std::u32string_view line, std::size_t first, const shaper_options& options,
+                             std::vector<visual_glyph>& out) const {
+    // Left-to-right text under a left-to-right (or automatic) paragraph is drawn as it is.
+    if (options.direction != bidi::base_dir::rtl && !bidi::has_rtl(line)) {
+        for (std::size_t i = 0; i < line.size(); ++i)
+            out.push_back({src_.glyph(line[i]), line[i], static_cast<std::uint32_t>(first + i)});
         return;
     }
 
     const arabic_layout* al = src_.arabic();
-    std::vector<otl::glyph_record> g = to_glyphs(line, al);  // 1-2. glyphs in logical order
-    if (al && al->usable) apply_gsub(*al, g);                // 3. GSUB features of the font
+    std::vector<otl::glyph_record> g = to_glyphs(line, first, al);  // 1-2. glyphs in logical order
+    if (al && al->usable) apply_gsub(*al, options.ligatures ? al->plan : al->plan_plain, g);  // 3. GSUB features
 
-    const std::size_t first = out.size();
-    append_in_visual_order(g, out);                          // 4. visual order
-    shadda_first(out, first);
+    const std::size_t begin = out.size();
+    append_in_visual_order(g, options.direction, out);               // 4. visual order
+    shadda_first(out, begin);
 }
 
 }  // namespace stb

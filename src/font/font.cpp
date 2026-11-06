@@ -147,7 +147,7 @@ private:
 layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
     // Glyphs in visual order: right-to-left lines (Persian, Arabic, ...) are joined, substituted
     // with the font's GSUB features and reordered; other text is one glyph per character.
-    const std::vector<shaped_glyph> glyphs = text_shaper(font_glyphs(f)).shape(logical);
+    const std::vector<visual_glyph> glyphs = text_shaper(font_glyphs(f)).shape(logical);
     const float s = f.scale(px);
     int asc = 0, desc = 0, gap = 0;
     f.face.v_metrics(asc, desc, gap);
@@ -164,7 +164,7 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
     int line = 0;
     int prev = 0;
     bool has_prev = false;
-    for (const shaped_glyph& sg : glyphs) {
+    for (const visual_glyph& sg : glyphs) {
         if (sg.cp == U'\n' && sg.gid == 0) {
             lay.width = std::max(lay.width, x);
             x = 0;
@@ -426,8 +426,86 @@ glyph font::render_glyph(char32_t cp, float px) const {
 
 std::vector<std::uint32_t> font::shape_glyphs(std::string_view utf8) const {
     std::vector<std::uint32_t> out;
-    for (const shaped_glyph& g : text_shaper(font_glyphs(*impl_)).shape(utf8_decode(utf8)))
+    for (const visual_glyph& g : text_shaper(font_glyphs(*impl_)).shape(utf8_decode(utf8)))
         if (!(g.cp == U'\r' && g.gid == 0)) out.push_back(g.gid);
+    return out;
+}
+
+std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options& options) const {
+    if (static_cast<unsigned long long>(utf8.size()) > 0xFFFFFFFFull) throw limit_error("text is longer than 4 GiB");
+    const std::u32string text = utf8_decode(utf8);
+
+    // The byte offset of every character (and of the end): a character's length in UTF-8 follows from
+    // its value, since utf8_decode refuses the overlong forms.
+    std::vector<std::uint32_t> byte_at(text.size() + 1, 0);
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char32_t c = text[i];
+        byte_at[i + 1] = byte_at[i] + (c < 0x80 ? 1u : c < 0x800 ? 2u : c < 0x10000 ? 3u : 4u);
+    }
+
+    shaper_options so;
+    so.direction = options.direction == text_direction::ltr   ? bidi::base_dir::ltr
+                   : options.direction == text_direction::rtl ? bidi::base_dir::rtl
+                                                               : bidi::base_dir::automatic;
+    so.ligatures = options.ligatures;
+    const std::vector<visual_glyph> visual = text_shaper(font_glyphs(*impl_)).shape(text, so);
+
+    // Positions in font units, with the same rules do_layout applies to pixels: a glyph advances by
+    // its hmtx advance, kerning with the glyph before it goes into that glyph's advance, and a mark
+    // takes no room, is centred on the ink of the letter before it and stacks above or below it.
+    const float mark_gap = 0.05f * float(design_metrics().units_per_em);
+    struct ink_box {
+        bool valid = false;
+        float cx = 0, top = 0, bottom = 0;  // of the letter marks attach to; y is up
+    } base;
+    struct attached_mark {
+        std::size_t glyph, letter;  // indices in `out`
+        float x;                    // where its origin goes, from the letter's origin
+    };
+    std::vector<attached_mark> marks;
+    constexpr std::size_t no_glyph = static_cast<std::size_t>(-1);
+    std::size_t prev = no_glyph;  // the last glyph that takes room: the next kerning goes to its advance
+    std::uint32_t prev_gid = 0;
+
+    std::vector<shaped_glyph> out;
+    out.reserve(visual.size());
+    for (const visual_glyph& vg : visual) {
+        if (vg.cp == U'\r') continue;
+        shaped_glyph sg;
+        sg.glyph = vg.gid;
+        sg.cluster = byte_at[vg.cluster];
+        if (vg.cp == U'\n' && vg.gid == 0) {  // a new line: the caller moves the pen
+            out.push_back(sg);
+            prev = no_glyph;
+            base = ink_box{};
+            continue;
+        }
+        const glyph_metrics gm = glyph_info(vg.gid);
+        const bool has_ink = gm.has_outline && gm.x_max > gm.x_min && gm.y_max > gm.y_min;
+        if (base.valid && has_ink && is_arabic_mark(vg.cp)) {
+            float dy;
+            if (is_arabic_mark_below(vg.cp)) {
+                dy = (base.bottom - mark_gap) - gm.y_max;
+                base.bottom = gm.y_min + dy;
+            } else {
+                dy = (base.top + mark_gap) - gm.y_min;
+                base.top = gm.y_max + dy;
+            }
+            sg.y_offset = dy;
+            marks.push_back({out.size(), prev, base.cx - 0.5f * (gm.x_min + gm.x_max)});
+            out.push_back(sg);  // no advance, and the kerning pair goes on across it
+            continue;
+        }
+        if (prev != no_glyph) out[prev].x_advance += glyph_kerning(prev_gid, vg.gid, options.kerning);
+        sg.x_advance = gm.advance;
+        out.push_back(sg);
+        prev = out.size() - 1;
+        prev_gid = vg.gid;
+        base = has_ink ? ink_box{true, 0.5f * (gm.x_min + gm.x_max), gm.y_max, gm.y_min} : ink_box{};
+    }
+    // A mark is drawn from the pen where it comes, which is after the advance of its letter (kerning
+    // included, known only now): the offset takes that advance back.
+    for (const attached_mark& m : marks) out[m.glyph].x_offset = m.x - out[m.letter].x_advance;
     return out;
 }
 
