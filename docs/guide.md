@@ -438,6 +438,12 @@ stb::atlas atlas = f.make_atlas(U"abc", 32, 256, 256);
 stb::text_size est = stb::estimate_text("Hello", 16);    // no font file: fixed sans / serif / mono tables
 ```
 
+**Font files.** `font::open` and `font::from_memory` read TrueType (`.ttf`), OpenType with CFF outlines (`.otf`),
+collections (`.ttc`, the face is the `index` argument) and WOFF 1.0 (`.woff`). A WOFF is unpacked to the font it
+holds, in memory, with libstb's own zlib, and has one face. WOFF2 needs Brotli, which libstb does not have: it throws
+`decode_error` ("WOFF2 fonts are not supported"); convert it first (for example with `fonttools`). A damaged WOFF is a
+`decode_error`, and one that would unpack to more than 512 MiB is a `limit_error`.
+
 **Glyph outlines (vector rendering).** `font` also gives the outline of any glyph as outline commands, in
 font units, so a vector renderer can draw text without rasterising it first. The glyph indices are the
 font's own, the ones `shape_glyphs` returns; an index past `glyph_count()` is an empty glyph, not an
@@ -466,7 +472,7 @@ for (char32_t cp : codepoints) {
     pen += f.glyph_info(g).advance * scale;                   // advance, lsb and the ink box, in font units
     prev = g;
 }
-const int faces = stb::font::face_count("fonts.ttc");        // 1 for a .ttf, the number of faces for a .ttc
+const int faces = stb::font::face_count("fonts.ttc");        // 1 for a .ttf or .woff, the number of faces for a .ttc
 ```
 
 `kerning_mode::automatic` (the default) is what `kerning()` and text rendering use: GPOS pair

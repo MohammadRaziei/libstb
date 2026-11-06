@@ -113,8 +113,17 @@
       `units_per_em`، bbox فونت، `num_glyphs`، `kern_table_advance`، `font_count` اضافه شد). اندیس بیرون از
       بازه exception نمی‌ده. تست: `tests/cpp/test_font_outline.cpp` (۱۷ تست، با فونت‌های مصنوعی جدید: منحنی +
       composite + GPOS/kern، CFF و `.ttc`؛ دو جهش عمدی گرفته شد). **باز: بخش ب (shape با cluster و
-      `shape_options`) و WOFF.**
-- [x] تست: ۲۲۱ تست C++ پاس. Python: ۱۱۹۴ پاس، ۲ skip (`pytest_memray` و `torch` نصب نبودن).
+      `shape_options`).**
+- [x] **WOFF1.** `font::open` / `font::from_memory` (و `Font.open` در پایتون) فایل `.woff` را در حافظه با zlib خودمان به sfnt باز
+      می‌کنند (`src/font/woff.cpp`، `woff.hpp`)؛ `face_count` برای آن ۱ است؛ WOFF2 با `decode_error` و پیام روشن رد می‌شود.
+      فایل خراب `decode_error`، فونتی که بیش از ۵۱۲ MiB باز شود `limit_error`، و حافظه به‌حرف فیلد طول رزرو نمی‌شود. تست:
+      `tests/cpp/test_woff.cpp` (۱۵ تست: جدول‌های باز‌شده با فونت اصلی بایت‌به‌بایت برابرند، فونت‌های ساخته‌شده توسط خود
+      تست با ترتیب و ذخیره‌ی متفاوت، فایل‌های خراب، WOFF2، لاگ) و دو تست در `tests/python/test_font.py`. فونت‌های تست را
+      `tests/data/make_woff_test_fonts.py` می‌سازد و برابری جدول‌ها را خودش چک می‌کند. دو جهش عمدی (حذف بررسی هم‌پوشانی و
+      بررسی `origLength`) گرفته شد؛ جهش هم‌پوشانی اول گرفته نشد چون تست قبلی به دلیل دیگری رد می‌شد، برای همین تستی اضافه شد که هر دو جدول جدا سالم باز می‌شوند.
+- [x] `tests/python/test_logging.py`: سه تست که numpy می‌خواهند حالا با `pytest.importorskip("numpy")` داخل خودشان skip می‌شوند
+      (CI ویندوز ARM numpy نداشت و سه تست fail شد).
+- [x] تست: ۴۱۱ تست C++ پاس. Python: ۱۴۱۶ پاس، ۴ skip (`pytest_memray`، `torch` و `uharfbuzz` نصب نبودن، و یک مورد BMP). `ctest` سه تا از سه.
 - [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
       اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
 
@@ -132,7 +141,7 @@
       با direction و سوئیچ‌های kerning/ligatures (liga/clig خاموش بشه، rlig و joining عربی نه). خط لوله الان
       روی کدپوینت کار می‌کنه و باید منبع هر گلیف رو از bidi، mirror، joining و ligatureها عبور بده.
       GPOS الان فقط pair adjustment داره (mark positioning نه).
-- [ ] WOFF1 (ارزان: zlib خودمون هست) و WOFF2 (Brotli لازم؛ احتمالاً نه) فقط اگه novasvg خودش decode نکنه.
+- [ ] WOFF2 (Brotli لازم؛ احتمالاً نه) فقط اگه novasvg خودش decode نکنه. (WOFF1 تموم شد.)
 - [ ] thread برای کارهای دیگه (blend با حالت‌های float، کدگذاری JPEG) فقط بعد از اندازه‌گیری روی ماشین
       چندهسته‌ای؛ کارهای حافظه‌محور (premultiply، flip، convert) عمداً بدون thread‌ن. بایندینگ‌های تصویر پایتون
       هنوز GIL رو موقع کار سنگین آزاد نمی‌کنن (فقط فونت‌ها می‌کنن).

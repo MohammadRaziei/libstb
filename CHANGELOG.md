@@ -8,6 +8,13 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **WOFF 1.0 fonts.** `font::open` and `font::from_memory` (and Python `Font.open`) read a `.woff` file: a WOFF is a
+  TrueType/OpenType font with its tables zlib-compressed one by one, and libstb unpacks it, in memory, with its own
+  zlib (`src/font/woff.cpp`) into the font file it holds, which the rest of the font code reads unchanged. A WOFF has
+  one face, so `font::face_count` is 1 and an `index` other than 0 is a `decode_error`. A damaged file (a wrong length,
+  tables out of order, outside the file or on the same bytes, a table that does not unpack to its `origLength`) is a
+  `decode_error`; one that would unpack to more than 512 MiB is a `limit_error`, and no memory is reserved on the word
+  of a length field. WOFF2 needs Brotli and is refused with a `decode_error` that says so.
 - libstb says what it did and why, through its own loggers: `libstb.decode`, `libstb.encode`, `libstb.resize`,
   `libstb.zlib`, `libstb.font`, `libstb.raster`, `libstb.simd`, `libstb.threads`. At `debug`: one record per call (the
   SIMD backend, the threads a resize uses, the size of a decode, encode or zlib call, glyphs a font lacks). At `warning`:

@@ -25,6 +25,7 @@
 #include "stb/util.hpp"
 
 #include "font/truetype/truetype.hpp"
+#include "font/woff.hpp"
 #include "util/log.hpp"
 
 namespace stb {
@@ -53,6 +54,12 @@ struct font_bytes {
     }
 
     void own(std::vector<std::uint8_t> v) {
+#ifdef STB_FONT_HAVE_MMAP
+        if (map) {  // the bytes replace a mapping (a WOFF file unpacked to its sfnt)
+            ::munmap(map, len);
+            map = nullptr;
+        }
+#endif
         owned = std::move(v);
         ptr = owned.data();
         len = owned.size();
@@ -217,6 +224,22 @@ const atlas_glyph* atlas::find(char32_t codepoint) const noexcept {
 
 namespace {
 
+// A WOFF 1.0 file holds a TrueType/OpenType font in compressed tables: unpacks it to `sfnt` and
+// returns true, so everything after this reads an ordinary font file. Returns false for any other
+// bytes. WOFF2 needs Brotli, which libstb does not have: it is refused with a clear message.
+bool unpack_web_font(const std::uint8_t* data, std::size_t size, std::vector<std::uint8_t>& sfnt) {
+    switch (detail::web_font_signature(data, size)) {
+        case detail::web_font_kind::woff1:
+            sfnt = detail::woff1_to_sfnt(data, size);
+            return true;
+        case detail::web_font_kind::woff2:
+            throw decode_error("WOFF2 fonts are not supported (WOFF 1.0, TrueType and OpenType are)");
+        case detail::web_font_kind::none:
+            break;
+    }
+    return false;
+}
+
 void init_font(font::impl* p, int index) {
     const otl::byte_view file(p->data.ptr, p->data.len);
     const int offset = truetype::face::offset_for_index(file, index);
@@ -233,6 +256,9 @@ void init_font(font::impl* p, int index) {
 font font::from_memory(std::vector<std::uint8_t> data, int index) {
     if (index < 0) throw std::invalid_argument("font index must be >= 0");
     if (data.empty()) throw decode_error("empty font data");
+
+    std::vector<std::uint8_t> sfnt;
+    if (unpack_web_font(data.data(), data.size(), sfnt)) data = std::move(sfnt);
 
     auto p = std::make_shared<impl>();
     p->data.own(std::move(data));
@@ -252,6 +278,8 @@ font font::open(const std::filesystem::path& path, int index) {
         p->data.own(detail::read_file(path));  // throws io_error / limit_error with the right errno
         if (p->data.len == 0) throw decode_error("empty font data");
     }
+    std::vector<std::uint8_t> sfnt;
+    if (unpack_web_font(p->data.ptr, p->data.len, sfnt)) p->data.own(std::move(sfnt));  // drops a file mapping
     init_font(p.get(), index);
     return font(std::move(p));
 }
@@ -357,6 +385,14 @@ float font::glyph_kerning(std::uint32_t left, std::uint32_t right, kerning_mode 
 }
 
 int font::face_count(const std::vector<std::uint8_t>& data) {
+    switch (detail::web_font_signature(data.data(), data.size())) {
+        case detail::web_font_kind::woff1:
+            return 1;  // a WOFF holds one font (the file is not unpacked here)
+        case detail::web_font_kind::woff2:
+            throw decode_error("WOFF2 fonts are not supported (WOFF 1.0, TrueType and OpenType are)");
+        case detail::web_font_kind::none:
+            break;
+    }
     const int n = truetype::face::font_count(otl::byte_view(data.data(), data.size()));
     if (n < 1) throw decode_error("not a TrueType/OpenType font or collection");
     return n;

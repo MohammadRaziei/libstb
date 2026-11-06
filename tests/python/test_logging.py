@@ -113,7 +113,7 @@ def test_libstb_log_is_kept_when_set():
 
 
 def test_the_library_logs_its_calls_at_debug_under_its_areas(caplog):
-    import numpy as np
+    np = pytest.importorskip("numpy")  # only this test needs numpy: without it just this test is skipped
 
     img = stb.Image(np.zeros((6, 8, 3), np.uint8))
     with caplog.at_level(logging.DEBUG, logger="libstb"):
@@ -128,7 +128,7 @@ def test_the_library_logs_its_calls_at_debug_under_its_areas(caplog):
 
 
 def test_the_library_says_nothing_at_the_default_level(caplog):
-    import numpy as np
+    np = pytest.importorskip("numpy")  # only this test needs numpy: without it just this test is skipped
 
     with caplog.at_level(logging.WARNING, logger="libstb"):
         img = stb.Image(np.zeros((6, 8, 3), np.uint8))
@@ -137,7 +137,7 @@ def test_the_library_says_nothing_at_the_default_level(caplog):
 
 
 def test_a_nan_coordinate_is_one_warning(caplog):
-    import numpy as np
+    np = pytest.importorskip("numpy")  # only this test needs numpy: without it just this test is skipped
 
     img = stb.Image(np.zeros((6, 8, 3), np.uint8))
     nan = float("nan")

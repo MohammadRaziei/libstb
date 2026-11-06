@@ -1,8 +1,8 @@
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 
-تاریخ: 2026-11-04. ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
+تاریخ: 2026-11-06 (WOFF1 و اصلاح تست numpy بعد از 2026-11-04 اضافه شدند). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
 این فایل untracked است (قبل از push حذفش کن). **تغییرات بخش «کارهای commit نشده» پایین هنوز commit نشده‌اند**
-(working tree عمداً dirty است: 55 مسیر در `git status`).
+(working tree عمداً dirty است: 77 مسیر در `git status`).
 
 ## قاعده‌های کاربر (حتماً رعایت شود)
 
@@ -65,7 +65,19 @@
 
 6. **CI ویندوز و warningها** (تمام شد، commit نشد): تست `test_file_handler...` روی ویندوز fail بود چون `file_handler` در حالت text می‌نویسد (CRLF، مثل `FileHandler` پایتون) ولی `slurp` باینری می‌خواند؛ `slurp` حالا text می‌خواند. warningها از ریشه درست شدند، نه خاموش: `stroke_style::dashes{}`، `int(cl.x - x)` در gray_raster، تبدیل صریح `level_` در bidi، `if constexpr ... else` به‌جای کد بعد از `return` در `composite_row`، تغییر نام `code` محلی در jpeg، و در تست‌ها `ofstream`/`stb::env`/`tmpfile_s` به‌جای fopen/getenv/tmpfile. تست‌هایی که عمداً ورودی بد می‌دهند حالا هشدار libstb را با `testutil::log_capture` می‌گیرند و می‌شمارند (خروجی تست ساکت است). بیلد تمیز gcc: صفر warning. ویندوز را نتوانستم اجرا کنم.
 
-پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها).
+7. **WOFF1** (تمام شد، commit نشد): `src/font/woff.hpp` و `woff.cpp` (`detail::woff1_to_sfnt`، `web_font_signature`)، اتصال در
+   `src/font/font.cpp` (`unpack_web_font` در `from_memory` و `open`؛ `font_bytes::own` اگر mapping داشته باشد اول `munmap` می‌کند؛
+   `face_count` برای `wOFF` ۱ می‌دهد و برای `wOF2` پیام «WOFF2 fonts are not supported»). فقط تشخیص خودکار، بدون تابع عمومی جدید
+   (API را کاربر تأیید کرد). تصمیم‌ها: `totalSfntSize` و بلوک‌های metadata/private استفاده نمی‌شوند (اندازه‌ی sfnt از خود جدول‌ها
+   حساب می‌شود)؛ `length` باید برابر اندازه‌ی فایل باشد؛ `reserved` چک نمی‌شود؛ ترتیب داده‌ی جدول‌ها در فایل مهم نیست ولی هم‌پوشانی و
+   تگ ناصعودی رد می‌شود؛ سقف ۵۱۲ MiB (`limit_error`) و حافظه فقط به اندازه‌ی داده‌ی واقعاً تولیدشده رزرو می‌شود. تست:
+   `tests/cpp/test_woff.cpp` (۱۵ تست) و ۲ تست در `tests/python/test_font.py`؛ فونت‌های `tests/data/*.woff` را
+   `tests/data/make_woff_test_fonts.py` می‌سازد (از fontTools). تغییر عمومی: کامنت‌های `include/stb/font.hpp`، `docs/guide.md`، `CHANGELOG.md`.
+8. **اصلاح CI ویندوز ARM (wheel):** سه تست `tests/python/test_logging.py` مستقیم `import numpy` می‌کردند و روی runner بدون numpy fail
+   شدند؛ حالا `pytest.importorskip("numpy")` داخل همان سه تست است (نه سطح ماژول، تا بقیه‌ی تست‌های logging اجرا شوند).
+
+پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها)، بعد دو commit کوچک
+(WOFF1، اصلاح تست numpy).
 
 ## کارهای باز (به ترتیب پیشنهادی)
 
@@ -75,7 +87,7 @@
    x_offset, y_offset}`، `shape_options {direction auto/ltr/rtl, kerning_mode, ligatures}`. خط لوله روی کدپوینت کار می‌کند و باید منبع هر
    گلیف را از bidi، mirror، joining عربی و ligatureهای چندبه‌یک عبور دهد. معنی ligatures=false: `liga/clig` بسته شوند، `rlig` و joining نه.
    GPOS فعلاً فقط pair adjustment دارد. `unicode-bidi: embed/override` پشتیبانی نمی‌شود. **اول API را پیشنهاد بده و تأیید بگیر.**
-3. **WOFF/WOFF2:** libstb اصلاً ندارد. WOFF1 ارزان است (zlib خودمان)، WOFF2 به Brotli نیاز دارد؛ فقط اگر novasvg خودش decode نکند.
+3. **WOFF2:** نیاز به Brotli (decoder حدود چند صد KB داده‌ی دیکشنری)؛ فقط اگر novasvg خودش decode نکند. (WOFF1 تمام شد، بالا ببین.)
 4. **بایندینگ پایتون برای API فونت** (outline، glyph_index و ...) و برای `Outline(font.outline(g))`؛ فعلاً عمداً نیست.
 6. kernel دستی SSE2 برای premultiply (الان auto-vectorize؛ جهت مستقیم روی alpha نیمه‌شفاف فقط حدود 1.3x مرجع)؛ NEON/arm64/MSVC/ویندوز اجرا نشده.
 7. thread برای کارهای دیگر (blend با حالت‌های float، JPEG encode) فقط بعد از اندازه‌گیری روی ماشین چندهسته‌ای. کارهای حافظه‌محور

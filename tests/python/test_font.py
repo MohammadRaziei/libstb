@@ -25,6 +25,28 @@ def test_open_from_path_str_and_bytes():
         assert Font.open(src).advance("A", 100) == 60.0
 
 
+def test_a_woff_file_is_the_same_font_as_the_ttf_it_was_made_from(font):
+    # libstb-test.woff is libstb-test.ttf with its tables zlib-compressed (tests/data/make_woff_test_fonts.py)
+    woff_path = FONT_PATH.with_suffix(".woff")
+    for src in (woff_path, str(woff_path), woff_path.read_bytes()):
+        woff = Font.open(src)
+        assert woff.advance("A", 100) == 60.0
+        assert woff.kerning("A", "B", 100) == -10.0
+        assert woff.metrics(100) == font.metrics(100)
+        a, b = woff.render("AB", 100), font.render("AB", 100)
+        assert (a.origin_x, a.origin_y) == (b.origin_x, b.origin_y)
+        assert np.array_equal(a.bitmap.numpy(), b.bitmap.numpy())
+
+
+def test_woff2_is_refused_and_a_damaged_woff_too():
+    data = bytearray(FONT_PATH.with_suffix(".woff").read_bytes())
+    woff2 = bytes(b"wOF2" + data[4:])
+    with pytest.raises(stb.DecodeError, match="WOFF2"):
+        Font.open(woff2)
+    with pytest.raises(stb.DecodeError):
+        Font.open(bytes(data[:-1]))  # shorter than its length field says
+
+
 def test_metrics(font):
     m = font.metrics(100)
     assert (m.ascent, m.descent, m.line_gap, m.line_height) == (80.0, -20.0, 0.0, 100.0)

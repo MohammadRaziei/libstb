@@ -130,7 +130,10 @@ public:
     static constexpr float max_pixel_height = 2048.0f;
 
     // Takes ownership of the file contents. `index` selects a face inside a
-    // .ttc collection. Throws invalid_argument (index < 0), decode_error.
+    // .ttc collection. A WOFF 1.0 file (.woff) is unpacked to the font it holds, in memory, and
+    // read like any other (it has one face, so `index` must be 0); WOFF2 is not supported.
+    // Throws invalid_argument (index < 0), decode_error (a damaged or WOFF2 file), limit_error
+    // (a WOFF that would unpack to more than 512 MiB).
     static font from_memory(std::vector<std::uint8_t> data, int index = 0);
     // Also throws io_error / limit_error.
     static font open(const std::filesystem::path& path, int index = 0);
@@ -168,9 +171,10 @@ public:
     // and in pixels, always in automatic mode.
     float glyph_kerning(std::uint32_t left, std::uint32_t right, kerning_mode mode = kerning_mode::automatic) const noexcept;
 
-    // How many fonts a file holds: 1 for a .ttf / .otf, the number of faces for a .ttc collection
-    // (font::from_memory / open take an index below it). It does not check that every face is
-    // usable. Throws decode_error if the data is neither, io_error / limit_error for a path.
+    // How many fonts a file holds: 1 for a .ttf / .otf / .woff, the number of faces for a .ttc
+    // collection (font::from_memory / open take an index below it). It does not check that every
+    // face is usable, nor unpack a WOFF. Throws decode_error if the data is none of these (or is
+    // WOFF2), io_error / limit_error for a path.
     static int face_count(const std::vector<std::uint8_t>& data);
     static int face_count(const std::filesystem::path& path);
 
