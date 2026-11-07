@@ -261,7 +261,9 @@ HarfBuzz's on 18,000 random strings (`Font.shape_glyphs` returns them, for diagn
 about 0.2 microseconds per character, and the GSUB table is parsed the first time right-to-left text
 is drawn with a font (about 0.1 ms), not when the font is opened.
 
-What is not done: GPOS. Kerning comes from the `kern` table only, and marks (harakat) are placed by a
+What is not done: GPOS mark and anchor positioning, and every GPOS lookup but pair adjustment. Kerning
+is the font's GPOS pair adjustment (lookup type 2, glyph pairs and class pairs, the advance of the first
+glyph) if the font has a GPOS table, else its legacy `kern` table. Marks (harakat) are placed by a
 simple rule rather than the font's anchors: centred on the ink of their letter and stacked above it
 (below for kasra and similar signs, shadda first), with no room of their own. That looks like the
 real thing on ordinary vowelled text but not pixel for pixel, and text set in a font that depends on
@@ -507,6 +509,33 @@ character.
 `kerning_mode::automatic` (the default) is what `kerning()` and text rendering use: GPOS pair
 adjustment if the font has GPOS, else the legacy `kern` table. `kern_table` looks at the `kern` table
 alone, for code that must match a renderer that ignores GPOS; `none` is no kerning.
+
+**From Python.** The same glyph-index API is on `libstb.Font`, in font units with y up, so a vector renderer can be
+written in Python. The glyph numbers are the font's own, an index past `glyph_count` is "nothing" (an empty outline,
+zero metrics), and a negative index or one above 2**32 - 1 is a `ValueError`.
+
+```python
+font = stb.Font.open("fonts.ttc", index=0)       # stb.Font.face_count("fonts.ttc") -> how many faces
+font.glyph_index("A")                            # the font's glyph, 0 (.notdef) if it has none; font.glyph_count
+font.glyph_info(g)                               # GlyphMetrics(advance, lsb, x_min, y_min, x_max, y_max, has_outline)
+font.design_metrics                              # DesignMetrics(units_per_em, ascent, descent, line_gap, x_min, ...)
+font.outline(g)                                  # [("M", x, y), ("L", ...), ("Q", ...), ("C", ...), ("Z",)] = Outline commands
+font.glyph_kerning(left, right, "automatic")     # or "kern_table" or "none"
+
+s = size / font.design_metrics.units_per_em      # font units -> pixels
+pen = 0.0
+for g in font.shape("\u0633\u0644\u0627\u0645 world", direction="auto", kerning="automatic", ligatures=True):
+    # ShapedGlyph(glyph, cluster, x_advance, x_offset, y_offset); glyph 0 is a line break
+    if g.glyph:
+        m = stb.Matrix.translation(x + (pen + g.x_offset) * s, baseline).scale(s, -s)   # Outline's y points down
+        img = img.fill_outline(stb.Outline(font.outline(g.glyph)), "black", matrix=m)
+    pen += g.x_advance
+```
+
+`Outline(font.outline(g))` takes the commands as they are. The cheap calls (`glyph_index`, `glyph_info`,
+`outline`, `glyph_kerning`) keep the GIL: each takes microseconds, less than letting go of it and taking it back
+costs. `shape` lets go of it for a text of 512 UTF-8 bytes or more (about 100 microseconds), so other threads run
+while a long text is shaped; a `Font` is immutable, so many threads can share one.
 
 Design: stb never appears in a public header. Where a class would hold stb
 state, it is hidden behind a pimpl: `font` keeps the font bytes and the

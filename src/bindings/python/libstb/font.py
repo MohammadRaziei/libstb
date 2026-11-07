@@ -1,14 +1,13 @@
-"""Fonts (stb_truetype): object API on top of the native module.
+"""Fonts: object API on top of the native module (libstb's own TrueType / CFF engine).
 
-SECURITY: stb_truetype does no bounds checking; its author says not to use it
-on untrusted font files. Only load fonts you trust.
+SECURITY: the font reader checks its bounds but has not been fuzzed. Only load
+fonts you trust.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Dict, NamedTuple, Optional
-
+from typing import Dict, List, NamedTuple, Optional
 
 from . import libstb_py as _native
 from .image import Image, Source, _read
@@ -87,6 +86,46 @@ class Atlas:
         return f"Atlas({self.image.width}x{self.image.height}, {len(self)} glyphs)"
 
 
+class GlyphMetrics(NamedTuple):
+    """One glyph's metrics in font units (y up). `advance` is how far the pen moves after the
+    glyph, `lsb` the distance from the pen to the glyph's left edge, (x_min, y_min, x_max, y_max)
+    the ink box (all 0 when `has_outline` is False, as for a space)."""
+
+    advance: float
+    lsb: float
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+    has_outline: bool
+
+
+class DesignMetrics(NamedTuple):
+    """A font's vertical metrics and bounding box in font units (descent is negative)."""
+
+    units_per_em: int
+    ascent: int
+    descent: int
+    line_gap: int
+    x_min: int
+    y_min: int
+    x_max: int
+    y_max: int
+
+
+class ShapedGlyph(NamedTuple):
+    """One glyph of Font.shape(), in font units with y up. The glyph is drawn at
+    (pen_x + x_offset, pen_y + y_offset) and the pen then moves right by `x_advance`.
+    `glyph` is 0 for a line break; `cluster` is the byte offset in the UTF-8 text of the first
+    character the glyph stands for."""
+
+    glyph: int
+    cluster: int
+    x_advance: float
+    x_offset: float
+    y_offset: float
+
+
 class Font:
     """A TrueType/OpenType font (immutable; safe to share between threads).
 
@@ -108,6 +147,18 @@ class Font:
         if isinstance(source, (str, os.PathLike)):
             return cls(_native.Font.open(source, index))
         return cls(_native.Font.from_bytes(_read(source), index))
+
+    @staticmethod
+    def face_count(source: Source) -> int:
+        """How many fonts a file holds: 1 for a .ttf / .otf / .woff, the number of faces of a .ttc
+        (`Font.open(..., index=i)` takes an index below it). `source` is a path or bytes.
+
+        It does not check that every face is usable. Raises DecodeError (not a font, or WOFF2),
+        OSError.
+        """
+        if isinstance(source, (str, os.PathLike)):
+            return _native.Font.face_count(source)
+        return _native.Font.face_count_bytes(_read(source))
 
     def metrics(self, pixel_height: float) -> FontMetrics:
         return FontMetrics(*self._f.metrics(pixel_height))
@@ -133,6 +184,78 @@ class Font:
         right-to-left order. A letter's marks follow it. For diagnostics and tests.
         """
         return self._f.shape_glyphs(text)
+
+    # ---- glyph-index API: outlines and metrics in font units (y up), for vector renderers ----
+
+    def glyph_index(self, char: str) -> int:
+        """The font's glyph for one character; 0 (".notdef") if it has none (see has_glyph)."""
+        return self._f.glyph_index(char)
+
+    @property
+    def glyph_count(self) -> int:
+        """How many glyphs the font has. An index at or past it is not a glyph: glyph_info,
+        outline and glyph_kerning answer "nothing" for it instead of raising."""
+        return self._f.glyph_count
+
+    def glyph_info(self, glyph: int) -> GlyphMetrics:
+        """The metrics of a glyph in font units. Zeros for an index that is not a glyph.
+
+        Raises ValueError for a negative index or one above 2**32 - 1.
+        """
+        return GlyphMetrics(*self._f.glyph_info(glyph))
+
+    @property
+    def design_metrics(self) -> DesignMetrics:
+        """The vertical metrics and bounding box in font units (Font.metrics gives the vertical
+        numbers in pixels)."""
+        return DesignMetrics(*self._f.design_metrics())
+
+    def outline(self, glyph: int) -> list:
+        """The outline of a glyph in font units, y up, as the commands Outline takes:
+        ("M", x, y), ("L", x, y), ("Q", cx, cy, x, y) (TrueType), ("C", c1x, c1y, c2x, c2y, x, y)
+        (CFF) and ("Z",). Empty for a glyph with no outline or an index that is not a glyph.
+
+        Outline's y axis points down, like pixels, so draw it through a Matrix that scales by
+        ``(s, -s)`` and moves the baseline::
+
+            o = stb.Outline(font.outline(font.glyph_index("A")))
+            img = img.fill_outline(o, "black", matrix=stb.Matrix.translation(x, baseline).scale(s, -s))
+
+        Raises ValueError for a negative index or one above 2**32 - 1.
+        """
+        return self._f.outline(glyph)
+
+    def glyph_kerning(self, left: int, right: int, mode: str = "automatic") -> float:
+        """Kerning between two glyphs in font units (usually <= 0). `mode` is "automatic" (GPOS pair
+        adjustment if the font has GPOS, else the `kern` table; what text drawing uses),
+        "kern_table" (the legacy `kern` table only) or "none"."""
+        return self._f.glyph_kerning(left, right, mode)
+
+    def shape(self, text: str, *, direction: str = "auto", kerning: str = "automatic",
+              ligatures: bool = True) -> List[ShapedGlyph]:
+        """Shape `text` into positioned glyphs in VISUAL order (left to right on the page), in font
+        units with y up. It makes the same decisions as draw_text (joined letter shapes, GSUB
+        features, mirrored brackets, right-to-left order, kerning) without rounding anything to
+        pixels, so a vector renderer can place the glyphs itself.
+
+        `direction` is "auto" (that of the first strong letter, as draw_text does), "ltr" or "rtl".
+        `kerning` is as in glyph_kerning; it is added to the advance of the first glyph of a pair.
+        `ligatures=False` stops the optional ligature features (liga, clig); the required ones
+        (lam + alef) and the joining shapes always run. A "\\n" is a glyph 0 with no advance:
+        start the next line (its pitch is design_metrics.ascent - descent + line_gap) and move the
+        pen back to 0. Marks take no advance and carry an x_offset / y_offset.
+
+        Only right-to-left scripts get the GSUB treatment so far: other text is one glyph per
+        character. Raises ValueError (malformed text, unknown direction or kerning), LimitError.
+
+        Place the glyphs by walking the pen along the line::
+
+            pen = 0.0
+            for g in font.shape("text"):
+                x = pen + g.x_offset   # draw font.outline(g.glyph) with its origin at x
+                pen += g.x_advance
+        """
+        return [ShapedGlyph(*t) for t in self._f.shape(text, direction, kerning, ligatures)]
 
     def measure(self, text: str, pixel_height: float) -> TextSize:
         return TextSize(*self._f.measure(text, pixel_height))

@@ -672,3 +672,260 @@ def test_random_text_shapes_like_harfbuzz():
             # HarfBuzz puts a mark before its letter in visual order, libstb after it: with marks
             # compare the glyphs as a multiset, without them the order too.
             assert (sorted(ours) == sorted(theirs)) if with_marks else (ours == theirs), text
+
+
+# --- glyph-index API: outlines and metrics in font units (libstb-test.ttf: 1000 units per em) ----------------------
+
+DATA = FONT_PATH.parent
+CURVES_FONT = DATA / "libstb-curves-test.ttf"
+CFF_FONT = DATA / "libstb-cff-test.otf"
+TTC_FONT = DATA / "libstb-test.ttc"
+
+
+def test_glyph_index_and_glyph_count(font):
+    a, b = font.glyph_index("A"), font.glyph_index("B")
+    assert a != 0 and b != 0 and a != b
+    assert font.glyph_index("Z") == 0 and not font.has_glyph("Z")  # no glyph: .notdef
+    assert font.glyph_index("é") != 0 and font.glyph_index("😀") != 0  # outside the BMP too
+    assert font.glyph_count > max(a, b)
+    with pytest.raises(ValueError):
+        font.glyph_index("AB")  # one character
+
+
+def test_glyph_info_is_in_font_units(font):
+    assert font.glyph_info(font.glyph_index("A")) == stb.GlyphMetrics(600, 100, 100, 0, 500, 700, True)
+    space = font.glyph_info(font.glyph_index(" "))
+    assert space == stb.GlyphMetrics(300, space.lsb, 0, 0, 0, 0, False)  # an advance and nothing to draw
+    # the same advance Font.advance gives in pixels: 100 px per 1000 units
+    assert font.advance("A", 100) == pytest.approx(font.glyph_info(font.glyph_index("A")).advance * 0.1)
+    v = Font.open(CURVES_FONT)
+    assert v.glyph_info(v.glyph_index("V")) == stb.GlyphMetrics(1200, 250, 250, 20, 1050, 1420, True)  # a composite
+
+
+def test_design_metrics_are_the_font_units_of_the_file(font):
+    d = font.design_metrics
+    assert d == stb.DesignMetrics(1000, 800, -200, 0, 0, 0, 500, 700)
+    m = font.metrics(100)  # 0.1 px per unit
+    assert (m.ascent, m.descent) == pytest.approx((d.ascent * 0.1, d.descent * 0.1))
+    c = Font.open(CURVES_FONT).design_metrics  # another grid: nothing may assume 1000 units per em
+    assert c == stb.DesignMetrics(2048, 1600, -400, 100, 0, 0, 1050, 1420)
+
+
+def test_a_glyph_past_the_glyphs_is_nothing_not_an_error(font):
+    b = font.glyph_index("B")
+    for g in (font.glyph_count, font.glyph_count + 1, 65535, 2**32 - 1):
+        assert font.glyph_info(g) == stb.GlyphMetrics(0, 0, 0, 0, 0, 0, False)
+        assert font.outline(g) == []
+        assert font.glyph_kerning(g, b) == 0.0 and font.glyph_kerning(b, g) == 0.0
+
+
+def test_a_glyph_must_be_an_index_that_fits_32_bits(font):
+    for bad in (-1, 2**32):
+        for call in (font.glyph_info, font.outline, lambda g: font.glyph_kerning(g, 0), lambda g: font.glyph_kerning(0, g)):
+            with pytest.raises(ValueError, match="glyph index"):
+                call(bad)
+    with pytest.raises(TypeError):
+        font.glyph_info("A")  # a character is not a glyph index: use glyph_index()
+
+
+def test_outline_commands_are_in_font_units_and_keep_the_curve_type(font):
+    assert font.outline(font.glyph_index("A")) == [("M", 100, 0), ("L", 100, 700), ("L", 500, 700), ("L", 500, 0),
+                                                   ("L", 100, 0), ("Z",)]
+    assert font.outline(font.glyph_index(" ")) == []  # nothing to draw
+    q = Font.open(CURVES_FONT)  # TrueType: a quadratic stays a quad
+    assert q.outline(q.glyph_index("Q")) == [("M", 0, 0), ("L", 1000, 0), ("Q", 1000, 1000, 0, 1000), ("L", 0, 0), ("Z",)]
+    c = Font.open(CFF_FONT)  # CFF: a cubic stays a cubic
+    assert c.outline(c.glyph_index("C")) == [("M", 0, 0), ("L", 1000, 0), ("C", 1000, 500, 500, 1000, 0, 1000),
+                                             ("L", 0, 0), ("Z",)]
+
+
+def test_an_outline_goes_straight_into_outline(font):
+    for f in (font, Font.open(CURVES_FONT), Font.open(CFF_FONT)):
+        for ch in "ABCQV":
+            commands = f.outline(f.glyph_index(ch))
+            assert stb.Outline(commands).commands == commands
+
+
+def test_every_glyph_of_a_font_has_a_well_formed_outline():
+    for path in (FONT_PATH, CURVES_FONT, CFF_FONT):
+        f = Font.open(path)
+        for g in range(f.glyph_count):
+            commands = f.outline(g)
+            assert bool(commands) == f.glyph_info(g).has_outline
+            assert all(c[0] in "MLQCZ" for c in commands)
+            if commands:
+                assert commands[0][0] == "M" and commands[-1][0] == "Z"  # every contour is M ... Z
+
+
+def test_glyph_kerning_modes(font):
+    a, b = font.glyph_index("A"), font.glyph_index("B")
+    assert font.glyph_kerning(a, b) == -100.0  # the font has the legacy kern table only
+    assert font.glyph_kerning(a, b, "automatic") == -100.0
+    assert font.glyph_kerning(a, b, "kern_table") == -100.0
+    assert font.glyph_kerning(a, b, "none") == 0.0
+    assert font.glyph_kerning(b, a) == 0.0  # no such pair
+    # in pixels it is Font.kerning: 100 px per 1000 units
+    assert font.kerning("A", "B", 100) == pytest.approx(font.glyph_kerning(a, b) * 0.1)
+    with pytest.raises(ValueError, match="kerning"):
+        font.glyph_kerning(a, b, "gpos")
+
+
+def test_glyph_kerning_automatic_prefers_gpos_over_the_kern_table():
+    f = Font.open(CURVES_FONT)  # the `kern` table says -100 for (A, B), GPOS pair adjustment says -50
+    a, b = f.glyph_index("A"), f.glyph_index("B")
+    assert f.glyph_kerning(a, b) == -50.0
+    assert f.glyph_kerning(a, b, "automatic") == -50.0
+    assert f.glyph_kerning(a, b, "kern_table") == -100.0
+    assert f.glyph_kerning(a, b, "none") == 0.0
+    assert f.glyph_kerning(b, a) == 0.0  # only the (A, B) pair is kerned
+    assert f.kerning("A", "B", 100) == pytest.approx(-50.0 * 100.0 / 2000.0)  # Font.kerning is the automatic mode in pixels
+    assert f.shape("AB")[0].x_advance == f.glyph_info(a).advance - 50  # shape folds the same kerning into the advance
+
+
+def test_face_count_of_a_font_and_of_a_collection():
+    for src in (FONT_PATH, str(FONT_PATH), FONT_PATH.read_bytes(), bytearray(FONT_PATH.read_bytes())):
+        assert Font.face_count(src) == 1
+    assert Font.face_count(CFF_FONT) == 1
+    assert Font.face_count(FONT_PATH.with_suffix(".woff")) == 1
+    for src in (TTC_FONT, str(TTC_FONT), TTC_FONT.read_bytes()):
+        assert Font.face_count(src) == 2
+    assert Font.open(TTC_FONT, index=1).glyph_count > 0  # an index below face_count opens
+    with pytest.raises(stb.DecodeError):
+        Font.open(TTC_FONT, index=Font.face_count(TTC_FONT))
+
+
+def test_face_count_refuses_what_is_not_a_font():
+    with pytest.raises(stb.DecodeError):
+        Font.face_count(b"this is not a font at all")
+    woff2 = bytes(b"wOF2" + FONT_PATH.with_suffix(".woff").read_bytes()[4:])
+    with pytest.raises(stb.DecodeError, match="WOFF2"):
+        Font.face_count(woff2)
+    with pytest.raises(FileNotFoundError):
+        Font.face_count(DATA / "no-such-font.ttf")
+
+
+# --- Font.shape ------------------------------------------------------------------------------------------------
+
+def test_shape_latin_is_one_glyph_per_character_in_font_units(font):
+    a, b = font.glyph_index("A"), font.glyph_index("B")
+    assert font.shape("AB") == [stb.ShapedGlyph(a, 0, 500, 0, 0), stb.ShapedGlyph(b, 1, 500, 0, 0)]  # 600 kerned -100
+    assert font.shape("") == []
+    assert [g.glyph for g in font.shape("AB")] == font.shape_glyphs("AB")  # the same glyphs shape_glyphs names
+
+
+def test_shape_kerning_option(font):
+    assert font.shape("AB", kerning="none")[0].x_advance == 600
+    assert font.shape("AB", kerning="kern_table")[0].x_advance == 500
+    assert font.shape("AB", kerning="automatic") == font.shape("AB")
+    a, b = font.glyph_index("A"), font.glyph_index("B")
+    for mode in ("none", "kern_table", "automatic"):
+        first = font.shape("AB", kerning=mode)[0]
+        assert first.x_advance == font.glyph_info(a).advance + font.glyph_kerning(a, b, mode)
+
+
+def test_shape_cluster_is_a_byte_offset_into_the_utf8_text(font):
+    assert [g.cluster for g in font.shape("AéB")] == [0, 1, 3]  # é: 2 bytes
+    assert [g.cluster for g in font.shape("A😀B")] == [0, 1, 5]  # an emoji: 4 bytes
+
+
+def test_shape_new_line_is_glyph_zero_and_ends_the_kerning_pair(font):
+    g = font.shape("A\nB")
+    assert [(s.glyph == 0, s.cluster) for s in g] == [(False, 0), (True, 1), (False, 2)]
+    assert g[1].x_advance == 0 and g[0].x_advance == 600  # not kerned towards a B on the next line
+    assert [s.cluster for s in font.shape("A\rB")] == [0, 2]  # a carriage return has no glyph
+
+
+def test_shape_arguments_are_checked(font):
+    with pytest.raises(ValueError, match="direction"):
+        font.shape("A", direction="up")
+    with pytest.raises(ValueError, match="kerning"):
+        font.shape("A", kerning="gpos")
+    with pytest.raises(TypeError):
+        font.shape("A", "rtl")  # the options are keyword-only
+
+
+def test_shape_persian_clusters_follow_the_letters():
+    f = Font.open(GSUB_FONT)
+    seen_lam_alef_meem = "\u0633\u0644\u0627\u0645"
+    g = f.shape(seen_lam_alef_meem)
+    assert [s.cluster for s in g] == [6, 2, 0]  # right to left: the last letter is the leftmost glyph
+    assert [s.glyph for s in g] == f.shape_glyphs(seen_lam_alef_meem)
+    assert len(f.shape("\u0627\u0644\u0644\u0647")) == 1  # liga: the Allah glyph, from its first letter
+    assert [s.cluster for s in f.shape("\u0628\u0633\u0645 \u0627\u0644\u0644\u0647")] == [7, 6, 4, 2, 0]
+    assert [s.cluster for s in f.shape("\u0633\u0644\n\u0645")] == [2, 0, 4, 5]  # each line on its own
+
+
+def test_shape_direction_option_decides_the_order_of_the_runs(font):
+    f = Font.open(GSUB_FONT)
+    mixed = "\u0633 ab"
+    assert [s.cluster for s in f.shape(mixed)] == [3, 4, 2, 0]  # auto: Persian first, so right to left
+    assert [s.cluster for s in f.shape(mixed, direction="rtl")] == [3, 4, 2, 0]
+    assert [s.cluster for s in f.shape(mixed, direction="ltr")] == [0, 2, 3, 4]
+    assert [s.cluster for s in font.shape("A!", direction="ltr")] == [0, 1]
+    assert [s.cluster for s in font.shape("A!", direction="rtl")] == [1, 0]
+
+
+def test_shape_ligatures_option_stops_the_optional_ligatures_only():
+    f = Font.open(GSUB_FONT)
+    allah = "\u0627\u0644\u0644\u0647"
+    assert len(f.shape(allah)) == 1 and len(f.shape(allah, ligatures=False)) == 4
+    lam_alef = "\u0644\u0627"  # rlig is required: it runs either way
+    assert len(f.shape(lam_alef, ligatures=False)) == 1
+
+
+def test_shape_marks_take_no_advance_and_stack_on_the_letter():
+    f = Font.open(DATA / "libstb-fa-test.ttf")
+    g = f.shape("\u0628\u064E")  # beh + fatha
+    assert len(g) == 2
+    mark = next(s for s in g if s.x_advance == 0)
+    assert mark.x_offset != 0 or mark.y_offset != 0  # placed from the pen, not at it
+
+
+def test_shape_a_long_text_is_the_same_as_its_parts(font):
+    # past the length where shape lets go of the GIL
+    long_text = "AB" * 1500
+    g = font.shape(long_text)
+    assert len(g) == 3000 and [s.cluster for s in g] == list(range(3000))
+    assert g == font.shape("AB" * 750) + [s._replace(cluster=s.cluster + 1500) for s in font.shape("AB" * 750)]
+
+
+def test_shape_and_outline_from_many_threads(font):
+    want = font.shape("AB" * 1500)
+    results, errors = [], []
+
+    def work():
+        try:
+            for _ in range(5):
+                results.append(font.shape("AB" * 1500) == want and font.outline(font.glyph_index("A")) != [])
+        except Exception as e:  # pragma: no cover
+            errors.append(e)
+
+    threads = [threading.Thread(target=work) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors and results == [True] * 20
+
+
+# --- shape + outline + fill_outline: a vector renderer written in Python -----------------------------------------
+
+def draw_vector_text(img, font, text, size, x, baseline, **kw):
+    """Draws `text` with the glyph-index API only: shape, outline, Matrix, fill_outline."""
+    s = size / font.design_metrics.units_per_em
+    pen = 0.0
+    for g in font.shape(text):
+        if g.glyph:
+            m = stb.Matrix.translation(x + (pen + g.x_offset) * s, baseline).scale(s, -s)
+            img = img.fill_outline(stb.Outline(font.outline(g.glyph)), kw.get("color", 0), matrix=m)
+        pen += g.x_advance
+    return img
+
+
+def test_a_glyph_outline_drawn_with_a_matrix_is_what_draw_text_draws(font):
+    white = stb.Image(np.full((100, 200, 3), 255, np.uint8))
+    # at 100 px the em is 1000 units, 0.1 px per unit; draw_text puts the baseline at y + ascent (80)
+    by_text = white.draw_text("AB", font, 100, 0, 0)
+    by_outline = draw_vector_text(white, font, "AB", 100, 0, 80)
+    assert np.array_equal(by_text.numpy(), by_outline.numpy())
+    assert by_outline.numpy()[50, 30].tolist() == [0, 0, 0] and by_outline.numpy()[5, 5].tolist() == [255, 255, 255]

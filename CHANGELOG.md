@@ -8,6 +8,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **Python: the glyph-index API and `Font.shape`.** `Font.glyph_index(char)`, `glyph_count`, `glyph_info(glyph)`
+  (`GlyphMetrics`), `design_metrics` (`DesignMetrics`), `outline(glyph)` (the command tuples `Outline` takes, so
+  `Outline(font.outline(g))` works), `glyph_kerning(left, right, mode)`, the static `Font.face_count(source)` and
+  `Font.shape(text, *, direction, kerning, ligatures)` (a list of `ShapedGlyph`), all in font units with y up, as in
+  C++. Together with `Matrix` and `Image.fill_outline` a vector text renderer can be written in Python. An index past
+  the glyphs is "nothing", a negative or oversized one is a `ValueError`. `shape` lets go of the GIL for texts of 512
+  bytes or more; the cheap calls keep it. The module docstring and `font.hpp` no longer say the font reader is
+  stb_truetype: it is libstb's own and checks its bounds (it has not been fuzzed).
 - **`font::shape`**: UTF-8 text to positioned glyphs, in visual order and in font units (y up), for a vector
   renderer that draws glyph outlines itself. It makes the decisions `draw_text` makes (joined letter shapes, GSUB
   ligatures, mirrored brackets, the bidirectional order, kerning) and returns, per glyph (`shaped_glyph`), the glyph

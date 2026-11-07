@@ -31,6 +31,10 @@ struct py_buffer {
     }
 };
 
+// One command of an outline as a Python tuple ("M", x, y), ("L", x, y), ("Q", cx, cy, x, y),
+// ("C", c1x, c1y, c2x, c2y, x, y) or ("Z",). Defined in bind_outline.cpp.
+nb::tuple command_tuple(const stb::outline_command& c);
+
 inline std::uint8_t byte_of(nb::handle h) {
     const long v = nb::cast<long>(h);
     if (v < 0 || v > 255) throw std::invalid_argument("colour values must be in 0..255");

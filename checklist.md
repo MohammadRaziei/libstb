@@ -67,10 +67,10 @@
       `test_marks_take_no_room_and_sit_over_or_under_the_letter`.
       `Font.shape_glyphs` (C++: `font::shape_glyphs`) glyph idهای انتخاب‌شده رو برمی‌گردونه (تشخیص/تست).
       **محدودیت‌ها (صادقانه):**
-      - GPOS نداریم: kerning فقط از جدول `kern`، و اعراب با قاعده‌ی ساده (نه نقطه‌ی anchor فونت). روی
-        متن اعرابی معمولی چشمی شبیه raqm ه ولی پیکسل‌به‌پیکسل نه. فونت‌هایی که شکلشون به GPOS وابسته‌ست
-        (بعضی نستعلیق‌ها) خراب دیده می‌شن. مثلاً عرض خط معمولی با raqm چند پیکسل فرق داره چون kerning
-        GPOS رو نداریم.
+      - از GPOS فقط pair adjustment (lookup نوع ۲، جفت گلیف و جفت کلاس، advance گلیف اول) رو داریم: kerning از GPOS
+        می‌آد اگه فونت GPOS داشته باشه، وگرنه از جدول `kern`. mark/anchor و بقیه‌ی lookupهای GPOS رو نداریم و اعراب با
+        قاعده‌ی ساده جا می‌گیرن (نه نقطه‌ی anchor فونت). روی متن اعرابی معمولی چشمی شبیه raqm ه ولی
+        پیکسل‌به‌پیکسل نه. فونت‌هایی که شکلشون به GPOS وابسته‌ست (بعضی نستعلیق‌ها) خراب دیده می‌شن.
       - lookup نوع ۸ (reverse chaining) خونده نمی‌شه؛ فقط langsys پیش‌فرض اسکریپت `arab` (یا `DFLT`)،
         یعنی `locl` بر اساس زبان نیست؛ `fin2/fin3/med2` (سریانی) و `rtlm` نه.
       - ZWNJ حذف می‌شه (HarfBuzz یک glyph با عرض صفر نگه می‌داره؛ تصویر یکیه).
@@ -212,3 +212,7 @@
       `src/util/logging_os.cpp`، تست `tests/cpp/test_logging_os.cpp`. **نوشته شد ولی اجرا نشده (CI اولین اجراست؛ Android بدون CI).** کد از aixlog کپی نشد،
       پس چیزی در `NOTICE.md` نرفت.
 - [x] logging خود کتابخانه (`src/util/log.hpp` و فراخوانی‌ها)، `tests/cpp/test_library_logging.cpp`، `docs/adr/0001..0003`.
+- [x] **پایتون: API فونت.** `Font.glyph_index`، `glyph_count`، `glyph_info`، `design_metrics`، `outline`، `glyph_kerning`،
+      `Font.face_count` و `Font.shape` (با `direction`/`kerning`/`ligatures`)، در واحد فونت و y رو به بالا مثل C++؛
+      `Outline(font.outline(g))` کار می‌کند. `shape` برای متن‌های 512 بایتی و بیشتر GIL را آزاد می‌کند. تست‌ها در
+      `tests/python/test_font.py`؛ مستندات در `docs/guide.md` («From Python»).

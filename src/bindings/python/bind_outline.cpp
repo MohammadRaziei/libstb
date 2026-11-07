@@ -59,8 +59,9 @@ stb::draw_options make_options(const std::optional<stb::matrix>& m, nb::handle b
     return o;
 }
 
-// One command of an outline as a Python tuple ("M", x, y), ("L", x, y), ("Q", cx, cy, x, y),
-// ("C", c1x, c1y, c2x, c2y, x, y) or ("Z",).
+}  // namespace
+
+// Declared in binding.hpp: bind_font.cpp returns glyph outlines in the same tuple form.
 nb::tuple command_tuple(const stb::outline_command& c) {
     switch (c.op) {
         case stb::outline_op::move_to: return nb::make_tuple("M", c.p[0].x, c.p[0].y);
@@ -72,6 +73,8 @@ nb::tuple command_tuple(const stb::outline_command& c) {
     }
     return nb::make_tuple("Z");
 }
+
+namespace {
 
 void add_command(stb::outline& p, nb::handle h) {
     nb::sequence seq = nb::cast<nb::sequence>(h);

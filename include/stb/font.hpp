@@ -1,11 +1,10 @@
 #pragma once
 
-// stb_truetype / stb_rect_pack live in src/font/font.cpp only; `font` hides
-// them behind a pimpl, so no stbtt_* type appears in this header.
+// The font engine (TrueType / CFF outlines, the rasterizer, the rectangle packer) lives in
+// src/font/ only; `font` hides it behind a pimpl, so no engine type appears in this header.
 //
-// !!! SECURITY: stb_truetype does no bounds checking of its own. Its author
-// !!! states: "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT
-// !!! FILES". Only load fonts you trust (your own, or vetted system fonts).
+// !!! SECURITY: the font reader checks its bounds, but it has not been fuzzed. Only load
+// !!! fonts you trust (your own, or vetted system fonts).
 
 #include <cstddef>
 #include <cstdint>
@@ -267,7 +266,7 @@ public:
     atlas make_atlas(std::u32string_view codepoints, float pixel_height, int width, int height,
                      int padding = 1) const;
 
-    // Opaque pimpl (holds the font file bytes and the stbtt_fontinfo). Public
+    // Opaque pimpl (holds the font file bytes and the parsed font face). Public
     // only so that helpers in font.cpp can name it; it is incomplete here, so
     // nothing outside stb_core can look inside.
     struct impl;

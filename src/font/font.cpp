@@ -67,7 +67,7 @@ struct font_bytes {
 
 #ifdef STB_FONT_HAVE_MMAP
     // Maps the file instead of reading it: opening a 750 KB font costs a few
-    // microseconds, and only the pages stb_truetype actually touches are paged in.
+    // microseconds, and only the pages the font reader actually touches are paged in.
     // Returns false (caller falls back to reading) on any problem, including the
     // empty / over-2-GiB files read_file reports a proper error for.
     bool map_file(const std::filesystem::path& path) {

@@ -16,7 +16,8 @@
 
 ## کارهای commit نشده (به ترتیب پیشنهادی commit)
 
-همه با CMake بیلد و تست شده‌اند: C++ 390 تست پاس، `ctest` کامل پاس، پایتون 1394 پاس و 4 skip (torch و uharfbuzz نصب نبود).
+همه با CMake بیلد و تست شده‌اند (gcc، لینوکس، `-j2`): C++ 425 تست پاس (از جمله `font::shape` و `logging_os`)، `ctest` کامل پاس، صفر warning،
+پایتون 1440 پاس و 4 skip (torch و uharfbuzz نصب نبود). ویندوز، macOS و Android هنوز اجرا نشده‌اند.
 
 1. **بازنامگذاری** (فقط نام، بدون تغییر رفتار):
    - هندسه‌ی برداری `stb::path` شد `stb::outline` (`include/stb/outline.hpp`، `src/draw/outline.cpp`) با `outline_op`،
@@ -81,37 +82,41 @@
 
 ## کارهای باز (به ترتیب پیشنهادی)
 
-1. **اول CI را بررسی کن:** دو کار بعدی (`font::shape` و handlerهای OS log) **بدون هیچ بیلد و اجرا** نوشته شدند (به درخواست کاربر؛ او خطاها
-   را از CI می‌آورد). هر خطای کامپایل یا تست قرمز از اینهاست تا ثابت شود نه. احتمال بیشتر: متن تست‌های `tests/cpp/test_font_shape.cpp`
-   (انتظارهای clusterهای فارسی با فونت `libstb-fa-gsub-test.ttf` از روی استدلال نوشته شد، نه اجرا)، و `src/util/logging_os.cpp` روی macOS
-   (os_log) و ویندوز (Event Log). Android هیچ CI ندارد و فقط نوشته شده.
-2. **`font::shape` (انجام شد، اجرا نشده):** `include/stb/font.hpp` (`text_direction`، `shape_options`، `shaped_glyph`، `font::shape`)،
+1. **CI را روی ویندوز، macOS و Android بررسی کن:** `font::shape` و handlerهای OS log حالا روی لینوکس بیلد و اجرا شدند (11 تست shape
+   و تست‌های `logging_os` پاس؛ انتظارهای clusterهای فارسی درست بودند)، ولی `src/util/logging_os.cpp` روی macOS (os_log) و ویندوز
+   (Event Log) و Android (logcat) هنوز اجرا نشده و ویندوز/ARM/MSVC هم برای اصلاحات این دوره. هر خطای CI احتمالاً از اینهاست.
+2. **`font::shape` (انجام شد، روی لینوکس اجرا و پاس):** `include/stb/font.hpp` (`text_direction`، `shape_options`، `shaped_glyph`، `font::shape`)،
    پیاده‌سازی در `src/font/font.cpp`. خط لوله: `glyph_record::cluster` (`gsub.hpp`) تا آخر می‌رود؛ نوع داخلی `shaped_glyph` شد `visual_glyph`
    (نام عمومی آزاد شود) و حالا `cluster` دارد؛ `text_shaper::shape(text, shaper_options{direction, ligatures})`؛ `bidi::resolve(classes,
    base_dir)`؛ `arabic_layout::plan_plain` همان plan بدون `liga/clig` است. تصمیم‌ها: مکان marks از ink boxها در واحد فونت (همان قاعده‌ی
    `do_layout` بدون گرد کردن، پس تا حدود یک پیکسل با `draw_text` فرق دارد و عمداً `do_layout` به `shape` تبدیل نشد تا pixel goldenها نشکنند)؛
    kerning به `x_advance` گلیف اول جفت اضافه می‌شود؛ markها جفت را نمی‌شکنند؛ `'\n'` گلیف 0 با cluster خودش؛ `'\r'` حذف؛ هر خط جدا.
    **محدودیت شناخته‌شده:** GSUB فقط برای متن راست‌به‌چپ اجرا می‌شود (مثل `draw_text`)، پس `ligatures` روی متن لاتین اثری ندارد (liga لاتین
-   هنوز اجرا نمی‌شود)؛ mark positioning از GPOS نیست؛ `unicode-bidi: embed/override` پشتیبانی نمی‌شود. بایندینگ پایتون عمداً ندارد.
-   تست: `tests/cpp/test_font_shape.cpp`.
-2b. **handlerهای OS log (انجام شد، اجرا نشده):** `include/stb/logging_os.hpp` (`syslog_handler`، `android_handler`، `unified_log_handler`،
+   هنوز اجرا نمی‌شود)؛ mark positioning از GPOS نیست؛ `unicode-bidi: embed/override` پشتیبانی نمی‌شود. بایندینگ پایتون: `Font.shape` (بخش «پایتون: API فونت» پایین).
+   تست: `tests/cpp/test_font_shape.cpp` (اجرا شد، پاس).
+2b. **handlerهای OS log (انجام شد؛ فقط لینوکس/syslog اجرا شد):** `include/stb/logging_os.hpp` (`syslog_handler`، `android_handler`، `unified_log_handler`،
    `debug_string_handler`، `event_log_handler`، ماکروهای `STB_LOG_HAS_*`)، `src/util/logging_os.cpp`، `src/util/logging_os_rank.hpp` (نگاشت سطح به
    ۵ severity، قابل تست روی همه‌ی پلتفرم‌ها)، لینک `advapi32` (ویندوز) و `log` (اندروید) در `libstb_apply_core_build_settings`. **کد از aixlog
    کپی نشده** (از API خود سیستم‌عامل‌ها نوشته شد)، پس در `NOTICE.md` چیزی ثبت نشد؛ اگر خواستید نام الهام را ذکر کنید بگویید. ثبت مکان و `exception()`
    اضافه نشد (فقط اگر کاربر خواست). تست: `tests/cpp/test_logging_os.cpp`. نکته: syslog یک اتصال برای کل پروسه دارد (`openlog`)؛ در Event Viewer
    بدون message file متن بعد از «description cannot be found» می‌آید.
 3. **WOFF2:** نیاز به Brotli (decoder حدود چند صد KB داده‌ی دیکشنری)؛ فقط اگر novasvg خودش decode نکند. (WOFF1 تمام شد، بالا ببین.)
-4. **بایندینگ پایتون برای API فونت** (outline، glyph_index و ...) و برای `Outline(font.outline(g))`؛ فعلاً عمداً نیست.
+4. **بایندینگ پایتون برای API فونت: تمام شد (commit نشده).** بخش «پایتون: API فونت» پایین را ببین. handlerهای OS log و کلاس‌های
+   `get_logger/handler/basic_config` عمداً بایند نشدند (پایتون `logging` و handlerهای خودش را دارد و پل همه‌ی logها را به آن می‌فرستد).
 6. kernel دستی SSE2 برای premultiply (الان auto-vectorize؛ جهت مستقیم روی alpha نیمه‌شفاف فقط حدود 1.3x مرجع)؛ NEON/arm64/MSVC/ویندوز اجرا نشده.
 7. thread برای کارهای دیگر (blend با حالت‌های float، JPEG encode) فقط بعد از اندازه‌گیری روی ماشین چندهسته‌ای. کارهای حافظه‌محور
    (premultiply، flip، convert) عمداً بدون thread. `nproc` ماشین قبلی 1 بود.
-8. بایندینگ‌های تصویر پایتون موقع کار سنگین GIL را آزاد نمی‌کنند (فقط فونت‌ها می‌کنند).
+8. بایندینگ‌های تصویر پایتون موقع کار سنگین GIL را آزاد نمی‌کنند (فونت‌ها می‌کنند). آزاد کردن هزینه دارد (چند ده تا چند صد ns و ممکن است
+   تا یک switch interval برای گرفتن دوباره صبر کنی)، پس فقط وقتی کار حدود 50 تا 100 میکروثانیه یا بیشتر است. آستانه‌ی بهینه برای تصویر را
+   باید اندازه‌گیری کرد (مثلاً بر اساس تعداد پیکسل)؛ تغییر API نیست.
 9. بنچمارک rasterizer (fill/stroke نسبت به plutovg و Pillow/cairo)؛ تأیید novasvg روی goldenهای خودش (باید با تلرانس 0 برابر باشد؛ اگر
    نبود اول تفاوت FMA/پرچم کامپایل را بررسی کن).
 10. **سؤال بی‌پاسخ: آیا `font` هنوز باید pimpl باشد؟** نظر من: بله (هدرهای داخلی را از هدر عمومی بیرون نگه می‌دارد؛ ABI پایدار؛
-    `shared_ptr<const impl>` یعنی «کپی ارزان، immutable، thread-safe»، که novasvg روی آن حساب کرده). **کامنت‌های کهنه (اصلاح نشده):**
-    `include/stb/font.hpp` خطوط 3 تا 6 و 238 (stb_truetype / stbtt_fontinfo) و `src/font/font.cpp` خط 62 باید به «موتور TrueType/CFF خود libstb
-    (`src/font/truetype/`)» اصلاح شوند.
+    `shared_ptr<const impl>` یعنی «کپی ارزان، immutable، thread-safe»، که novasvg روی آن حساب کرده). **کامنت‌های کهنه اصلاح شد:** `include/stb/font.hpp` (بالای فایل و pimpl)، `src/font/font.cpp` و docstring بالای `font.py`
+    دیگر نمی‌گویند موتور stb_truetype است؛ حالا «موتور خود libstb» و «reader مرزها را چک می‌کند ولی fuzz نشده» (همان جمله‌ی `docs/guide.md`).
+    تناقض guide/هدر درباره‌ی GPOS حل شد: کد (`face.cpp`) و تست (`test_kerning_modes_pick_gpos_or_the_kern_table`) نشان می‌دهند GPOS pair
+    adjustment (lookup نوع ۲، فقط advance گلیف اول) خوانده می‌شود، پس `docs/guide.md` و `checklist.md` اصلاح شدند. mark/anchor و بقیه‌ی
+    lookupهای GPOS هنوز نیستند. ورودی تاریخی `CHANGELOG.md` (نسخه‌ی قدیمی) عمداً دست نخورد.
 11. `checklist.md`: تعداد تست‌ها و بخش «قدیمی‌ها» کامل به‌روز نشده (فقط آیتم‌های جدید اضافه شده‌اند).
 
 ## کار با build و تست (همه با CMake)
@@ -153,6 +158,21 @@ PYTHONPATH=/tmp/b/python/install python3 -m pytest tests/python -q     # تست 
 - `glyph_kerning(automatic)`: اگر فونت GPOS دارد فقط GPOS؛ `kern_table` فقط جدول kern. `face_count(path)` کل فایل را می‌خواند. `glyph_info` عمداً `noexcept` نیست.
 - هدر `export.hpp` در MSVC هشدارهای C4251/C4275 را خاموش می‌کند؛ کلاس‌های export شده می‌توانند عضو `std::` داشته باشند.
 - برای printf-check روی متد عضو، اندیس‌ها یکی بیشتر است (`this` آرگومان 1): `STB_FORMAT_CHECK(2, 3)`.
+
+## پایتون: API فونت (تمام شد، commit نشده)
+
+API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API را توصیف کن»): روی `libstb.Font`، همه در واحد فونت با y رو به بالا.
+`glyph_index(char)`، `glyph_count`، `glyph_info(glyph) -> GlyphMetrics`، `design_metrics -> DesignMetrics`، `outline(glyph)`
+(همان tuple‌های `Outline`، پس `Outline(font.outline(g))` کار می‌کند)، `glyph_kerning(left, right, mode="automatic")`،
+`Font.face_count(source)`، `shape(text, *, direction="auto", kerning="automatic", ligatures=True) -> list[ShapedGlyph]`.
+
+- کد: `src/bindings/python/bind_font.cpp` (+ `command_tuple` که از `bind_outline.cpp` بیرون آمد و در `binding.hpp` اعلام شد، تا کپی نشود)،
+  `libstb/font.py` (سه NamedTuple)، `libstb/__init__.py` (export). تست: `tests/python/test_font.py` (بخش‌های «glyph-index API»، «Font.shape»
+  و «a vector renderer written in Python»؛ از جمله برابری پیکسلی `fill_outline` با `draw_text`).
+- خطا: اندیس منفی یا بزرگ‌تر از 2**32-1 `ValueError`؛ اندیس بعد از گلیف‌ها «هیچ» است (outline خالی، metrics صفر) نه خطا، مثل C++.
+- GIL: فقط `shape` برای متن 512 بایت UTF-8 یا بیشتر آزاد می‌کند (اندازه‌گیری: 0.2 تا 0.4 میکروثانیه به‌ازای هر بایت)؛ `glyph_index`،
+  `glyph_info`، `outline`، `glyph_kerning` کار چند میکروثانیه‌ای‌اند و GIL را نگه می‌دارند.
+- مستندات: `docs/guide.md` («From Python»)، `CHANGELOG.md`.
 
 ## rasterizer برداری (issue #2): تمام شد، commit شده
 

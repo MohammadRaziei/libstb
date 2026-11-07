@@ -4,6 +4,8 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <cstdint>
+#include <limits>
 #include <tuple>
 
 #include "binding.hpp"
@@ -62,6 +64,34 @@ stb::font font_of(nb::handle h) {
     return nb::cast<stb::font>(o);
 }
 
+// A glyph index from Python: any int that fits the font's 32-bit index. One past the glyphs of the
+// font is not an error (the glyph functions answer "nothing" for it), a negative or oversized number is.
+std::uint32_t glyph_id(long long g) {
+    if (g < 0 || g > static_cast<long long>(std::numeric_limits<std::uint32_t>::max()))
+        throw std::invalid_argument("a glyph index must be in 0..4294967295");
+    return static_cast<std::uint32_t>(g);
+}
+
+stb::kerning_mode parse_kerning(const std::string& name) {
+    if (name == "automatic") return stb::kerning_mode::automatic;
+    if (name == "kern_table") return stb::kerning_mode::kern_table;
+    if (name == "none") return stb::kerning_mode::none;
+    throw std::invalid_argument("kerning must be \"automatic\", \"kern_table\" or \"none\", got \"" + name + "\"");
+}
+
+stb::text_direction parse_direction(const std::string& name) {
+    if (name == "auto") return stb::text_direction::automatic;
+    if (name == "ltr") return stb::text_direction::ltr;
+    if (name == "rtl") return stb::text_direction::rtl;
+    throw std::invalid_argument("direction must be \"auto\", \"ltr\" or \"rtl\", got \"" + name + "\"");
+}
+
+// font::shape costs about 0.2 to 0.4 microseconds per byte of text (measured on the test fonts), and
+// letting go of the GIL and taking it back costs more than a short text takes. From 512 bytes
+// (roughly 100 microseconds) on, other Python threads gain more than the switch costs, so only a
+// text at least this long is shaped without the GIL.
+constexpr std::size_t shape_without_gil_from_bytes = 512;
+
 // Draws the texts on the canvas's copy without holding the GIL; the Image is made after it returns.
 stb::image finish_canvas(stb::canvas& c) {
     nb::gil_scoped_release release;
@@ -115,6 +145,66 @@ void bind_font(nb::module_& m) {
              "char"_a, "pixel_height"_a)
         .def("shape_glyphs",
              [](const font& f, const std::string& text) { return f.shape_glyphs(text); }, "text"_a)
+        // ---- glyph-index API (stb::font): outlines and metrics in font units, y up ----
+        .def_static(
+            "face_count",
+            [](const std::filesystem::path& path) { return font::face_count(path); }, "path"_a,
+            nb::call_guard<nb::gil_scoped_release>())
+        .def_static(
+            "face_count_bytes",
+            [](nb::bytes data) {
+                const auto* p = reinterpret_cast<const std::uint8_t*>(data.c_str());
+                return font::face_count(std::vector<std::uint8_t>(p, p + data.size()));
+            },
+            "data"_a)
+        .def("glyph_index",
+             [](const font& f, const std::string& ch) { return f.glyph_index(one_char(ch)); }, "char"_a)
+        .def_prop_ro("glyph_count", [](const font& f) { return f.glyph_count(); })
+        .def("glyph_info",
+             [](const font& f, long long glyph) {
+                 const stb::glyph_metrics m = f.glyph_info(glyph_id(glyph));
+                 return std::make_tuple(m.advance, m.lsb, m.x_min, m.y_min, m.x_max, m.y_max, m.has_outline);
+             },
+             "glyph"_a)
+        .def("design_metrics",
+             [](const font& f) {
+                 const stb::font_design_metrics d = f.design_metrics();
+                 return std::make_tuple(d.units_per_em, d.ascent, d.descent, d.line_gap, d.x_min, d.y_min, d.x_max,
+                                        d.y_max);
+             })
+        .def("outline",
+             [](const font& f, long long glyph) {
+                 nb::list out;
+                 for (const stb::outline_command& c : f.outline(glyph_id(glyph))) out.append(command_tuple(c));
+                 return out;
+             },
+             "glyph"_a)
+        .def("glyph_kerning",
+             [](const font& f, long long left, long long right, const std::string& mode) {
+                 return f.glyph_kerning(glyph_id(left), glyph_id(right), parse_kerning(mode));
+             },
+             "left"_a, "right"_a, "mode"_a = "automatic")
+        // ---- shaping: positioned glyphs in font units ----
+        .def("shape",
+             [](const font& f, const std::string& text, const std::string& direction, const std::string& kerning,
+                bool ligatures) {
+                 stb::shape_options options;
+                 options.direction = parse_direction(direction);
+                 options.kerning = parse_kerning(kerning);
+                 options.ligatures = ligatures;
+                 std::vector<stb::shaped_glyph> glyphs;
+                 if (text.size() >= shape_without_gil_from_bytes) {
+                     nb::gil_scoped_release release;
+                     glyphs = f.shape(text, options);
+                 } else {
+                     glyphs = f.shape(text, options);
+                 }
+                 nb::list out;
+                 for (const stb::shaped_glyph& g : glyphs)
+                     out.append(nb::make_tuple(g.glyph, g.cluster, g.x_advance, g.x_offset, g.y_offset));
+                 return out;
+             },
+             "text"_a, "direction"_a = "auto", "kerning"_a = "automatic", "ligatures"_a = true)
         .def("measure",
              [](const font& f, const std::string& text, float px) {
                  const auto s = f.measure(text, px);
