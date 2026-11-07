@@ -17,7 +17,7 @@
 ## کارهای commit نشده (به ترتیب پیشنهادی commit)
 
 همه با CMake بیلد و تست شده‌اند (gcc، لینوکس، `-j2`): C++ 425 تست پاس (از جمله `font::shape` و `logging_os`)، `ctest` کامل پاس، صفر warning،
-پایتون 1440 پاس و 4 skip (torch و uharfbuzz نصب نبود). ویندوز، macOS و Android هنوز اجرا نشده‌اند.
+پایتون 1453 پاس و 4 skip (torch و uharfbuzz نصب نبود). ویندوز، macOS و Android هنوز اجرا نشده‌اند.
 
 1. **بازنامگذاری** (فقط نام، بدون تغییر رفتار):
    - هندسه‌ی برداری `stb::path` شد `stb::outline` (`include/stb/outline.hpp`، `src/draw/outline.cpp`) با `outline_op`،
@@ -173,6 +173,15 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
 - GIL: فقط `shape` برای متن 512 بایت UTF-8 یا بیشتر آزاد می‌کند (اندازه‌گیری: 0.2 تا 0.4 میکروثانیه به‌ازای هر بایت)؛ `glyph_index`،
   `glyph_info`، `outline`، `glyph_kerning` کار چند میکروثانیه‌ای‌اند و GIL را نگه می‌دارند.
 - مستندات: `docs/guide.md` («From Python»)، `CHANGELOG.md`.
+
+## پایتون: `Image.to_pil()` بدون کپی برای L و RGBA (تمام شد، commit نشده)
+
+به درخواست کاربر («خودکار و بدون کپی»): `to_pil()` برای مود `L` و `RGBA` با `PILImage.frombuffer(..., "raw", mode, 0, 1)` حافظه‌ی تصویر را
+به اشتراک می‌گذارد (اندازه‌گیری: 1 ms برای 1080p RGBA و 24 ms برای 4000x3000 کپی می‌شد، حالا حدود 5 میکروثانیه). `RGB` و `LA` هنوز کپی
+می‌شوند چون Pillow آن‌ها را 4 بایت به‌ازای هر پیکسل نگه می‌دارد. تصویر Pillow `readonly` است و در اولین نوشتن کپی می‌شود، پس هرگز در `Image`
+نمی‌نویسد؛ ولی تغییر پیکسل‌های `Image` (از `numpy()` یا آرایه‌ای که wrap کرده) در تصویر Pillow دیده می‌شود. `img.to_pil().copy()` مستقل است.
+هیچ پارامتر جدیدی اضافه نشد (بحث `copy=` کنار گذاشته شد). `from_pil` همچنان کپی می‌کند (Pillow فقط `tobytes()` می‌دهد). تست‌ها:
+`tests/python/test_pillow_convert.py`. `move` (null کردن منبع) عمداً نیست: Pillow مالکیت حافظه‌ی بیرونی را نمی‌گیرد و نگه داشتن مرجع کافی است.
 
 ## rasterizer برداری (issue #2): تمام شد، commit شده
 

@@ -12,7 +12,9 @@ OUT.mkdir(exist_ok=True)
 y, x = np.mgrid[0:60, 0:90]
 img = stb.Image(np.dstack([x * 255 // 89, y * 255 // 59, np.full_like(x, 120)]).astype(np.uint8))
 
-# libstb -> Pillow: the mode follows the channel count (L, LA, RGB, RGBA). It is a copy.
+# libstb -> Pillow: the mode follows the channel count (L, LA, RGB, RGBA). L and RGBA are not copied:
+# the Pillow image looks at the pixels of `img` (read-only; Pillow copies on its first write). LA and RGB
+# are copied, and `img.to_pil().copy()` is independent of `img`.
 pil = img.to_pil()
 print("to_pil        :", pil.mode, pil.size)
 print("gray and alpha:", img.convert(stb.PixelFormat.GRAY).to_pil().mode, img.convert(stb.PixelFormat.RGBA).to_pil().mode)

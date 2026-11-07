@@ -335,7 +335,7 @@ stb.imwrite("small.jpg", small, quality=85)
 img = stb.Image.open("photo.jpg")
 view = img.numpy()                                  # zero-copy view of the pixels
 print(view.mean(axis=(0, 1)))
-pil = img.to_pil()                                  # needs Pillow
+pil = img.to_pil()                                  # needs Pillow; L and RGBA are not copied
 back = stb.Image.from_pil(pil.rotate(90, expand=True))
 ```
 

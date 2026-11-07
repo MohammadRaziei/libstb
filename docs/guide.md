@@ -198,7 +198,7 @@ are not.
 needs it, like numpy (`pip install "libstb[pillow]"`; `import libstb` never loads it).
 
 ```python
-pil = img.to_pil()                 # libstb -> Pillow: L, LA, RGB or RGBA by channel count (a copy)
+pil = img.to_pil()                 # libstb -> Pillow: L, LA, RGB or RGBA by channel count; L and RGBA share the pixels (no copy)
 img = stb.Image.from_pil(pil)      # Pillow -> libstb
 ```
 

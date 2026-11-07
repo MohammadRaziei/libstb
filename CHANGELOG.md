@@ -114,6 +114,11 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   stb_bench_premultiply` times them.
 
 ### Changed
+- **`Image.to_pil()` no longer copies L and RGBA images**: the Pillow image looks at the pixels of the `Image` (it
+  keeps it alive), as `img.numpy()` does. Pillow marks it read-only and copies on its first write, so it never writes
+  into the `Image`; a change to the `Image`'s pixels (through `numpy()` or the array it wraps) shows in the Pillow
+  image. `img.to_pil().copy()` is independent. LA and RGB are still copied (Pillow stores them at 4 bytes per pixel).
+  `from_pil` still copies: Pillow gives its pixels out only as `tobytes()`.
 - `stb::stroke_style::dashes` has an initializer, so `stroke_style{width}` no longer is a missing-initializer warning for users.
 - Names, so that `path` means a file path everywhere: the vector geometry type is now `stb::outline`
   (`stb/outline.hpp`, `src/draw/outline.cpp`), with `outline_op`, `outline_command`, `outline_item`,

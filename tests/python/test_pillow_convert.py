@@ -1,5 +1,6 @@
 """Image.to_pil() / Image.from_pil(): Pillow is imported only when they run."""
 
+import gc
 import subprocess
 import sys
 import textwrap
@@ -34,13 +35,59 @@ def test_to_pil_has_the_mode_the_channels_say_and_the_same_pixels(c):
     np.testing.assert_array_equal(pixels(pil, c), a)
 
 
-def test_to_pil_is_a_copy():
-    img = stb.Image(np.zeros((2, 2, 3), np.uint8))
+@pytest.mark.parametrize("c", [1, 4])
+def test_to_pil_of_l_and_rgba_is_not_copied(c):
+    img = stb.Image(np.zeros((2, 3, c), np.uint8))
+    pil = img.to_pil()
+    img.numpy()[:] = 255  # the Pillow image looks at the same pixels
+    np.testing.assert_array_equal(pixels(pil, c), np.full((2, 3, c), 255, np.uint8))
+
+
+@pytest.mark.parametrize("c", [2, 3])
+def test_to_pil_of_la_and_rgb_is_a_copy(c):
+    # Pillow keeps these at 4 bytes per pixel, so it cannot look at libstb's 2 or 3
+    img = stb.Image(np.zeros((2, 3, c), np.uint8))
     pil = img.to_pil()
     img.numpy()[:] = 255
-    assert pil.getpixel((0, 0)) == (0, 0, 0)
-    pil.putpixel((1, 1), (9, 9, 9))
-    assert img.numpy()[1, 1].tolist() == [255, 255, 255]
+    np.testing.assert_array_equal(pixels(pil, c), np.zeros((2, 3, c), np.uint8))
+
+
+@pytest.mark.parametrize("c", [1, 4])
+def test_changing_the_shared_pillow_image_never_writes_into_the_image(c):
+    # Pillow marks the image read-only and copies it on the first write
+    img = stb.Image(np.zeros((2, 3, c), np.uint8))
+    pil = img.to_pil()
+    assert pil.readonly
+    pil.putpixel((1, 1), 9 if c == 1 else (9, 9, 9, 9))
+    assert pil.getpixel((1, 1)) == (9 if c == 1 else (9, 9, 9, 9))
+    assert not img.numpy().any()
+
+
+@pytest.mark.parametrize("c", [1, 4])
+def test_the_shared_pillow_image_keeps_the_image_alive(c):
+    a = rand(40, 50, c)
+    pil = stb.Image(a.copy()).to_pil()  # nothing else refers to the Image
+    gc.collect()
+    np.testing.assert_array_equal(pixels(pil, c), a)
+
+
+@pytest.mark.parametrize("c", [1, 2, 3, 4])
+def test_to_pil_then_copy_is_independent(c):
+    img = stb.Image(np.zeros((2, 3, c), np.uint8))
+    pil = img.to_pil().copy()
+    img.numpy()[:] = 255
+    np.testing.assert_array_equal(pixels(pil, c), np.zeros((2, 3, c), np.uint8))
+    pil.paste(0, (0, 0, *pil.size))  # writing into the copy never reaches the Image
+    assert img.numpy().all()
+
+
+@pytest.mark.parametrize("c", [1, 4])
+def test_from_pil_of_a_shared_pillow_image_gives_an_independent_image(c):
+    a = rand(5, 7, c)
+    img = stb.Image(a.copy())
+    back = stb.Image.from_pil(img.to_pil())
+    img.numpy()[:] = 0
+    np.testing.assert_array_equal(back.numpy(), a)
 
 
 # ------------------------------------------------------------------- from_pil

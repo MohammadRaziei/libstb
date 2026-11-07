@@ -48,13 +48,30 @@ def _pillow():
     return PILImage
 
 
+# Pillow modes whose rows are plain bytes in the order libstb stores them, so a Pillow image can look
+# at the pixels of an Image as they are. Pillow keeps RGB and LA at 4 bytes per pixel inside, so those
+# two cannot: they are copied.
+_PIL_SHARES_MEMORY = frozenset({"L", "RGBA"})
+
+
 def _to_pil(self):
-    """A Pillow image with these pixels (a copy): mode L, LA, RGB or RGBA by pixel format.
+    """A Pillow image with these pixels: mode L, LA, RGB or RGBA by pixel format.
+
+    L and RGBA are NOT copied: the Pillow image looks at this image's pixels (it keeps the image
+    alive), like ``img.numpy()`` does. Pillow marks such an image read-only and copies it the first
+    time you change it, so Pillow never writes into this image; but a change to this image's pixels
+    (through ``img.numpy()`` or the array it wraps) shows in the Pillow image. ``img.to_pil().copy()``
+    is an independent Pillow image (one copy, as before). LA and RGB are always copied, because
+    Pillow stores them at 4 bytes per pixel.
 
     Needs Pillow, imported only here.
     """
     PILImage = _pillow()
-    return PILImage.frombytes(_PIL_MODES[self.format], (self.width, self.height), memoryview(self))
+    mode = _PIL_MODES[self.format]
+    size = (self.width, self.height)
+    if mode in _PIL_SHARES_MEMORY:
+        return PILImage.frombuffer(mode, size, memoryview(self), "raw", mode, 0, 1)
+    return PILImage.frombytes(mode, size, memoryview(self))
 
 
 def _from_pil(cls, pil):
