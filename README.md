@@ -97,7 +97,9 @@ target_link_libraries(my_app PRIVATE libstb::libstb)
 
 `libstb` must be on the `PATH` (the Python environment where you ran `pip install`); otherwise
 use `python -m libstb --cmake-dir`. `find_package(libstb CONFIG)` also works after
-`cmake --install`.
+`cmake --install`. The wheel carries the C++ SDK as an ordinary install prefix,
+`libstb/sdk/` (`include/`, `lib/`, `lib/cmake/libstb/`); `libstb --sdk-dir` prints it, so
+`-DCMAKE_PREFIX_PATH=$(libstb --sdk-dir)` works too.
 
 The namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake target
 (`libstb::libstb`) and the Python package (`libstb`) keep the project name. The core is a shared
@@ -444,7 +446,7 @@ libstb info photo.jpg --json
 libstb convert photo.jpg small.png --resize 320x           # a missing side keeps the aspect ratio
 libstb convert in.png out.jpg --quality 85 --pixel-format gray --orient
 libstb zlib compress data.bin data.bin.z -l 9
-libstb --cmake-dir                                         # also --include-dir, --lib-dir
+libstb --cmake-dir                                         # also --sdk-dir, --include-dir, --lib-dir
 ```
 
 The output format of `convert` comes from the extension of the destination. Exit status is 0 on

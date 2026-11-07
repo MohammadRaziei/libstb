@@ -1,6 +1,6 @@
 """Command line: `libstb ...` or `python -m libstb ...`.
 
-    libstb --version | --cmake-dir | --include-dir | --lib-dir
+    libstb --version | --sdk-dir | --cmake-dir | --include-dir | --lib-dir
     libstb info FILE...  [--json]
     libstb convert SRC DST [options]
     libstb zlib compress|decompress SRC DST      ("-" is stdin / stdout)
@@ -25,6 +25,7 @@ from . import (
     get_cmake_dir,
     get_include_dir,
     get_lib_dir,
+    get_sdk_dir,
     iminfo,
     imwrite,
     zlib_compress,
@@ -53,6 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Inspect, convert and compress with libstb.",
     )
     p.add_argument("--version", action="version", version=f"libstb {__version__}")
+    p.add_argument("--sdk-dir", action="store_true", help="print the root of the C++ SDK (include/, lib/)")
     p.add_argument("--cmake-dir", action="store_true", help="print the directory of libstbConfig.cmake")
     p.add_argument("--include-dir", action="store_true", help="print the directory of stb.h and stb/*.hpp")
     p.add_argument("--lib-dir", action="store_true", help="print the directory of the shared library")
@@ -146,7 +148,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_parser()
     a = parser.parse_args(argv)
 
-    paths = (("cmake_dir", get_cmake_dir), ("include_dir", get_include_dir), ("lib_dir", get_lib_dir))
+    paths = (("sdk_dir", get_sdk_dir), ("cmake_dir", get_cmake_dir), ("include_dir", get_include_dir), ("lib_dir", get_lib_dir))
     asked = [fn for name, fn in paths if getattr(a, name)]
     if asked:
         for fn in asked:

@@ -28,6 +28,17 @@ def test_the_package_carries_no_static_core_library():
     assert not found("libstb_core.a") and not found("stb_core.lib")
 
 
+def test_the_cpp_sdk_is_one_install_prefix_inside_the_package():
+    sdk = pathlib.Path(stb.get_sdk_dir())
+    assert sdk == PACKAGE / "sdk"
+    assert pathlib.Path(stb.get_include_dir()) == sdk / "include"
+    assert pathlib.Path(stb.get_lib_dir()) == sdk / "lib"
+    assert pathlib.Path(stb.get_cmake_dir()) == sdk / "lib" / "cmake" / "libstb"
+    assert found(SHARED_NAME)[0].parent == sdk / "lib"
+    # Nothing of the SDK is left at the old places.
+    assert not (PACKAGE / "include").exists() and not (PACKAGE / "lib").exists() and not (PACKAGE / "cmake").exists()
+
+
 def test_the_headers_and_cmake_files_for_c_plus_plus_users_are_there():
     assert (pathlib.Path(stb.get_include_dir()) / "stb.h").is_file()
     assert (pathlib.Path(stb.get_include_dir()) / "stb" / "export.hpp").is_file()

@@ -352,7 +352,7 @@ What to know:
 
 ```
 libstb --version
-libstb --cmake-dir                 # also --include-dir, --lib-dir
+libstb --cmake-dir                 # also --sdk-dir, --include-dir, --lib-dir
 libstb info photo.jpg more.png [--json]
 libstb convert photo.jpg out.png --resize 320x     # a missing side keeps the aspect ratio
 libstb convert in.png out.jpg --quality 85 --pixel-format gray --orient
@@ -375,11 +375,15 @@ find_package(libstb CONFIG REQUIRED)
 target_link_libraries(app PRIVATE libstb::libstb)
 ```
 
+The wheel carries the C++ SDK as an ordinary install prefix, `libstb/sdk/` (`include/`, `lib/` and
+`lib/cmake/libstb/` inside it; `libstb --sdk-dir` / `libstb.get_sdk_dir()` print it), so
+`-DCMAKE_PREFIX_PATH=<sdk>` is an alternative to setting `libstb_DIR`.
+
 The C++ namespace and headers are `stb` (`<stb.h>`, `<stb/*.hpp>`); the CMake
 target (`libstb::libstb`) and the Python package (`libstb`) keep the project name.
 
 `libstb::libstb` is a shared library (`libstb.so`, `libstb.dylib`, `stb.dll`). The wheel carries
-exactly one copy, in `libstb/lib` (on Windows `libstb/__init__.py` registers that folder with
+exactly one copy, in `libstb/sdk/lib` (on Windows `libstb/__init__.py` registers that folder with
 `os.add_dll_directory` before loading the extension), and the Python extension and your program
 both load it, so there is one engine per process (on musllinux the Python extension has its own
 static copy of the core instead: a dynamic libstdc++ crashes on C++ exceptions there). Your CMake target

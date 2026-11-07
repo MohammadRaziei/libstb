@@ -13,11 +13,14 @@ No system dependencies: `pip install libstb` is all you need.
 
 import os as _os
 
-# The native core is a shared library in libstb/lib (libstb.so, libstb.dylib: found through the
-# extension's rpath). Windows has no rpath and does not search PATH for the DLLs of an extension
-# module, so the directory is added by hand, before the first import of the extension below.
-# os.add_dll_directory exists only there: asking for the function, not the platform, is the check.
-_lib_dir = _os.path.join(_os.path.dirname(__file__), "lib")
+# The C++ SDK (headers, the native core and its CMake package) is an install prefix inside the
+# package, libstb/sdk/. The core is a shared library in libstb/sdk/lib (libstb.so, libstb.dylib:
+# found through the extension's rpath). Windows has no rpath and does not search PATH for the DLLs
+# of an extension module, so the directory is added by hand, before the first import of the
+# extension below. os.add_dll_directory exists only there: asking for the function, not the
+# platform, is the check.
+_sdk_dir = _os.path.join(_os.path.dirname(__file__), "sdk")
+_lib_dir = _os.path.join(_sdk_dir, "lib")
 if hasattr(_os, "add_dll_directory") and _os.path.isdir(_lib_dir):  # pragma: no cover (Windows only)
     _dll_directory = _os.add_dll_directory(_lib_dir)  # kept: it stays registered for the process
 
@@ -39,8 +42,6 @@ from .libstb_py import (Align, BlendMode, Canvas, CanvasImage, CanvasOutline, Ca
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
 from .libstb_py import logging_bridge, set_threads, thread_count
-
-_pkg_dir = _os.path.dirname(__file__)
 
 
 def simd(name):
@@ -144,19 +145,27 @@ def imwrite(path, image, *, quality=None, compression=None, rle=None):
     getattr(img, method)(path, **given)
 
 
+def get_sdk_dir():
+    """Root of the C++ SDK shipped in the package: an install prefix with include/ and lib/ in it.
+
+    It can be used as CMAKE_PREFIX_PATH for find_package(libstb CONFIG).
+    """
+    return _sdk_dir
+
+
 def get_include_dir():
-    """Directory containing stb.h and stb/*.hpp."""
-    return _os.path.join(_pkg_dir, "include")
+    """Directory containing stb.h and stb/*.hpp (<sdk>/include)."""
+    return _os.path.join(_sdk_dir, "include")
 
 
 def get_lib_dir():
-    """Directory containing the shared C++ library (libstb.so, libstb.dylib or stb.dll)."""
-    return _os.path.join(_pkg_dir, "lib")
+    """Directory containing the shared C++ library: libstb.so, libstb.dylib or stb.dll (<sdk>/lib)."""
+    return _lib_dir
 
 
 def get_cmake_dir():
-    """Directory containing libstbConfig.cmake, for find_package(libstb CONFIG)."""
-    return _os.path.join(_pkg_dir, "cmake")
+    """Directory containing libstbConfig.cmake, for find_package(libstb CONFIG) (<sdk>/lib/cmake/libstb)."""
+    return _os.path.join(_lib_dir, "cmake", "libstb")
 
 
 __all__ = [
@@ -166,5 +175,5 @@ __all__ = [
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",
     "Error", "DecodeError", "EncodeError", "LimitError",
-    "get_include_dir", "get_lib_dir", "get_cmake_dir",
+    "get_sdk_dir", "get_include_dir", "get_lib_dir", "get_cmake_dir",
 ]

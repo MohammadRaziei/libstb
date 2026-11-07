@@ -7,6 +7,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Changed
+- **The wheel keeps the C++ SDK in `libstb/sdk/`.** Headers, the shared core and the CMake package moved from
+  `libstb/include`, `libstb/lib` and `libstb/cmake` to `libstb/sdk/include`, `libstb/sdk/lib` and
+  `libstb/sdk/lib/cmake/libstb`: the same tree `cmake --install` makes, so `sdk` also works as a
+  `CMAKE_PREFIX_PATH`. `get_include_dir()`, `get_lib_dir()` and `get_cmake_dir()` return the new places; new
+  `get_sdk_dir()` and `libstb --sdk-dir`. The extension's rpath is `$ORIGIN/sdk/lib` (`@loader_path/sdk/lib`) and
+  Windows registers `sdk/lib` with `os.add_dll_directory`. The old folders are gone.
+
 ### Added
 - **Python: the glyph-index API and `Font.shape`.** `Font.glyph_index(char)`, `glyph_count`, `glyph_info(glyph)`
   (`GlyphMetrics`), `design_metrics` (`DesignMetrics`), `outline(glyph)` (the command tuples `Outline` takes, so

@@ -69,14 +69,16 @@ endif()
 # runtime, which a DLL of C++ classes already requires.
 target_compile_options(stb_core PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>)
 
-# Install layout: the wheel carries include/, lib/ and cmake/ inside the
-# `libstb` package (httpp's pattern, see get_cmake_dir() in the Python
-# package); a plain `cmake --install` uses the usual prefix layout.
+# Install layout: the wheel carries the C++ SDK as a regular install prefix, libstb/sdk/ (include/,
+# lib/ and lib/cmake/libstb/ inside it: the same tree `cmake --install` makes, so it also works as a
+# CMAKE_PREFIX_PATH; see get_sdk_dir() in the Python package). A plain `cmake --install` uses the
+# usual prefix layout.
 if(DEFINED SKBUILD)
-    set(_libstb_lib_dest   libstb/lib)
-    set(_libstb_bin_dest   libstb/lib)  # stb.dll beside stb.lib; libstb/__init__.py adds it with os.add_dll_directory
-    set(_libstb_inc_dest   libstb/include)
-    set(_libstb_cmake_dest libstb/cmake)
+    set(_libstb_sdk_dest   libstb/sdk)
+    set(_libstb_lib_dest   ${_libstb_sdk_dest}/lib)
+    set(_libstb_bin_dest   ${_libstb_sdk_dest}/lib)  # stb.dll beside stb.lib; libstb/__init__.py adds it with os.add_dll_directory
+    set(_libstb_inc_dest   ${_libstb_sdk_dest}/include)
+    set(_libstb_cmake_dest ${_libstb_sdk_dest}/lib/cmake/libstb)
 else()
     set(_libstb_lib_dest   lib)
     set(_libstb_bin_dest   bin)

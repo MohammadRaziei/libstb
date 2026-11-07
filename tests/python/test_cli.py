@@ -30,6 +30,11 @@ def test_paths(capsys):
     assert capsys.readouterr().out.split() == [stb.get_cmake_dir(), stb.get_include_dir()]
 
 
+def test_sdk_dir(capsys):
+    assert main(["--sdk-dir"]) == 0
+    assert capsys.readouterr().out.strip() == stb.get_sdk_dir()
+
+
 def test_no_command_is_a_usage_error(capsys):
     assert main([]) == 2
 

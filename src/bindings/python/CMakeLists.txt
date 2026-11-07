@@ -59,13 +59,13 @@ if(DEFINED SKBUILD)
         target_link_options(libstb_py PRIVATE -static-libstdc++ -static-libgcc)
     endif()
 
-    # libstb.so / libstb.dylib is installed in libstb/lib, next to nothing else but the cmake and
-    # include folders: the extension finds it from there. (Windows: stb.dll is installed beside the
-    # extension, where the loader looks first.)
+    # libstb.so / libstb.dylib is installed in libstb/sdk/lib, next to nothing else but the cmake
+    # folder (and libstb/sdk/include beside it): the extension finds it from there. (Windows has no
+    # rpath: libstb/__init__.py registers that folder with os.add_dll_directory.)
     if(APPLE)
-        set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "@loader_path/lib")
+        set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "@loader_path/sdk/lib")
     elseif(UNIX)
-        set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+        set_target_properties(libstb_py PROPERTIES INSTALL_RPATH "$ORIGIN/sdk/lib")
     endif()
 
     # Windows has no rpath: the loader finds stb.dll only next to the extension or in a directory
