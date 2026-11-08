@@ -8,6 +8,12 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **GPOS kerning and positioning for Arabic script runs.** The font's `kern`, `dist` lookups are run
+  (single and pair adjustment, contextual and chained contextual lookups, extension lookups), chosen by the
+  script's features instead of scanning every pair lookup. Vazirmatn (whose Arabic kerning is a chained
+  lookup) now equals HarfBuzz glyph for glyph, advance and offset.
+- Marks of one letter are ordered like HarfBuzz does (combining class, shadda first), and a mark without a
+  letter takes no room.
 - **GPOS mark attachment in `font::shape()` and text drawing.** Marks (harakat) go where the font's `mark` and
   `mkmk` features put them (mark to base, to ligature, to mark); a mark without an anchor keeps the centred
   placement. `shape()` and `draw_text` now agree. Test font `libstb-fa-gpos-test.ttf` (`make_mark_test_font.py`).

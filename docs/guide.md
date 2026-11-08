@@ -261,13 +261,15 @@ HarfBuzz's on 18,000 random strings (`Font.shape_glyphs` returns them, for diagn
 about 0.2 microseconds per character, and the GSUB table is parsed the first time right-to-left text
 is drawn with a font (about 0.1 ms), not when the font is opened.
 
-GPOS: marks are placed from the font's anchors (features `mark` and `mkmk`: lookup types 4 mark to base,
-5 mark to ligature, 6 mark to mark, also through extension lookups; a mark after a ligature hangs on
+GPOS: in Arabic-script text the font's features `kern`, `dist`, `mark`, `mkmk`, `abvm` and `blwm` are run for
+the script (lookup types 1 single, 2 pair, 4 mark to base, 5 mark to ligature, 6 mark to mark, 7 and 8
+contextual, also through extension lookups; Latin text uses the pair kerning of the font as before). Marks
+are placed from the font's anchors (a mark after a ligature hangs on
 its last component). A mark the font has no anchor pair for falls back to a simple rule: centred on the
 ink of its letter and stacked above it (below for kasra and similar signs, shadda first). Kerning is the
 font's GPOS pair adjustment (lookup type 2, glyph pairs and class pairs, the advance of the first glyph)
-if the font has a GPOS table, else its legacy `kern` table. What is not done: every other GPOS lookup
-(cursive attachment, contextual positioning, device and variation tables of anchors), so text set in a
+if the font has a GPOS table, else its legacy `kern` table. What is not done: cursive attachment (type 3) and
+the device and variation tables of values and anchors, so text set in a
 font that depends on them for its shapes (some Nastaliq fonts) will look wrong. GSUB lookups of type 8 (reverse chaining)
 are skipped, only the default language system of the script is used (no `locl` per language), and
 `font.advance` and `font.kerning` work on one code point and do no shaping. Not checked: Hebrew,

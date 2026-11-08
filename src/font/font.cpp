@@ -166,6 +166,7 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
     int prev = 0;
     bool has_prev = false;
     float base_x = 0;  // the pen where the last glyph that takes room was put: GPOS marks hang on it
+    bool prev_kerned = false;  // the last glyph's kerning is the font's GPOS lookups (see visual_glyph::kerned)
     for (const visual_glyph& sg : glyphs) {
         if (sg.cp == U'\n' && sg.gid == 0) {
             lay.width = std::max(lay.width, x);
@@ -179,7 +180,7 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
         const int gid = int(sg.gid);
         const float baseline = ascent + line * line_h;
         if (sg.attached && has_prev) {  // placed by the font's GPOS: takes no room, breaks no pair
-            lay.items.push_back({gid, base_x + float(sg.mark_x) * s, baseline - float(sg.mark_y) * s});
+            lay.items.push_back({gid, base_x + float(sg.mark_x + sg.shift_x) * s, baseline - float(sg.mark_y + sg.shift_y) * s});
             continue;
         }
         const truetype::box ink = f.face.bitmap_box(gid, s, s);
@@ -197,14 +198,19 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
             lay.items.push_back({gid, base.cx - 0.5f * float(bx0 + bx1), baseline + dy});
             continue;  // a mark takes no room and does not break kerning
         }
-        if (has_prev) x += f.face.kern_advance(prev, gid) * s;
         int adv = 0, lsb = 0;
         f.face.h_metrics(gid, adv, lsb);
-        lay.items.push_back({gid, x, baseline});
+        if (is_arabic_mark(sg.cp)) {  // a mark without a letter to sit on: where it is, with no room
+            lay.items.push_back({gid, x + float(sg.shift_x) * s, baseline - float(sg.shift_y) * s});
+            continue;
+        }
+        if (has_prev && !(sg.kerned && prev_kerned)) x += f.face.kern_advance(prev, gid) * s;
+        lay.items.push_back({gid, x + float(sg.shift_x) * s, baseline - float(sg.shift_y) * s});
         base_x = x;
         base = has_ink ? ink_box{true, x + 0.5f * float(bx0 + bx1), float(by0), float(by1)} : ink_box{};
-        x += adv * s;
+        x += float(adv + sg.kern) * s;
         prev = gid;
+        prev_kerned = sg.kerned;
         has_prev = true;
     }
     lay.width = std::max(lay.width, x);
@@ -484,6 +490,8 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, 
     constexpr std::size_t no_glyph = static_cast<std::size_t>(-1);
     std::size_t prev = no_glyph;  // the last glyph that takes room: the next kerning goes to its advance
     std::uint32_t prev_gid = 0;
+    bool prev_kerned = false;  // the kerning of the last glyph is the font's GPOS lookups (visual_glyph::kerned)
+    const bool kerning_on = options.kerning != kerning_mode::none;
 
     std::vector<shaped_glyph> out;
     out.reserve(visual.size());
@@ -501,8 +509,8 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, 
             continue;
         }
         if (vg.attached && prev != no_glyph) {  // placed by the font's GPOS, from the origin of its letter
-            sg.y_offset = float(vg.mark_y);
-            marks.push_back({out.size(), prev, float(vg.mark_x)});
+            sg.y_offset = float(vg.mark_y + vg.shift_y);
+            marks.push_back({out.size(), prev, float(vg.mark_x + vg.shift_x)});
             out.push_back(sg);  // no advance, and the kerning pair goes on across it
             continue;
         }
@@ -522,11 +530,20 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, 
             out.push_back(sg);  // no advance, and the kerning pair goes on across it
             continue;
         }
-        if (prev != no_glyph) out[prev].x_advance += glyph_kerning(prev_gid, vg.gid, options.kerning);
-        sg.x_advance = gm.advance;
+        if (is_arabic_mark(vg.cp)) {  // a mark without a letter to sit on: where it is, with no room
+            sg.x_offset = float(vg.shift_x);
+            sg.y_offset = float(vg.shift_y);
+            out.push_back(sg);
+            continue;
+        }
+        if (prev != no_glyph && !(vg.kerned && prev_kerned)) out[prev].x_advance += glyph_kerning(prev_gid, vg.gid, options.kerning);
+        sg.x_advance = gm.advance + (kerning_on ? float(vg.kern) : 0.0f);
+        sg.x_offset = float(vg.shift_x);
+        sg.y_offset = float(vg.shift_y);
         out.push_back(sg);
         prev = out.size() - 1;
         prev_gid = vg.gid;
+        prev_kerned = vg.kerned;
         base = has_ink ? ink_box{true, 0.5f * (gm.x_min + gm.x_max), gm.y_max, gm.y_min} : ink_box{};
     }
     // A mark is drawn from the pen where it comes, which is after the advance of its letter (kerning

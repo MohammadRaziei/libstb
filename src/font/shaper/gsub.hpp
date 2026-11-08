@@ -30,11 +30,14 @@ struct glyph_record {
     // gives each piece its own cluster: substitution never changes this field, so it always says
     // where a glyph came from.
     std::uint32_t cluster = 0;
-    // Set by the GPOS mark positioning (mark_positioner), after GSUB: the glyph is a mark attached
+    // Set by the GPOS positioning (positioner), after GSUB: the glyph is a mark attached
     // to a base, a ligature or another mark, and (mark_x, mark_y) is where its origin goes from the
     // origin of the base the whole chain hangs on, in font units (y up).
     bool attached = false;
     std::int32_t mark_x = 0, mark_y = 0;
+    // Set by the other GPOS lookups (positioner): this glyph's advance changes by `kern` and the glyph
+    // is drawn `shift_x`, `shift_y` from its pen, in font units.
+    std::int32_t kern = 0, shift_x = 0, shift_y = 0;
 };
 
 // Whether the flags of a lookup (and its mark filtering set) make `g` invisible to it. `defs` may

@@ -6,7 +6,8 @@
 //      fina) they decide, and a shape without a feature is the plain letter; else the shape is the
 //      Arabic Presentation Form in the cmap, else the plain letter; lam + alef is left to GSUB (rlig) or the presentation ligature;
 //   3. the rest of the font's GSUB features run over each Arabic run (ccmp, rlig, calt, liga ...);
-//   4. marks are attached to their letters with the font's GPOS (features mark, mkmk);
+//   4. the font's GPOS positions the glyphs (features kern, mark, mkmk, ...): kerning, and marks
+//      attached to their letters;
 //   5. the line is ordered with the bidirectional algorithm, brackets are mirrored, and a
 //      letter's marks stay after it.
 // Lines without a right-to-left letter come back as one glyph per character (unless the paragraph
@@ -35,7 +36,7 @@ enum : std::uint32_t { mask_all = 1, mask_isol = 2, mask_fina = 4, mask_medi = 8
 struct arabic_layout {
     otl::gdef defs;
     otl::gsub_table gsub;
-    otl::mark_positioner marks;  // GPOS mark attachment; independent of GSUB (usable() says if the font has any)
+    otl::positioner gpos;  // GPOS kerning and mark attachment; independent of GSUB (usable() says if the font has any)
     otl::shaping_plan plan;
     otl::shaping_plan plan_plain;  // the same without the optional ligatures (liga, clig): shape_options::ligatures = false
     bool usable = false;       // the font has GSUB lookups for Arabic (or default) script
@@ -68,6 +69,12 @@ struct visual_glyph {
     // base in visual order.
     bool attached = false;
     std::int32_t mark_x = 0, mark_y = 0;
+    // The other GPOS adjustments (otl::glyph_record::kern, shift_x, shift_y), in font units: `kern`
+    // is added to the advance of the glyph, and the glyph is drawn shift_x, shift_y from its pen.
+    // `kerned`: the adjustments of the glyph come from the font's GPOS kerning lookups, so the kerning
+    // of a pair of such glyphs is not looked up again as a pair.
+    std::int32_t kern = 0, shift_x = 0, shift_y = 0;
+    bool kerned = false;
 };
 
 struct shaper_options {

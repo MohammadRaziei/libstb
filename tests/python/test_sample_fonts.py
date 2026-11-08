@@ -120,7 +120,7 @@ def test_random_persian_text_shapes_like_harfbuzz_glyph_for_glyph_and_advance_fo
         buf.add_str(text)
         buf.guess_segment_properties()
         buf.direction, buf.script = "rtl", "Arab"
-        # libstb does GSUB and the advances; marks and cursive attachment from GPOS are not done
+        # GSUB and the advances alone: no kerning, no mark attachment (the next test has them)
         hb.shape(hbfont, buf, {"kern": False, "mark": False, "mkmk": False, "curs": False})
         ours = font.shape(text, direction="rtl", kerning="none")
         assert [g.glyph for g in ours] == [i.codepoint for i in buf.glyph_infos], text
@@ -129,9 +129,7 @@ def test_random_persian_text_shapes_like_harfbuzz_glyph_for_glyph_and_advance_fo
     assert checked > 250
 
 
-def test_vowelled_persian_text_puts_marks_where_harfbuzz_does_from_the_gpos_anchors():
-    import unicodedata
-
+def test_vowelled_persian_text_is_positioned_like_harfbuzz_kerning_and_marks_in_any_typed_order():
     hb, hbfont = _hb()
     font = Font.open(REGULAR)
     rng = random.Random(11)
@@ -144,9 +142,7 @@ def test_vowelled_persian_text_puts_marks_where_harfbuzz_does_from_the_gpos_anch
                 text += " "  # a mark without a letter is not what this test is about
                 continue
             text += rng.choice(LETTERS)
-            # at most two marks, in the canonical order HarfBuzz sorts them into (shadda first)
-            text += "".join(sorted((rng.choice(marks) for _ in range(rng.choice([0, 0, 1, 2]))),
-                                   key=lambda c: 0 if c == "\u0651" else unicodedata.combining(c)))
+            text += "".join(rng.choice(marks) for _ in range(rng.choice([0, 0, 1, 2])))  # in any order
         return text.strip()
 
     checked = 0
@@ -158,14 +154,14 @@ def test_vowelled_persian_text_puts_marks_where_harfbuzz_does_from_the_gpos_anch
         buf.add_str(text)
         buf.guess_segment_properties()
         buf.direction, buf.script = "rtl", "Arab"
-        hb.shape(hbfont, buf, {"kern": False, "curs": False})
+        hb.shape(hbfont, buf, {})  # every default feature: kerning (a chained lookup in this font) too
         # where each glyph is drawn: the pen before it plus its offset (HarfBuzz lists a mark before its letter)
         theirs, pen = [], 0
         for info, pos in zip(buf.glyph_infos, buf.glyph_positions):
             theirs.append((info.codepoint, pen + pos.x_offset, pos.y_offset))
             pen += pos.x_advance
         ours, pen = [], 0.0
-        for g in font.shape(text, direction="rtl", kerning="none"):
+        for g in font.shape(text, direction="rtl"):
             ours.append((g.glyph, round(pen + g.x_offset), round(g.y_offset)))
             pen += g.x_advance
         assert sorted(ours) == sorted(theirs), text

@@ -14,7 +14,7 @@ arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offse
     using otl::make_tag;
     const std::initializer_list<std::uint32_t> scripts = {make_tag('a', 'r', 'a', 'b'), make_tag('D', 'F', 'L', 'T')};
     r.defs = otl::gdef(otl::find_table(file, font_offset, make_tag('G', 'D', 'E', 'F')));
-    r.marks = otl::mark_positioner(otl::find_table(file, font_offset, make_tag('G', 'P', 'O', 'S')), scripts);
+    r.gpos = otl::positioner(otl::find_table(file, font_offset, make_tag('G', 'P', 'O', 'S')), scripts);
     const otl::byte_view table = otl::find_table(file, font_offset, make_tag('G', 'S', 'U', 'B'));
     if (table.empty()) return r;
     r.gsub = otl::gsub_table(table);
@@ -107,9 +107,22 @@ void apply_gsub(const arabic_layout& al, const otl::shaping_plan& plan, std::vec
 
 namespace {
 
-// Shadda goes first among the marks of one letter, so a vowel sign stacks above it.
+// The order of the marks of one letter, as in Unicode's canonical ordering (their combining
+// class) with the shadda first: so that a vowel sign stacks above it and the font's mark to mark
+// anchors apply in the order they were designed for, whatever order the text was typed in.
+int mark_order(char32_t cp) {
+    if (cp == 0x0651) return 0;
+    if (cp >= 0x064B && cp <= 0x0652) return int(cp - 0x064B) + 27;  // fathatan ... sukun (the shadda is above)
+    if (cp >= 0x0618 && cp <= 0x061A) return int(cp - 0x0618) + 30;
+    if (cp == 0x0670) return 35;
+    if (cp == 0x0655 || cp == 0x0656 || cp == 0x065C || cp == 0x065F || cp == 0x06E3 || cp == 0x06EA ||
+        cp == 0x06ED)
+        return 220;  // below
+    return 230;      // above: the other marks
+}
+
 template <class Glyph>
-void shadda_first(std::vector<Glyph>& out, std::size_t first) {
+void order_marks(std::vector<Glyph>& out, std::size_t first) {
     for (std::size_t i = first; i < out.size();) {
         if (!arabic::is_mark(out[i].cp)) {
             ++i;
@@ -117,8 +130,8 @@ void shadda_first(std::vector<Glyph>& out, std::size_t first) {
         }
         std::size_t j = i;
         while (j < out.size() && arabic::is_mark(out[j].cp)) ++j;
-        std::stable_partition(out.begin() + std::ptrdiff_t(i), out.begin() + std::ptrdiff_t(j),
-                              [](const Glyph& s) { return s.cp == 0x0651; });
+        std::stable_sort(out.begin() + std::ptrdiff_t(i), out.begin() + std::ptrdiff_t(j),
+                         [](const Glyph& a, const Glyph& b) { return mark_order(a.cp) < mark_order(b.cp); });
         i = j;
     }
 }
@@ -181,7 +194,8 @@ void text_shaper::append_in_visual_order(const std::vector<otl::glyph_record>& g
     const bidi::result order = bidi::resolve(classes, direction);
 
     for (std::uint32_t k : order.order) {
-        visual_glyph s{g[k].gid, g[k].cp, g[k].cluster, g[k].attached, g[k].mark_x, g[k].mark_y};
+        visual_glyph s{g[k].gid,    g[k].cp,     g[k].cluster, g[k].attached, g[k].mark_x,
+                       g[k].mark_y, g[k].kern,   g[k].shift_x, g[k].shift_y};
         if (s.cp == 0x200E || s.cp == 0x200F) continue;  // LRM, RLM: only steered the order
         if (order.level[k] & 1) {
             const char32_t m = bidi::mirrored(s.cp);
@@ -207,14 +221,16 @@ void text_shaper::shape_line(std::u32string_view line, std::size_t first, const 
     std::vector<otl::glyph_record> g = to_glyphs(line, first, al);  // 1-2. glyphs in logical order
     if (al && al->usable) apply_gsub(*al, options.ligatures ? al->plan : al->plan_plain, g);  // 3. GSUB features
 
-    if (al && al->marks.usable()) {                                   // 4. GPOS mark attachment
-        shadda_first(g, 0);  // so that a vowel sign attaches to the shadda, not the other way round
-        al->marks.position(g, &al->defs);
+    if (al && al->gpos.usable()) {                                    // 4. GPOS: kerning, marks
+        order_marks(g, 0);
+        al->gpos.position(g, &al->defs);
     }
 
     const std::size_t begin = out.size();
     append_in_visual_order(g, options.direction, out);               // 5. visual order
-    shadda_first(out, begin);
+    order_marks(out, begin);
+    if (al && al->gpos.kerns())
+        for (std::size_t k = begin; k < out.size(); ++k) out[k].kerned = arabic::is_arabic_script(out[k].cp);
 }
 
 }  // namespace stb
