@@ -1,6 +1,6 @@
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 
-تاریخ: 2026-11-06 (WOFF1 و اصلاح تست numpy بعد از 2026-11-04 اضافه شدند). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
+تاریخ: 2026-11-09 (بعد از 2026-11-06: GPOS برای kerning و mark، `glyph_kind`، `shape` با بازه، ترتیب marks؛ بخش 9 پایین). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
 این فایل untracked است (قبل از push حذفش کن). **تغییرات بخش «کارهای commit نشده» پایین هنوز commit نشده‌اند**
 (working tree عمداً dirty است: حدود 90 مسیر در `git status`).
 
@@ -80,8 +80,40 @@
 8. **اصلاح CI ویندوز ARM (wheel):** سه تست `tests/python/test_logging.py` مستقیم `import numpy` می‌کردند و روی runner بدون numpy fail
    شدند؛ حالا `pytest.importorskip("numpy")` داخل همان سه تست است (نه سطح ماژول، تا بقیه‌ی تست‌های logging اجرا شوند).
 
+9. **GPOS، `glyph_kind`، `shape(text, begin, end)`** (تمام شد، commit نشده؛ سه issue که کاربر پیشنهاد داد + دو issue بعدی). همه با CMake بیلد و تست شد
+   (gcc، لینوکس): C++ 453 تست پاس، `ctest` سه از سه، صفر warning. ویندوز/macOS/MSVC اجرا نشده.
+   - **موتور GPOS** (`src/font/shaper/gpos.hpp`، `gpos.cpp`؛ کلاس `otl::positioner`، جای `mark_positioner` که در همین دور ساخته و عوض شد). بعد از GSUB و
+     روی glyphها به **ترتیب منطقی** (مثل HarfBuzz) اجرا می‌شود. featureها: `kern`، `dist`، `mark`، `mkmk`، `abvm`، `blwm` برای اولین اسکریپت
+     موجود از `arab` و `DFLT` (زبان پیش‌فرض)، lookupها به ترتیب شماره‌ی lookup. نوع‌ها: 1 (single)، 2 (pair، قالب 1 و 2)، 4، 5، 6 (mark به base،
+     ligature، mark)، 7 و 8 (context و chaining، هر سه قالب)، 9 (extension). **نوع 3 (cursive) و device/variation tables خوانده نمی‌شوند.**
+     گزینش lookup بر اساس feature است؛ قبلاً `face.cpp` همه‌ی lookupهای نوع 2 را اسکن می‌کرد (برای لاتین هنوز همین است، بخش «باز» پایین).
+     امنیت: همه‌ی خواندن‌ها range-check، سقف lookup (1024)، subtable (16384)، عمق تو در تو (8)، گلیف در rule (255) و بودجه‌ی تلاش
+     (4096 به‌ازای هر glyph، حداکثر 2^26).
+   - خروجی در `glyph_record` / `visual_glyph`: `attached`، `mark_x`، `mark_y` (مختصات mark از origin پایه، واحد فونت، y رو به بالا؛ زنجیره‌ی mark-to-mark جمع می‌شود)،
+     `kern` (به advance همان glyph اضافه می‌شود)، `shift_x`، `shift_y` (جابه‌جایی رسم)، و در `visual_glyph` فلگ `kerned`: glyph عربی در خطی که فونت
+     برایش lookup `kern`/`dist` دارد؛ جفت دو glyph `kerned` دوباره با `face.glyph_kerning` kern نمی‌شود (جلوگیری از اعمال دوباره).
+     `arabic_layout::gpos` (`marks` قبلی) مستقل از GSUB ساخته می‌شود (فونت بدون GSUB ولی با GPOS هم کار می‌کند).
+   - `font::shape` و `do_layout` (برای `draw_text`) **از یک خروجی** استفاده می‌کنند، پس marks در هر دو یکی است (فقط گرد شدن پیکسل در `draw_text`).
+     mark بدون anchor همان قاعده‌ی قدیمی (وسط‌چین روی ink) را می‌گیرد. `kerning=none` فقط `kern` را حذف می‌کند، نه mark را.
+   - **ترتیب marks:** `shadda_first` شد `order_marks` (مرتب‌سازی پایدار با combining class، شدّه اول؛ `mark_order` در `text_shaper.cpp`)، هم قبل از GPOS هم
+     بعد از bidi. **mark بدون حرف** (بعد از فاصله یا اول متن) حالا advance صفر می‌گیرد (مثل HarfBuzz).
+   - **`glyph_kind`** (`normal`، `notdef`، `line_break`) در `shaped_glyph::kind`؛ پایتون: عنصر ششم تاپل C++ ← `ShapedGlyph.kind` (رشته، پیش‌فرض `"normal"`).
+   - **`font::shape(utf8, begin, end, options)`:** کل متن شکل می‌گیرد و فقط glyphهایی که cluster‌شان در `[begin, end)` است برمی‌گردند؛ `cluster` همچنان
+     آفست در کل متن؛ لبه‌ی وسط UTF-8 یا بازه‌ی بد `invalid_argument`. هزینه: هر فراخوانی کل متن را شکل می‌دهد. پایتون: `Font.shape(..., begin=0, end=None)` (بایت).
+   - **امضای API این دور:** `kind` (گزینه‌ی الف: enum) و بازه (امضای `begin, end`) را خودم انتخاب کردم چون کاربر گفت «به صلاح‌دید خودت»؛ کاربر رد نکرد.
+   - **تست‌ها:** `tests/cpp/test_font_shape.cpp` (11 تست جدید: `kind`، GPOS mark به base/ligature/mark، mark بدون anchor، بازه و جوینینگ، افراز دلخواه متن)،
+     فونت مصنوعی `tests/data/libstb-fa-gpos-test.ttf` (+ `make_mark_test_font.py`؛ مقدارهای دست‌حساب‌شده با HarfBuzz هم یکی بود)،
+     `tests/python/test_sample_fonts.py::test_vowelled_persian_text_is_positioned_like_harfbuzz_...` (Vazirmatn Regular، 300 متن، kern روشن، ترتیب دلخواه marks، صفر اختلاف).
+     تست قدیمی HarfBuzz همان فایل حالا `kerning="none"` می‌دهد (چون kerning عربی حالا کار می‌کند و آن تست kern را خاموش می‌کند).
+   - **مقایسه با HarfBuzz روی فونت‌های واقعی** (فقط محلی، فونت‌ها در repo نیستند؛ از releaseهای https://github.com/MohammadRaziei/fonts: `fa-Vazirmatn`، `fa-MjSeries`،
+     `fa-pro-archive`، با `curl -L .../releases/download/<tag>/fonts.zip`؛ API گیت‌هاب rate-limit بود): 300 متن تصادفی حرکت‌دار، kern روشن:
+     Vazirmatn (Regular، Bold، Thin)، Scheherazade و Lateef **300 از 300 دقیق**؛ IRANSans 279؛ Amiri حدود 171 از 268؛ Noor_e_Quran 234 از 291.
+     `tools/compare_with_harfbuzz.py` همین مقایسه را اجرا می‌کند.
+   - docs: `CHANGELOG.md`، `docs/guide.md`، `README.md`، کامنت‌های `include/stb/font.hpp`.
+
 پیشنهاد commit: پنج commit جدا (بازنامگذاری، اصلاح ویندوز، logging در C++، پل پایتون، logging کتابخانه و ADRها)، بعد commitهای کوچک
-(WOFF1، اصلاح تست numpy، `font::shape`، handlerهای OS log).
+(WOFF1، اصلاح تست numpy، `font::shape`، handlerهای OS log، و برای بخش 9: «GPOS positioner» (gpos.*، otl، text_shaper، font.cpp، تست‌ها)،
+«glyph_kind» و «shape با بازه» جدا از آن).
 
 ## کارهای باز (به ترتیب پیشنهادی)
 
@@ -91,11 +123,11 @@
 2. **`font::shape` (انجام شد، روی لینوکس اجرا و پاس):** `include/stb/font.hpp` (`text_direction`، `shape_options`، `shaped_glyph`، `font::shape`)،
    پیاده‌سازی در `src/font/font.cpp`. خط لوله: `glyph_record::cluster` (`gsub.hpp`) تا آخر می‌رود؛ نوع داخلی `shaped_glyph` شد `visual_glyph`
    (نام عمومی آزاد شود) و حالا `cluster` دارد؛ `text_shaper::shape(text, shaper_options{direction, ligatures})`؛ `bidi::resolve(classes,
-   base_dir)`؛ `arabic_layout::plan_plain` همان plan بدون `liga/clig` است. تصمیم‌ها: مکان marks از ink boxها در واحد فونت (همان قاعده‌ی
-   `do_layout` بدون گرد کردن، پس تا حدود یک پیکسل با `draw_text` فرق دارد و عمداً `do_layout` به `shape` تبدیل نشد تا pixel goldenها نشکنند)؛
+   base_dir)`؛ `arabic_layout::plan_plain` همان plan بدون `liga/clig` است. تصمیم‌ها: مکان marks: از GPOS (بخش 9) و برای mark بی‌anchor
+   از ink boxها در واحد فونت؛ `do_layout` به `shape` تبدیل نشد تا pixel goldenها نشکنند ولی هر دو از همان خروجی `visual_glyph` می‌خوانند؛
    kerning به `x_advance` گلیف اول جفت اضافه می‌شود؛ markها جفت را نمی‌شکنند؛ `'\n'` گلیف 0 با cluster خودش؛ `'\r'` حذف؛ هر خط جدا.
    **محدودیت شناخته‌شده:** GSUB فقط برای متن راست‌به‌چپ اجرا می‌شود (مثل `draw_text`)، پس `ligatures` روی متن لاتین اثری ندارد (liga لاتین
-   هنوز اجرا نمی‌شود)؛ mark positioning از GPOS نیست؛ `unicode-bidi: embed/override` پشتیبانی نمی‌شود. بایندینگ پایتون: `Font.shape` (بخش «پایتون: API فونت» پایین).
+   هنوز اجرا نمی‌شود)؛ `unicode-bidi: embed/override` پشتیبانی نمی‌شود. بایندینگ پایتون: `Font.shape` (بخش «پایتون: API فونت» پایین).
    تست: `tests/cpp/test_font_shape.cpp` (اجرا شد، پاس).
 2b. **handlerهای OS log (انجام شد؛ فقط لینوکس/syslog اجرا شد):** `include/stb/logging_os.hpp` (`syslog_handler`، `android_handler`، `unified_log_handler`،
    `debug_string_handler`، `event_log_handler`، ماکروهای `STB_LOG_HAS_*`)، `src/util/logging_os.cpp`، `src/util/logging_os_rank.hpp` (نگاشت سطح به
@@ -118,8 +150,17 @@
     `shared_ptr<const impl>` یعنی «کپی ارزان، immutable، thread-safe»، که novasvg روی آن حساب کرده). **کامنت‌های کهنه اصلاح شد:** `include/stb/font.hpp` (بالای فایل و pimpl)، `src/font/font.cpp` و docstring بالای `font.py`
     دیگر نمی‌گویند موتور stb_truetype است؛ حالا «موتور خود libstb» و «reader مرزها را چک می‌کند ولی fuzz نشده» (همان جمله‌ی `docs/guide.md`).
     تناقض guide/هدر درباره‌ی GPOS حل شد: کد (`face.cpp`) و تست (`test_kerning_modes_pick_gpos_or_the_kern_table`) نشان می‌دهند GPOS pair
-    adjustment (lookup نوع ۲، فقط advance گلیف اول) خوانده می‌شود، پس `docs/guide.md` و `checklist.md` اصلاح شدند. mark/anchor و بقیه‌ی
-    lookupهای GPOS هنوز نیستند. ورودی تاریخی `CHANGELOG.md` (نسخه‌ی قدیمی) عمداً دست نخورد.
+    adjustment (lookup نوع ۲، فقط advance گلیف اول) خوانده می‌شود، پس `docs/guide.md` و `checklist.md` اصلاح شدند. (بخش 9 بالا: بعداً GPOS
+    کامل‌تر شد؛ فقط cursive و device tables نیستند). ورودی تاریخی `CHANGELOG.md` (نسخه‌ی قدیمی) عمداً دست نخورد.
+12. **GPOS، کارهای باقی‌مانده (از بخش 9):**
+    - **cursive attachment (lookup نوع 3, feature `curs`):** پیاده نشده؛ احتمالاً علت اصلی اختلاف با HarfBuzz روی Amiri و Noor_e_Quran (در مقایسه‌ی بخش 9 فقط 60 تا 80 درصد
+      متن‌ها یکی‌اند)؛ تأیید نشده، اول `curs` را در HarfBuzz خاموش کن و ببین اختلاف می‌ماند یا نه (اختلاف Amiri با `curs` خاموش هم ماند، پس شاید علت دیگری هم باشد).
+    - **IRANSans:** 21 از 300 متن با HarfBuzz فرق دارد (حداکثر 150 واحد)، نمونه: `چكّْ فّغٌجٌپٍ جًشْژُ`؛ علت بررسی نشده (حدس: ترتیب marks از `mark_order` برای marks خاص، یا `abvm`/`blwm`).
+    - kerning لاتین هنوز از `face.glyph_kerning` می‌آید (اسکن همه‌ی lookupهای نوع 2 بدون انتخاب feature/script، فقط جفت glyph، بدون context)؛ برای یکدستی می‌توان آن را هم به
+      `positioner` برد (script `latn`/`DFLT`)، ولی `glyph_kerning(l, r)` به‌دلیل context نمی‌تواند نتیجه‌ی کامل بدهد (در docs هم بنویس).
+    - ZWNJ، متن لاتین داخل خط عربی (حالا `kerned` فقط برای glyph عربی است)، و `font::kerning(char32_t...)` قدیمی دست نخوردند.
+    - چند فونت واقعی (Vazirmatn) را به `tests/` اضافه نکردم؛ فقط Regular که از قبل در `data/fonts` بود در تست HarfBuzz استفاده می‌شود.
+    - **issueهایی که کاربر خواست متنشان نوشته شود (برای GitHub):** (1) kerning زمینه‌ای Vazirmatn (انجام شد)، (2) ترتیب marks (انجام شد)، (3) mark بی‌حرف (انجام شد). هر سه در بخش 9 حل شدند؛ متن‌ها فقط در چت بودند.
 11. `checklist.md`: تعداد تست‌ها و بخش «قدیمی‌ها» کامل به‌روز نشده (فقط آیتم‌های جدید اضافه شده‌اند).
 
 ## کار با build و تست (همه با CMake)

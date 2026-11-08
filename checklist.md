@@ -67,10 +67,10 @@
       `test_marks_take_no_room_and_sit_over_or_under_the_letter`.
       `Font.shape_glyphs` (C++: `font::shape_glyphs`) glyph idهای انتخاب‌شده رو برمی‌گردونه (تشخیص/تست).
       **محدودیت‌ها (صادقانه):**
-      - از GPOS فقط pair adjustment (lookup نوع ۲، جفت گلیف و جفت کلاس، advance گلیف اول) رو داریم: kerning از GPOS
-        می‌آد اگه فونت GPOS داشته باشه، وگرنه از جدول `kern`. mark/anchor و بقیه‌ی lookupهای GPOS رو نداریم و اعراب با
-        قاعده‌ی ساده جا می‌گیرن (نه نقطه‌ی anchor فونت). روی متن اعرابی معمولی چشمی شبیه raqm ه ولی
-        پیکسل‌به‌پیکسل نه. فونت‌هایی که شکلشون به GPOS وابسته‌ست (بعضی نستعلیق‌ها) خراب دیده می‌شن.
+      - GPOS برای متن عربی: featureهای `kern`، `dist`، `mark`، `mkmk`، `abvm`، `blwm` (lookup نوع ۱، ۲، ۴، ۵، ۶، ۷، ۸ و extension)
+        اجرا می‌شن (`src/font/shaper/gpos.*`). cursive (نوع ۳) و device/variation tables نه. اعراب فقط وقتی anchor ندارن با
+        قاعده‌ی ساده جا می‌گیرن. kerning لاتین هنوز جفت‌گلیف از `face` ه. با HarfBuzz روی Vazirmatn (هر سه وزن)، Scheherazade و Lateef
+        دقیق یکی‌ه؛ Amiri و Noor_e_Quran نه (احتمالاً `curs`). فونت‌هایی که شکلشون به cursive وابسته‌ست (بعضی نستعلیق‌ها) خراب دیده می‌شن.
       - lookup نوع ۸ (reverse chaining) خونده نمی‌شه؛ فقط langsys پیش‌فرض اسکریپت `arab` (یا `DFLT`)،
         یعنی `locl` بر اساس زبان نیست؛ `fin2/fin3/med2` (سریانی) و `rtlm` نه.
       - ZWNJ حذف می‌شه (HarfBuzz یک glyph با عرض صفر نگه می‌داره؛ تصویر یکیه).
@@ -122,7 +122,7 @@
       بررسی `origLength`) گرفته شد؛ جهش هم‌پوشانی اول گرفته نشد چون تست قبلی به دلیل دیگری رد می‌شد، برای همین تستی اضافه شد که هر دو جدول جدا سالم باز می‌شوند.
 - [x] `tests/python/test_logging.py`: سه تست که numpy می‌خواهند حالا با `pytest.importorskip("numpy")` داخل خودشان skip می‌شوند
       (CI ویندوز ARM numpy نداشت و سه تست fail شد).
-- [x] تست: ۴۱۱ تست C++ پاس. Python: ۱۴۱۶ پاس، ۴ skip (`pytest_memray`، `torch` و `uharfbuzz` نصب نبودن، و یک مورد BMP). `ctest` سه تا از سه.
+- [x] تست: ۴۵۳ تست C++ پاس (قبلاً ۴۱۱). Python: ۱۴۱۶ پاس (قدیمی؛ این دور شمارش نشد)، ۴ skip (`pytest_memray`، `torch` و `uharfbuzz` نصب نبودن، و یک مورد BMP). `ctest` سه تا از سه.
 - [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
       اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
 
@@ -136,10 +136,14 @@
 
 ## قابلیت‌ها
 
+- [x] **GPOS برای kerning و mark، `glyph_kind`، `shape(text, begin, end)`** (commit نشده). `otl::positioner` (`gpos.hpp`، `gpos.cpp`)، `shaped_glyph::kind`
+      (`normal`، `notdef`، `line_break`)، شکل‌دهی بخشی از متن به‌عنوان جزئی از کل (`Font.shape(..., begin, end)` در پایتون، بایت). ترتیب marks مثل HarfBuzz
+      (`order_marks`) و mark بی‌حرف بدون عرض. تست: 11 تست جدید در `test_font_shape.cpp`، فونت `libstb-fa-gpos-test.ttf`، و تست HarfBuzz روی Vazirmatn در `test_sample_fonts.py`.
+      C++ 453 تست پاس. **باز:** cursive (نوع ۳)، اختلاف IRANSans/Amiri/Noor_e_Quran با HarfBuzz، kerning لاتین از `positioner`، اجرا روی CI ویندوز/macOS. جزئیات: `handoff.md` بخش 9 و 12.
 - [x] shaping با cluster: `font::shape(utf8, shape_options)` → `shaped_glyph {glyph, cluster (آفست بایت), x_advance, x_offset, y_offset}` به
       واحد فونت و y رو به بالا؛ `shape_options {direction, kerning, ligatures}` (ligatures=false: `liga/clig` بسته، `rlig` و joining نه). `cluster`
-      از bidi، mirror، joining و ligatureها رد می‌شود (`glyph_record::cluster`). **نوشته شد ولی اجرا نشده (CI اولین اجراست).** تست:
-      `tests/cpp/test_font_shape.cpp`. باز: mark positioning از GPOS، GSUB برای متن لاتین (الان فقط راست‌به‌چپ)، بایندینگ پایتون.
+      از bidi، mirror، joining و ligatureها رد می‌شود (`glyph_record::cluster`). **روی لینوکس اجرا و پاس (CI هنوز نه).** تست:
+      `tests/cpp/test_font_shape.cpp`. باز: GSUB برای متن لاتین (الان فقط راست‌به‌چپ). بایندینگ پایتون (`Font.shape`) و GPOS انجام شد.
 - [ ] WOFF2 (Brotli لازم؛ احتمالاً نه) فقط اگه novasvg خودش decode نکنه. (WOFF1 تموم شد.)
 - [ ] thread برای کارهای دیگه (blend با حالت‌های float، کدگذاری JPEG) فقط بعد از اندازه‌گیری روی ماشین
       چندهسته‌ای؛ کارهای حافظه‌محور (premultiply، flip، convert) عمداً بدون thread‌ن. بایندینگ‌های تصویر پایتون
