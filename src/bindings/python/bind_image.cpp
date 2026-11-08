@@ -56,7 +56,11 @@ using bytes_in = nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig, nb::
 struct KeepAlive {
     nb::object* obj;
     void operator()(nb::object* p) const {
-        if (Py_IsInitialized()) {  // otherwise the interpreter is gone: leak, do not touch it
+        // nb::is_alive() and not Py_IsInitialized(): that one turns false at the START of interpreter
+        // finalization, while the module globals are still being released. An image freed in that phase
+        // must still drop what it views, or an object that itself holds another image (a numpy array made
+        // by np.from_dlpack(image), whose capsule keeps that image) is leaked and nanobind reports it.
+        if (nb::is_alive()) {  // otherwise the interpreter is gone: leak, do not touch it
             nb::gil_scoped_acquire gil;
             delete p;
         }

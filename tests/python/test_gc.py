@@ -104,3 +104,21 @@ def test_no_leak_report_at_exit_when_the_image_outlives_the_script(keep_global):
     )
     assert r.returncode == 0
     assert r.stderr == ""
+
+
+@pytest.mark.parametrize("keep", ["everything", "only_the_last_image"])
+def test_no_leak_report_at_exit_for_an_image_over_an_array_made_from_an_image(keep):
+    # np.from_dlpack(image) is an array whose capsule keeps that image alive; Image.from_dlpack(array) views it.
+    # When the script ends the last image is freed while the interpreter is already finalizing, and it must still
+    # let the array go: with Py_IsInitialized() as the guard it did not, and nanobind printed "leaked 1 instances!".
+    r = _run(
+        f"""
+        import numpy as np, libstb as stb
+        img = stb.Image(np.zeros((4, 4, 3), np.uint8))
+        shared = np.from_dlpack(img)
+        back = stb.Image.from_dlpack(shared)
+        {'del img, shared' if keep == 'only_the_last_image' else ''}
+        """
+    )
+    assert r.returncode == 0
+    assert r.stderr == ""
