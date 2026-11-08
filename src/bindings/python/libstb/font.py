@@ -116,14 +116,16 @@ class DesignMetrics(NamedTuple):
 class ShapedGlyph(NamedTuple):
     """One glyph of Font.shape(), in font units with y up. The glyph is drawn at
     (pen_x + x_offset, pen_y + y_offset) and the pen then moves right by `x_advance`.
-    `glyph` is 0 for a line break; `cluster` is the byte offset in the UTF-8 text of the first
-    character the glyph stands for."""
+    `glyph` is 0 for a line break or a character the font has no glyph for: `kind` tells them
+    apart ("line_break", "notdef", else "normal"). `cluster` is the byte offset in the UTF-8 text of
+    the first character the glyph stands for."""
 
     glyph: int
     cluster: int
     x_advance: float
     x_offset: float
     y_offset: float
+    kind: str = "normal"
 
 
 class Font:
@@ -233,7 +235,7 @@ class Font:
         return self._f.glyph_kerning(left, right, mode)
 
     def shape(self, text: str, *, direction: str = "auto", kerning: str = "automatic",
-              ligatures: bool = True) -> List[ShapedGlyph]:
+              ligatures: bool = True, begin: int = 0, end: Optional[int] = None) -> List[ShapedGlyph]:
         """Shape `text` into positioned glyphs in VISUAL order (left to right on the page), in font
         units with y up. It makes the same decisions as draw_text (joined letter shapes, GSUB
         features, mirrored brackets, right-to-left order, kerning) without rounding anything to
@@ -244,7 +246,16 @@ class Font:
         `ligatures=False` stops the optional ligature features (liga, clig); the required ones
         (lam + alef) and the joining shapes always run. A "\\n" is a glyph 0 with no advance:
         start the next line (its pitch is design_metrics.ascent - descent + line_gap) and move the
-        pen back to 0. Marks take no advance and carry an x_offset / y_offset.
+        pen back to 0 (`kind` is "line_break"; a character the font has no glyph for is a glyph 0
+        with kind "notdef"). Marks take no advance and carry an x_offset / y_offset: the font's GPOS
+        (mark to base, to ligature and to mark) places them where it has an anchor.
+
+        `begin` and `end` (byte offsets in the UTF-8 encoding of `text`, as `cluster` is; `end` None
+        is the end of the text) return only the glyphs of that part, shaped as a part of the whole
+        text: the direction, the joining shape of a letter at the edge, ligatures and kerning across
+        it are those of the whole run. Use it to draw a text in pieces (spans with another colour
+        or weight). A glyph belongs to the part its cluster is in. Offsets inside a UTF-8 sequence,
+        begin > end or end past the text raise ValueError.
 
         Only right-to-left scripts get the GSUB treatment so far: other text is one glyph per
         character. Raises ValueError (malformed text, unknown direction or kerning), LimitError.
@@ -256,7 +267,7 @@ class Font:
                 x = pen + g.x_offset   # draw font.outline(g.glyph) with its origin at x
                 pen += g.x_advance
         """
-        return [ShapedGlyph(*t) for t in self._f.shape(text, direction, kerning, ligatures)]
+        return [ShapedGlyph(*t) for t in self._f.shape(text, direction, kerning, ligatures, begin, end)]
 
     def measure(self, text: str, pixel_height: float) -> TextSize:
         return TextSize(*self._f.measure(text, pixel_height))

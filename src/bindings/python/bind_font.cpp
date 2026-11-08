@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <tuple>
 
 #include "binding.hpp"
@@ -91,6 +92,15 @@ stb::text_direction parse_direction(const std::string& name) {
 // (roughly 100 microseconds) on, other Python threads gain more than the switch costs, so only a
 // text at least this long is shaped without the GIL.
 constexpr std::size_t shape_without_gil_from_bytes = 512;
+
+const char* kind_name(stb::glyph_kind kind) {
+    switch (kind) {
+        case stb::glyph_kind::notdef: return "notdef";
+        case stb::glyph_kind::line_break: return "line_break";
+        case stb::glyph_kind::normal: break;
+    }
+    return "normal";
+}
 
 // Draws the texts on the canvas's copy without holding the GIL; the Image is made after it returns.
 stb::image finish_canvas(stb::canvas& c) {
@@ -187,24 +197,26 @@ void bind_font(nb::module_& m) {
         // ---- shaping: positioned glyphs in font units ----
         .def("shape",
              [](const font& f, const std::string& text, const std::string& direction, const std::string& kerning,
-                bool ligatures) {
+                bool ligatures, std::size_t begin, std::optional<std::size_t> end) {
                  stb::shape_options options;
                  options.direction = parse_direction(direction);
                  options.kerning = parse_kerning(kerning);
                  options.ligatures = ligatures;
+                 const std::size_t stop = end.value_or(text.size());
                  std::vector<stb::shaped_glyph> glyphs;
                  if (text.size() >= shape_without_gil_from_bytes) {
                      nb::gil_scoped_release release;
-                     glyphs = f.shape(text, options);
+                     glyphs = f.shape(text, begin, stop, options);
                  } else {
-                     glyphs = f.shape(text, options);
+                     glyphs = f.shape(text, begin, stop, options);
                  }
                  nb::list out;
                  for (const stb::shaped_glyph& g : glyphs)
-                     out.append(nb::make_tuple(g.glyph, g.cluster, g.x_advance, g.x_offset, g.y_offset));
+                     out.append(nb::make_tuple(g.glyph, g.cluster, g.x_advance, g.x_offset, g.y_offset, kind_name(g.kind)));
                  return out;
              },
-             "text"_a, "direction"_a = "auto", "kerning"_a = "automatic", "ligatures"_a = true)
+             "text"_a, "direction"_a = "auto", "kerning"_a = "automatic", "ligatures"_a = true, "begin"_a = 0,
+             "end"_a = nb::none())
         .def("measure",
              [](const font& f, const std::string& text, float px) {
                  const auto s = f.measure(text, px);
