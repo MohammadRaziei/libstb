@@ -50,7 +50,7 @@ img.resize(320, 240, "cubic").write("small.png")   # the format comes from the e
   blend modes, fill, masks, stacking, EXIF orientation, vector outlines (anti-aliased fill and
   stroke with caps, joins and dashes) and a canvas for text, shapes and outlines.
 - **Text, including Persian and Arabic.** TrueType and CFF fonts, GSUB shaping, bidi reordering
-  and pair kerning (marks are not placed from GPOS anchors, see the [guide](docs/guide.md)), plus a
+  and pair kerning (marks are placed from GPOS anchors, see the [guide](docs/guide.md)), plus a
   text size estimate that needs no font file.
 - **zlib as an API.** `zlib_compress` and `zlib_decompress`, with bounded output so a zip bomb
   is a `LimitError`.

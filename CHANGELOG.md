@@ -8,6 +8,13 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **GPOS mark attachment in `font::shape()` and text drawing.** Marks (harakat) go where the font's `mark` and
+  `mkmk` features put them (mark to base, to ligature, to mark); a mark without an anchor keeps the centred
+  placement. `shape()` and `draw_text` now agree. Test font `libstb-fa-gpos-test.ttf` (`make_mark_test_font.py`).
+- **`shaped_glyph::kind` (`glyph_kind`: `normal`, `notdef`, `line_break`)** tells a line break from a missing
+  character, which both have glyph 0. Python: `ShapedGlyph.kind`.
+- **`font::shape(text, begin, end)`** shapes a part of the text as part of the whole run (joining, ligatures,
+  kerning across the edges). Python: `Font.shape(..., begin=0, end=None)`.
 - **`data/`: sample pictures and fonts, and examples and tests that use them.** Four photographs (`camera.png`,
   `astronaut.png`, `chelsea.png`, a real JPEG `rocket.jpg`), an RGBA `badge.png` made by `data/make_badge.py`, and
   Vazirmatn Regular and Bold (Persian, Arabic and Latin; GSUB and GPOS), with their licenses in `data/README.md`

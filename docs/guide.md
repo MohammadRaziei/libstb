@@ -261,13 +261,14 @@ HarfBuzz's on 18,000 random strings (`Font.shape_glyphs` returns them, for diagn
 about 0.2 microseconds per character, and the GSUB table is parsed the first time right-to-left text
 is drawn with a font (about 0.1 ms), not when the font is opened.
 
-What is not done: GPOS mark and anchor positioning, and every GPOS lookup but pair adjustment. Kerning
-is the font's GPOS pair adjustment (lookup type 2, glyph pairs and class pairs, the advance of the first
-glyph) if the font has a GPOS table, else its legacy `kern` table. Marks (harakat) are placed by a
-simple rule rather than the font's anchors: centred on the ink of their letter and stacked above it
-(below for kasra and similar signs, shadda first), with no room of their own. That looks like the
-real thing on ordinary vowelled text but not pixel for pixel, and text set in a font that depends on
-GPOS for its shapes (some Nastaliq fonts) will look wrong. GSUB lookups of type 8 (reverse chaining)
+GPOS: marks are placed from the font's anchors (features `mark` and `mkmk`: lookup types 4 mark to base,
+5 mark to ligature, 6 mark to mark, also through extension lookups; a mark after a ligature hangs on
+its last component). A mark the font has no anchor pair for falls back to a simple rule: centred on the
+ink of its letter and stacked above it (below for kasra and similar signs, shadda first). Kerning is the
+font's GPOS pair adjustment (lookup type 2, glyph pairs and class pairs, the advance of the first glyph)
+if the font has a GPOS table, else its legacy `kern` table. What is not done: every other GPOS lookup
+(cursive attachment, contextual positioning, device and variation tables of anchors), so text set in a
+font that depends on them for its shapes (some Nastaliq fonts) will look wrong. GSUB lookups of type 8 (reverse chaining)
 are skipped, only the default language system of the script is used (no `locl` per language), and
 `font.advance` and `font.kerning` work on one code point and do no shaping. Not checked: Hebrew,
 Urdu-specific letters, text with explicit bidi controls (embeddings and isolates are ignored). A font
@@ -506,8 +507,10 @@ in a right-to-left run the offsets go down as the glyphs go right, and a ligatur
 has the offset of its first letter. `'\n'` is a glyph 0 with its own cluster and no advance; `'\r'` and the invisible
 bidi controls of a right-to-left line have no glyph. `ligatures = false` stops only the optional ligature
 features (`liga`, `clig`): lam + alef and the joining shapes are required and stay. Marks are placed from the
-ink boxes (centred on the letter before them, stacked above or below), not from the GPOS mark attachment, so
-they can sit up to a pixel from where `draw_text`, which snaps them to its pixel grid, puts them. As in
+font's GPOS mark attachment (a mark without an anchor is centred on its letter), the same as `draw_text`
+does, which then snaps them to its pixel grid. `glyph_kind` tells a line break from a missing character (both
+glyph 0). `shape(text, begin, end)` returns only the glyphs of a part of the text, shaped as part of the whole
+(joining, ligatures and kerning across the edges); `begin` and `end` are byte offsets like `cluster`. As in
 `draw_text`, only right-to-left scripts go through the font's GSUB table so far; other text is one glyph per
 character.
 
