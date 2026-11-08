@@ -21,8 +21,10 @@ target_include_directories(test_stb_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include ${
 # keep UTF-8 (warning C4566 is this problem).
 target_compile_options(test_stb_cpp PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 # Synthetic font with solid-rectangle glyphs (tests/data/make_test_font.py).
+# The sample pictures and fonts of data/ (test_sample_data.cpp).
 target_compile_definitions(test_stb_cpp PRIVATE
-    LIBSTB_TEST_DATA_DIR="${LIBSTB_TEST_SOURCE_DIR}/data")
+    LIBSTB_TEST_DATA_DIR="${LIBSTB_TEST_SOURCE_DIR}/data"
+    LIBSTB_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
 find_package(Threads REQUIRED)
 target_link_libraries(test_stb_cpp PRIVATE Threads::Threads)
 
