@@ -1,17 +1,21 @@
 // Vector outlines: fill, stroke (caps, joins, dashes) and a canvas with outlines, drawn into one image.
 //
+//   outlines                       (the result is ./output/outlines.png)
 //   outlines out.png
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 
 #include "stb.h"
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "usage: " << argv[0] << " <out.png>\n";
+    if (argc > 2) {
+        std::cerr << "usage: " << argv[0] << " [<out.png>]\n";
         return 2;
     }
+    const std::filesystem::path out_path = argc == 2 ? std::filesystem::path(argv[1]) : std::filesystem::path("output") / "outlines.png";
     try {
+        if (out_path.has_parent_path()) std::filesystem::create_directories(out_path.parent_path());
         stb::image img(360, 240, stb::pixel_format::rgba);
         img.fill(stb::color(250, 248, 240));
 
@@ -54,8 +58,8 @@ int main(int argc, char** argv) {
                 .opacity(0.9f);
         }
         c.add_outline(stb::outline().add_rounded_rect(15, 15, 120, 40, 12)).fill(stb::color(0, 0, 0, 40)).stroke(1.5f, "#555");
-        c.finish().write(argv[1]);
-        std::cout << "wrote " << argv[1] << "\n";
+        c.finish().write(out_path);
+        std::cout << "wrote " << out_path.string() << "\n";
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << "\n";
         return 1;

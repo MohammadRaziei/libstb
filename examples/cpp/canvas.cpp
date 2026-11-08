@@ -1,19 +1,31 @@
 // Draw several texts and shapes on one image with stb::canvas.
 //
-//   canvas_example photo.jpg font.ttf out.png
+//   canvas                         (the picture and font of data/, the result is ./output/canvas.png)
+//   canvas photo.jpg font.ttf out.png
+#include <filesystem>
 #include <iostream>
 #include <utility>
 
 #include "stb.h"
 
+// The sample pictures and fonts of the repository (data/README.md): the build sets the real path.
+#ifndef LIBSTB_DATA_DIR
+#define LIBSTB_DATA_DIR "data"
+#endif
+
 int main(int argc, char** argv) {
-    if (argc != 4) {
-        std::cerr << "usage: " << argv[0] << " <image> <font.ttf> <out.png>\n";
+    if (argc != 1 && argc != 4) {
+        std::cerr << "usage: " << argv[0] << " [<image> <font.ttf> <out.png>]\n";
         return 2;
     }
+    namespace fs = std::filesystem;
+    const fs::path photo_path = argc == 4 ? fs::path(argv[1]) : fs::path(LIBSTB_DATA_DIR) / "images" / "astronaut.png";
+    const fs::path font_path = argc == 4 ? fs::path(argv[2]) : fs::path(LIBSTB_DATA_DIR) / "fonts" / "Vazirmatn-Regular.ttf";
+    const fs::path out_path = argc == 4 ? fs::path(argv[3]) : fs::path("output") / "canvas.png";
     try {
-        stb::image photo = stb::image::open(argv[1]);
-        stb::font f = stb::font::open(argv[2]);
+        if (out_path.has_parent_path()) fs::create_directories(out_path.parent_path());
+        stb::image photo = stb::image::open(photo_path);
+        stb::font f = stb::font::open(font_path);
 
         // The canvas copies `photo` once. The texts are collected and drawn in finish().
         stb::canvas c(photo);
@@ -45,7 +57,7 @@ int main(int argc, char** argv) {
 
         // Everything is drawn here, in the order added.
         stb::image out = c.finish();
-        out.write_png(argv[3]);
+        out.write_png(out_path);
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << '\n';
         return 1;

@@ -1,5 +1,6 @@
 // A tour of the C++ API: load, inspect, geometry, resize, blend, fill, masks, stacking, canvas, encode.
 //
+//   tour                           (the picture and font of data/, the results go to ./output/tour)
 //   tour photo.jpg font.ttf outdir/
 #include <filesystem>
 #include <iostream>
@@ -7,25 +8,32 @@
 
 #include "stb.h"
 
+// The sample pictures and fonts of the repository (data/README.md): the build sets the real path.
+#ifndef LIBSTB_DATA_DIR
+#define LIBSTB_DATA_DIR "data"
+#endif
+
 int main(int argc, char** argv) {
-    if (argc != 4) {
-        std::cerr << "usage: " << argv[0] << " <image> <font.ttf> <outdir>\n";
+    if (argc != 1 && argc != 4) {
+        std::cerr << "usage: " << argv[0] << " [<image> <font.ttf> <outdir>]\n";
         return 2;
     }
     namespace fs = std::filesystem;
-    const fs::path out_dir = argv[3];
+    const fs::path photo_path = argc == 4 ? fs::path(argv[1]) : fs::path(LIBSTB_DATA_DIR) / "images" / "rocket.jpg";
+    const fs::path font_path = argc == 4 ? fs::path(argv[2]) : fs::path(LIBSTB_DATA_DIR) / "fonts" / "Vazirmatn-Regular.ttf";
+    const fs::path out_dir = argc == 4 ? fs::path(argv[3]) : fs::path("output") / "tour";
     fs::create_directories(out_dir);
 
     try {
         // 1. Inspect without decoding any pixel.
-        const stb::image_info info = stb::image_info::read_file(argv[1]);
+        const stb::image_info info = stb::image_info::read_file(photo_path);
         std::cout << info.width << "x" << info.height << " " << stb::pixel_format_name(info.format) << '\n';
 
         // 2. Load. Options are optional: here, upright (EXIF) and always RGB.
         stb::load_options opt;
         opt.orient = true;
         opt.format = stb::pixel_format::rgb;
-        stb::image photo = stb::image::open(argv[1], opt);
+        stb::image photo = stb::image::open(photo_path, opt);
 
         // 3. Geometry: every call returns a new image. A temporary is moved, not copied.
         stb::image turned = photo.rotate90(1);                // 1 quarter turn counter-clockwise
@@ -60,7 +68,7 @@ int main(int argc, char** argv) {
         stb::image sheet = stb::image::vstack({&row, &shaded}, 8, "white");
 
         // 6. Canvas: shapes, texts and images collected on ONE copy of the photo, drawn in order by finish().
-        stb::font f = stb::font::open(argv[2]);
+        stb::font f = stb::font::open(font_path);
         stb::canvas c(photo);
         c.set_font(f, 48).set_color("white");
 
