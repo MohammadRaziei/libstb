@@ -458,7 +458,8 @@ contour is `move_to ... close`, and `y` points up like the font.
 
 ```cpp
 const stb::font_design_metrics dm = f.design_metrics();      // units_per_em, ascent, descent, line_gap, bbox
-const float scale = font_size / float(dm.units_per_em);       // font units -> output units
+const float scale = font_size / float(dm.ascent - dm.descent);   // font units -> pixels, the scale draw_text() uses for its size
+// (font_size / units_per_em would make font_size the em instead: smaller text in most fonts)
 std::vector<stb::outline_command> cmds;                          // reused: outline() clears it, keeps its capacity
 float pen = 0;
 std::uint32_t prev = 0;
@@ -526,7 +527,8 @@ font.design_metrics                              # DesignMetrics(units_per_em, a
 font.outline(g)                                  # [("M", x, y), ("L", ...), ("Q", ...), ("C", ...), ("Z",)] = Outline commands
 font.glyph_kerning(left, right, "automatic")     # or "kern_table" or "none"
 
-s = size / font.design_metrics.units_per_em      # font units -> pixels
+d = font.design_metrics
+s = size / (d.ascent - d.descent)                # font units -> pixels, the scale draw_text uses for its size
 pen = 0.0
 for g in font.shape("\u0633\u0644\u0627\u0645 world", direction="auto", kerning="automatic", ligatures=True):
     # ShapedGlyph(glyph, cluster, x_advance, x_offset, y_offset); glyph 0 is a line break

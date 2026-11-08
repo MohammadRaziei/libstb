@@ -207,7 +207,8 @@ class Font:
     @property
     def design_metrics(self) -> DesignMetrics:
         """The vertical metrics and bounding box in font units (Font.metrics gives the vertical
-        numbers in pixels)."""
+        numbers in pixels). The `size` of draw_text is the height from the descent to the ascent, so
+        to draw outlines at the same size scale them by ``size / (ascent - descent)``."""
         return DesignMetrics(*self._f.design_metrics())
 
     def outline(self, glyph: int) -> list:

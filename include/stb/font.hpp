@@ -88,8 +88,10 @@ private:
 //
 // Everything below is in FONT UNITS, the font's own design grid (font::design_metrics().units_per_em
 // per em, 1000 or 2048 usually), with y pointing UP like the font itself and no scaling or hinting
-// applied: what a vector renderer needs. To draw at `size` (the em in output units) multiply by
-// size / units_per_em, and flip y if the output grows downwards.
+// applied: what a vector renderer needs. To draw at `size` as the em in output units multiply by
+// size / units_per_em; to draw at the size draw_text() calls pixel_height (the height from the descent
+// to the ascent, see font::metrics) multiply by pixel_height / (ascent - descent). Flip y if the output
+// grows downwards.
 
 // Outlines use stb::point and stb::outline_command from stb/outline.hpp, so a glyph outline goes
 // straight into a stb::outline (outline::add_commands) and from there to the rasterizer.
@@ -166,8 +168,9 @@ public:
     // Also throws io_error / limit_error.
     static font open(const std::filesystem::path& path, int index = 0);
 
-    // pixel_height is the em-height in pixels, in (0, max_pixel_height];
-    // anything else throws invalid_argument.
+    // pixel_height is the height in pixels from the font's descent to its ascent (hhea ascent minus
+    // descent, which is the em only in fonts where the two happen to be equal), in (0, max_pixel_height];
+    // so ascent - descent of the result is pixel_height. anything else throws invalid_argument.
     font_metrics metrics(float pixel_height) const;
     bool has_glyph(char32_t codepoint) const;
     float advance(char32_t codepoint, float pixel_height) const;
