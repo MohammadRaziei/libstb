@@ -247,6 +247,19 @@ public:
     // character. Throws invalid_argument on malformed UTF-8, limit_error for text over 4 GiB.
     std::vector<shaped_glyph> shape(std::string_view utf8, const shape_options& options = {}) const;
 
+    // The glyphs of the part [begin, end) of `utf8` (byte offsets), shaped as a part of the whole text:
+    // the direction, the joining shape of a letter at the edge of the part, ligatures and kerning
+    // across it are those of the whole run, so the parts of a text that is drawn in pieces (a span
+    // with another colour or weight) fit together. `cluster` is still a byte offset in all of
+    // `utf8`, and the glyphs come in the order they have in shape(utf8). A glyph belongs to the
+    // part its cluster is in: a ligature of letters on both sides of `begin` is in the part with
+    // its first letter. The advance of the last glyph of a part includes the kerning to the first
+    // glyph of the next one.
+    // Throws invalid_argument if begin > end, end > utf8.size(), or begin or end is inside a UTF-8
+    // sequence (and as shape() does).
+    std::vector<shaped_glyph> shape(std::string_view utf8, std::size_t begin, std::size_t end,
+                                    const shape_options& options = {}) const;
+
     // The glyph indices of the font that `utf8` is drawn with, in visual order ('\n' is 0 and
     // starts a new line). This is what shaping decides: joined letter shapes, ligatures, mirrored
     // brackets and the right-to-left order. For diagnostics and tests; marks follow their letter.

@@ -296,3 +296,64 @@ UTEST(libstb_font_shape_tests, test_gpos_marks_stay_with_their_own_letter) {
     ASSERT_TRUE(close_to(from_letter_x(g, 3), 200));
     ASSERT_TRUE(close_to(g[3].y_offset, 700));
 }
+
+// ------------------------------------------------------------------ shape(text, begin, end)
+
+UTEST(libstb_font_shape_tests, test_a_range_gives_the_glyphs_of_that_part_of_the_whole_shaping) {
+    const stb::font f = rects();
+    // the kerning pair (A, B) crosses the edge: the advance of A has it in either case
+    const std::vector<stb::shaped_glyph> whole = f.shape("AB");
+    const std::vector<stb::shaped_glyph> first = f.shape("AB", 0, 1), second = f.shape("AB", 1, 2);
+    ASSERT_EQ(std::size_t(1), first.size());
+    ASSERT_EQ(std::size_t(1), second.size());
+    ASSERT_TRUE(first[0].x_advance == 500.0f);  // 600 - 100: alone it would be 600
+    ASSERT_TRUE(f.shape("A")[0].x_advance == 600.0f);
+    ASSERT_EQ(whole[1].glyph, second[0].glyph);
+    ASSERT_EQ(std::uint32_t(1), second[0].cluster);  // still an offset in the whole text
+    ASSERT_TRUE(f.shape("AB", 0, 2)[0].x_advance == whole[0].x_advance);
+    ASSERT_EQ(std::size_t(0), f.shape("AB", 1, 1).size());
+}
+
+UTEST(libstb_font_shape_tests, test_a_range_keeps_the_joining_shape_of_the_whole_word) {
+    const stb::font f = gsub_font();
+    const std::string word = "\u0628\u0628\u0628";  // beh x3: initial, medial, final
+    const std::vector<stb::shaped_glyph> whole = f.shape(word);
+    ASSERT_EQ(std::size_t(3), whole.size());
+    ASSERT_TRUE(clusters(whole) == (U{4, 2, 0}));
+    const std::vector<stb::shaped_glyph> middle = f.shape(word, 2, 4);
+    ASSERT_EQ(std::size_t(1), middle.size());
+    ASSERT_EQ(whole[1].glyph, middle[0].glyph);                       // the medial form, not the isolated one
+    ASSERT_TRUE(middle[0].glyph != f.shape("\u0628")[0].glyph);
+    ASSERT_EQ(std::uint32_t(2), middle[0].cluster);
+}
+
+UTEST(libstb_font_shape_tests, test_the_parts_of_a_split_text_are_the_whole_text_cut_in_two) {
+    const stb::font g = gsub_font();
+    for (const char* text : {"AB", "A\u00E9B", "\u0633\u0644\u0627\u0645", "\u0628\u0633\u0645 \u0627\u0644\u0644\u0647",
+                             "\u0633 ab", "(\u0633)\nab \u0633"}) {
+        const std::string t = text;
+        const std::vector<stb::shaped_glyph> whole = g.shape(t);
+        for (std::size_t cut = 0; cut <= t.size(); ++cut) {
+            if (cut < t.size() && (std::uint8_t(t[cut]) & 0xC0) == 0x80) continue;  // inside a character
+            const std::vector<stb::shaped_glyph> left = g.shape(t, 0, cut), right = g.shape(t, cut, t.size());
+            ASSERT_EQ(whole.size(), left.size() + right.size());
+            std::size_t l = 0, r = 0;
+            for (const stb::shaped_glyph& w : whole) {  // each glyph is in the part its cluster is in, as it was
+                const stb::shaped_glyph& p = w.cluster < cut ? left[l++] : right[r++];
+                ASSERT_EQ(w.glyph, p.glyph);
+                ASSERT_EQ(w.cluster, p.cluster);
+                ASSERT_TRUE(w.x_advance == p.x_advance && w.x_offset == p.x_offset && w.y_offset == p.y_offset);
+            }
+        }
+    }
+}
+
+UTEST(libstb_font_shape_tests, test_a_bad_range_is_refused) {
+    const stb::font f = rects();
+    ASSERT_THROWS(f.shape("AB", 2, 1), std::invalid_argument);
+    ASSERT_THROWS(f.shape("AB", 0, 3), std::invalid_argument);
+    ASSERT_THROWS(f.shape("AB", 3, 3), std::invalid_argument);
+    ASSERT_THROWS(f.shape("A\u00E9B", 2, 3), std::invalid_argument);  // starts inside the e acute
+    ASSERT_THROWS(f.shape("A\u00E9B", 0, 2), std::invalid_argument);  // ends inside it
+    ASSERT_EQ(std::size_t(1), f.shape("A\u00E9B", 1, 3).size());
+}

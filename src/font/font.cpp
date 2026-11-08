@@ -439,7 +439,17 @@ std::vector<std::uint32_t> font::shape_glyphs(std::string_view utf8) const {
 }
 
 std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options& options) const {
+    return shape(utf8, 0, utf8.size(), options);
+}
+
+std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, std::size_t end,
+                                      const shape_options& options) const {
     if (static_cast<unsigned long long>(utf8.size()) > 0xFFFFFFFFull) throw limit_error("text is longer than 4 GiB");
+    if (begin > end || end > utf8.size()) throw std::invalid_argument("shape: the range is not inside the text");
+    // An edge inside a UTF-8 sequence would cut a character in two (a continuation byte is 10xxxxxx).
+    const auto is_continuation = [&](std::size_t i) { return i < utf8.size() && (std::uint8_t(utf8[i]) & 0xC0) == 0x80; };
+    if (is_continuation(begin) || is_continuation(end))
+        throw std::invalid_argument("shape: the range starts or ends inside a UTF-8 sequence");
     const std::u32string text = utf8_decode(utf8);
 
     // The byte offset of every character (and of the end): a character's length in UTF-8 follows from
@@ -523,6 +533,12 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options
     // included, known only now): the offset takes that advance back.
     for (const attached_mark& m : marks) out[m.glyph].x_offset = m.x - out[m.letter].x_advance;
 
+    // The part asked for: the glyphs whose cluster is in it. They were shaped with the whole text, so
+    // the joining shapes, ligatures and kerning at its edges are those of the whole run.
+    if (begin != 0 || end != utf8.size())
+        out.erase(std::remove_if(out.begin(), out.end(),
+                                 [&](const shaped_glyph& g) { return g.cluster < begin || g.cluster >= end; }),
+                  out.end());
     return out;
 }
 
