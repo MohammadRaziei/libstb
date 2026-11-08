@@ -77,6 +77,63 @@ std::uint16_t class_def::class_of(std::uint32_t gid) const noexcept {
     return 0;
 }
 
+namespace {
+
+// The script table of the first requested script the font has (empty when it has none).
+byte_view find_script(byte_view script_list, std::initializer_list<std::uint32_t> scripts) {
+    const unsigned n = script_list.u16(0);
+    for (std::uint32_t want : scripts) {
+        for (unsigned i = 0; i < n; ++i) {
+            const std::size_t rec = 2 + 6 * std::size_t(i);
+            if (script_list.u32(rec) == want) return script_list.from(script_list.u16(rec + 4));
+        }
+    }
+    return {};
+}
+
+// The requested language system of a script, else the script's default (empty when neither exists).
+byte_view find_language_system(byte_view script, std::uint32_t language) {
+    if (language) {
+        const unsigned n = script.u16(2);
+        for (unsigned i = 0; i < n; ++i) {
+            const std::size_t rec = 4 + 6 * std::size_t(i);
+            if (script.u32(rec) == language) return script.from(script.u16(rec + 4));
+        }
+    }
+    if (script.u16(0)) return script.from(script.u16(0));
+    return {};
+}
+
+// The features of a language system, each with its lookups (features without any are dropped).
+std::vector<feature_entry> language_features(byte_view lang, byte_view feature_list) {
+    std::vector<feature_entry> features;
+    auto add_feature = [&](unsigned index) {
+        const std::size_t rec = 2 + 6 * std::size_t(index);
+        if (index >= feature_list.u16(0)) return;
+        const byte_view f = feature_list.from(feature_list.u16(rec + 4));
+        feature_entry out{feature_list.u32(rec), {}};
+        const unsigned n = f.u16(2);
+        for (unsigned k = 0; k < n; ++k) out.lookups.push_back(f.u16(4 + 2 * std::size_t(k)));
+        if (!out.lookups.empty()) features.push_back(std::move(out));
+    };
+    const unsigned required = lang.u16(2);
+    if (required != 0xFFFF) add_feature(required);
+    const unsigned count = lang.u16(4);
+    for (unsigned i = 0; i < count; ++i) add_feature(lang.u16(6 + 2 * std::size_t(i)));
+    return features;
+}
+
+}  // namespace
+
+std::vector<feature_entry> script_features(byte_view table, std::initializer_list<std::uint32_t> scripts,
+                                           std::uint32_t language) {
+    const byte_view script = find_script(table.from(table.u16(4)), scripts);
+    if (script.empty()) return {};
+    const byte_view lang = find_language_system(script, language);
+    if (lang.empty()) return {};
+    return language_features(lang, table.from(table.u16(6)));
+}
+
 // -------------------------------------------------------------------- GDEF
 
 gdef::gdef(byte_view t) {

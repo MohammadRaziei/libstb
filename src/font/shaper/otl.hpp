@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <vector>
 
 namespace stb::otl {
@@ -108,6 +109,18 @@ public:
 private:
     byte_view v_;
 };
+
+// A feature of a GSUB or GPOS table with the indices of its lookups.
+struct feature_entry {
+    std::uint32_t tag;
+    std::vector<std::uint16_t> lookups;
+};
+
+// The features (those without a lookup are dropped) of a GSUB or GPOS table for the first of
+// `scripts` the table has, in the language system `language` (0: the script's default). Empty
+// if the table has none of the scripts.
+std::vector<feature_entry> script_features(byte_view table, std::initializer_list<std::uint32_t> scripts,
+                                           std::uint32_t language);
 
 // Glyph classes of GDEF.GlyphClassDef.
 enum glyph_class : std::uint8_t { gc_unclassified = 0, gc_base = 1, gc_ligature = 2, gc_mark = 3, gc_component = 4 };

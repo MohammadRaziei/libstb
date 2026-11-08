@@ -19,16 +19,20 @@ void apply_context::set_glyph(std::size_t i, std::uint32_t gid, bool ligature) {
 
 // ------------------------------------------------------------------- lookup
 
-bool lookup::skips(const apply_context& c, const glyph_record& g) const noexcept {
-    if (flags_ == 0) return false;
-    if ((flags_ & 0x02) && g.gclass == gc_base) return true;
-    if ((flags_ & 0x04) && g.gclass == gc_ligature) return true;
+bool lookup_skips(unsigned flags, unsigned mark_set, const gdef* defs, const glyph_record& g) noexcept {
+    if (flags == 0) return false;
+    if ((flags & 0x02) && g.gclass == gc_base) return true;
+    if ((flags & 0x04) && g.gclass == gc_ligature) return true;
     if (g.gclass == gc_mark) {
-        if (flags_ & 0x08) return true;
-        if (flags_ & 0x10) return !(c.defs && c.defs->in_mark_set(static_cast<std::uint16_t>(mark_set_), g.gid));
-        if (flags_ & 0xFF00) return !(c.defs && c.defs->mark_attach_class(g.gid) == (flags_ >> 8));
+        if (flags & 0x08) return true;
+        if (flags & 0x10) return !(defs && defs->in_mark_set(static_cast<std::uint16_t>(mark_set), g.gid));
+        if (flags & 0xFF00) return !(defs && defs->mark_attach_class(g.gid) == (flags >> 8));
     }
     return false;
+}
+
+bool lookup::skips(const apply_context& c, const glyph_record& g) const noexcept {
+    return lookup_skips(flags_, mark_set_, c.defs, g);
 }
 
 std::size_t lookup::next_unskipped(const apply_context& c, std::size_t i) const noexcept {
@@ -466,70 +470,12 @@ gsub_table::gsub_table(byte_view table) : table_(table) {
     lookups_ = lookup_list(table_);
 }
 
-namespace {
-
-struct feature_entry {
-    std::uint32_t tag;
-    std::vector<std::uint16_t> lookups;
-};
-
-// The script table of the first requested script the font has (empty when it has none).
-byte_view find_script(byte_view script_list, std::initializer_list<std::uint32_t> scripts) {
-    const unsigned n = script_list.u16(0);
-    for (std::uint32_t want : scripts) {
-        for (unsigned i = 0; i < n; ++i) {
-            const std::size_t rec = 2 + 6 * std::size_t(i);
-            if (script_list.u32(rec) == want) return script_list.from(script_list.u16(rec + 4));
-        }
-    }
-    return {};
-}
-
-// The requested language system of a script, else the script's default (empty when neither exists).
-byte_view find_language_system(byte_view script, std::uint32_t language) {
-    if (language) {
-        const unsigned n = script.u16(2);
-        for (unsigned i = 0; i < n; ++i) {
-            const std::size_t rec = 4 + 6 * std::size_t(i);
-            if (script.u32(rec) == language) return script.from(script.u16(rec + 4));
-        }
-    }
-    if (script.u16(0)) return script.from(script.u16(0));
-    return {};
-}
-
-// The features of a language system, each with its lookups (features without any are dropped).
-std::vector<feature_entry> language_features(byte_view lang, byte_view feature_list) {
-    std::vector<feature_entry> features;
-    auto add_feature = [&](unsigned index) {
-        const std::size_t rec = 2 + 6 * std::size_t(index);
-        if (index >= feature_list.u16(0)) return;
-        const byte_view f = feature_list.from(feature_list.u16(rec + 4));
-        feature_entry out{feature_list.u32(rec), {}};
-        const unsigned n = f.u16(2);
-        for (unsigned k = 0; k < n; ++k) out.lookups.push_back(f.u16(4 + 2 * std::size_t(k)));
-        if (!out.lookups.empty()) features.push_back(std::move(out));
-    };
-    const unsigned required = lang.u16(2);
-    if (required != 0xFFFF) add_feature(required);
-    const unsigned count = lang.u16(4);
-    for (unsigned i = 0; i < count; ++i) add_feature(lang.u16(6 + 2 * std::size_t(i)));
-    return features;
-}
-
-}  // namespace
-
 shaping_plan gsub_table::make_plan(std::initializer_list<std::uint32_t> scripts, std::uint32_t language,
                                    const std::vector<stage_request>& stages) const {
     shaping_plan plan;
     if (!valid()) return plan;
-    const byte_view feature_list = table_.from(table_.u16(6));
-    const byte_view script = find_script(table_.from(table_.u16(4)), scripts);
-    if (script.empty()) return plan;
-    const byte_view lang = find_language_system(script, language);
-    if (lang.empty()) return plan;
-    const std::vector<feature_entry> features = language_features(lang, feature_list);
-
+    const std::vector<feature_entry> features = script_features(table_, scripts, language);
+    if (features.empty()) return plan;
     for (const feature_entry& f : features) plan.tags_.push_back(f.tag);
     for (const stage_request& req : stages) {
         shaping_plan::stage st{req.mask, {}};
