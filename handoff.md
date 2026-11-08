@@ -16,8 +16,11 @@
 
 ## کارهای commit نشده (به ترتیب پیشنهادی commit)
 
-همه با CMake بیلد و تست شده‌اند (gcc، لینوکس، `-j2`): C++ 425 تست پاس (از جمله `font::shape` و `logging_os`)، `ctest` کامل پاس، صفر warning،
-پایتون 1453 پاس و 4 skip (torch و uharfbuzz نصب نبود). ویندوز، macOS و Android هنوز اجرا نشده‌اند.
+**به‌روزرسانی (آخرین دور):** کارهای شماره‌دار پایین (بازنامگذاری، logging، shape، WOFF1، API فونت پایتون، `to_pil`) بین‌راه در تاریخچه‌ی git commit شده‌اند؛
+فقط «این دور» (بخش بعدی: `data/`، مثال‌ها، تست‌ها، اصلاح leak) commit نشده است.
+
+همه با CMake بیلد و تست شده‌اند (gcc، لینوکس، `-j2`): C++ 442 تست پاس (از جمله `font::shape`، `logging_os` و 17 تست `test_sample_data.cpp`)، `ctest` کامل پاس، صفر warning،
+پایتون 1624 پاس و 4 skip (torch نصب نبود؛ uharfbuzz نصب بود و تست‌های مقایسه با HarfBuzz اجرا شدند). ویندوز، macOS و Android هنوز اجرا نشده‌اند.
 
 1. **بازنامگذاری** (فقط نام، بدون تغییر رفتار):
    - هندسه‌ی برداری `stb::path` شد `stb::outline` (`include/stb/outline.hpp`، `src/draw/outline.cpp`) با `outline_op`،
@@ -158,6 +161,31 @@ PYTHONPATH=/tmp/b/python/install python3 -m pytest tests/python -q     # تست 
 - `glyph_kerning(automatic)`: اگر فونت GPOS دارد فقط GPOS؛ `kern_table` فقط جدول kern. `face_count(path)` کل فایل را می‌خواند. `glyph_info` عمداً `noexcept` نیست.
 - هدر `export.hpp` در MSVC هشدارهای C4251/C4275 را خاموش می‌کند؛ کلاس‌های export شده می‌توانند عضو `std::` داشته باشند.
 - برای printf-check روی متد عضو، اندیس‌ها یکی بیشتر است (`this` آرگومان 1): `STB_FORMAT_CHECK(2, 3)`.
+
+## این دور: `data/`، مثال‌ها، تست‌ها (تمام شد، commit نشده)
+
+درخواست کاربر: یک پوشه‌ی `data` در ریشه با چند فونت و تصویر (مثل cameraman و lena) که مثال‌ها و تست‌ها با آن‌ها کار کنند.
+
+- **`data/`** (راهنما و لایسنس هر فایل: `data/README.md`؛ `NOTICE.md` هم بخش دارد): `images/` شامل `camera.png` (CC0)، `astronaut.png` (NASA، public domain)،
+  `chelsea.png` (CC0)، `rocket.jpg` (JPEG واقعی، public domain)، `badge.png` (RGBA، ساخته‌شده با libstb توسط `data/make_badge.py`)؛ `fonts/` شامل
+  Vazirmatn Regular و Bold (OFL 1.1، فایل‌های دست‌نخورده‌ی upstream) و `OFL.txt`. **Lena عمداً نیست** (عکس Playboy است و در مخزن MIT قابل
+  توزیع نیست؛ cameraman قدیمی هم همین شک را دارد و scikit-image عکس CC0 جایگزین کرده؛ `camera.png` همان است). `tests/data/` همان فونت‌های ساختگی
+  برای عددهای دقیق است و عوض نشد. `data/` داخل wheel نمی‌رود.
+- **مثال‌ها:** همه‌ی مثال‌های پایتون (01 تا 11 و 13 تا 15) و 4 نوت‌بوک از `data/` می‌خوانند (به‌جای گرادیان ساختگی و فونت سیستم/matplotlib). برنامه‌های C++ بدون
+  آرگومان اجرا می‌شوند (`LIBSTB_DATA_DIR` را `examples/cpp/CMakeLists.txt` تعریف می‌کند و خروجی به `./output/` می‌رود). **جدید:** C++ `font_text`، `vector_text`،
+  `limits_and_zlib`، `logging_and_threads`؛ پایتون `13_font_glyphs_and_shape.py`، `14_untrusted_input_and_zlib.py`، `15_logging_threads_simd.py`.
+  `05_font_render.py` هم متن کهنه‌ی «stb_truetype» را از دست داد. همه با CMake بیلد (صفر warning) و اجرا شدند.
+- **تست‌ها:** `tests/python/sample_data.py` (مسیرها)، `test_sample_data.py`، `test_sample_fonts.py`، `tests/cpp/test_sample_data.cpp` (+ `LIBSTB_DATA_DIR` در
+  `tests/cpp/CMakeLists.txt`). نکته‌ها از اجرا: ریسایز پیش‌فرض در نور خطی است (روی عکس 0.6 تا 6.2 سطح روشن‌تر از میانگین مقادیر؛ `Resizer(srgb=False)` میانگین را حفظ می‌کند)؛
+  JPEG گریِ نوشته‌شده سه‌مؤلفه‌ای است؛ شکل دادن فارسی با HarfBuzz روی Vazirmatn واقعی برای 588 متن تصادفی بدون هیچ اختلافی در گلیف و advance است.
+- **باگ واقعی پیدا و درست شد** (`bind_image.cpp`): پیام `nanobind: leaked 1 instances!` آخر اسکریپت وقتی `shared = np.from_dlpack(img)` و
+  `back = Image.from_dlpack(shared)` در globals بود. علت: `KeepAlive` فقط وقتی `Py_IsInitialized()` درست بود آزاد می‌کرد و آن موقع شروع finalization غلط است. حالا
+  `nb::is_alive()`. تست: `test_gc.py::test_no_leak_report_at_exit_for_an_image_over_an_array_made_from_an_image` (روی ماژول قدیمی fail می‌شد).
+  **هنوز باز:** هر کلاسی که در `__main__` تعریف شود و جای دیگری (مثلاً handler پایتون `logging`) نگه داشته شود، globals را زنده نگه می‌دارد و nanobind هنگام خروج
+  می‌گوید Imageهای globals leak شده‌اند؛ مثال 15 از `logging.handlers.BufferingHandler` استفاده می‌کند تا این شکل پیش نیاید. راه کلی `nb::set_leak_warnings(false)` است (استفاده نشد).
+- **دو اشتباه مستند اصلاح شد:** (1) `pixel_height` در `font::metrics`/`draw_text` ارتفاع descent تا ascent است (hhea)، نه em (هدر «em-height» می‌گفت)؛ برای هماهنگی با
+  `draw_text` مقیاس خط‌های برداری `size / (ascent - descent)` است (نه `units_per_em`)؛ `font.hpp`، `guide.md`، docstring `design_metrics` و مثال‌ها اصلاح شدند.
+  (2) ترتیب `matrix`: هر فراخوانی روی نقطه اول اعمال می‌شود، پس «scale، بعد move» یعنی `translate(...).scale(...)` (دو قطعه‌ی README برعکس بود).
 
 ## پایتون: API فونت (تمام شد، commit نشده)
 

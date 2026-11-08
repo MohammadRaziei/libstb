@@ -7,15 +7,17 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
-### Changed
-- **The wheel keeps the C++ SDK in `libstb/sdk/`.** Headers, the shared core and the CMake package moved from
-  `libstb/include`, `libstb/lib` and `libstb/cmake` to `libstb/sdk/include`, `libstb/sdk/lib` and
-  `libstb/sdk/lib/cmake/libstb`: the same tree `cmake --install` makes, so `sdk` also works as a
-  `CMAKE_PREFIX_PATH`. `get_include_dir()`, `get_lib_dir()` and `get_cmake_dir()` return the new places; new
-  `get_sdk_dir()` and `libstb --sdk-dir`. The extension's rpath is `$ORIGIN/sdk/lib` (`@loader_path/sdk/lib`) and
-  Windows registers `sdk/lib` with `os.add_dll_directory`. The old folders are gone.
-
 ### Added
+- **`data/`: sample pictures and fonts, and examples and tests that use them.** Four photographs (`camera.png`,
+  `astronaut.png`, `chelsea.png`, a real JPEG `rocket.jpg`), an RGBA `badge.png` made by `data/make_badge.py`, and
+  Vazirmatn Regular and Bold (Persian, Arabic and Latin; GSUB and GPOS), with their licenses in `data/README.md`
+  (the "Lena" image is left out on purpose: it is not redistributable). Every Python example and notebook now works on
+  these instead of generated gradients, and the C++ examples run without arguments (`LIBSTB_DATA_DIR` is set by the
+  build). New examples: `font_text`, `vector_text`, `limits_and_zlib` and `logging_and_threads` (C++), and
+  `13_font_glyphs_and_shape.py`, `14_untrusted_input_and_zlib.py` and `15_logging_threads_simd.py` (Python).
+  New tests: `test_sample_data.py` and `test_sample_fonts.py` (Python) and `test_sample_data.cpp`: decoding against
+  Pillow, every writer, resizing, alpha, SIMD backends and thread counts on real pictures, and Persian shaping
+  against HarfBuzz on the real font (588 random texts, no difference in glyphs or advances).
 - **Python: the glyph-index API and `Font.shape`.** `Font.glyph_index(char)`, `glyph_count`, `glyph_info(glyph)`
   (`GlyphMetrics`), `design_metrics` (`DesignMetrics`), `outline(glyph)` (the command tuples `Outline` takes, so
   `Outline(font.outline(g))` works), `glyph_kerning(left, right, mode)`, the static `Font.face_count(source)` and
@@ -122,6 +124,13 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   stb_bench_premultiply` times them.
 
 ### Changed
+- **The wheel keeps the C++ SDK in `libstb/sdk/`.** Headers, the shared core and the CMake package moved from
+  `libstb/include`, `libstb/lib` and `libstb/cmake` to `libstb/sdk/include`, `libstb/sdk/lib` and
+  `libstb/sdk/lib/cmake/libstb`: the same tree `cmake --install` makes, so `sdk` also works as a
+  `CMAKE_PREFIX_PATH`. `get_include_dir()`, `get_lib_dir()` and `get_cmake_dir()` return the new places; new
+  `get_sdk_dir()` and `libstb --sdk-dir`. The extension's rpath is `$ORIGIN/sdk/lib` (`@loader_path/sdk/lib`) and
+  Windows registers `sdk/lib` with `os.add_dll_directory`. The old folders are gone.
+
 - **`Image.to_pil()` no longer copies L and RGBA images**: the Pillow image looks at the pixels of the `Image` (it
   keeps it alive), as `img.numpy()` does. Pillow marks it read-only and copies on its first write, so it never writes
   into the `Image`; a change to the `Image`'s pixels (through `numpy()` or the array it wraps) shows in the Pillow
@@ -139,6 +148,18 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 - Source layout only, no API change: the encoders and the compressor moved to `src/codec/encode/` (next to
   `decode/`), the glyph rasterizer is `src/font/truetype/glyph_raster.cpp`, the Python outline bindings are in
   `bind_outline.cpp`, and the resizer's SIMD vector header is `src/image/resize/simd_vec.hpp`.
+
+### Fixed
+- **"nanobind: leaked 1 instances!" at the end of a script** that did `shared = np.from_dlpack(img)` and
+  `back = Image.from_dlpack(shared)`. The reference an image keeps to what it views was dropped only while
+  `Py_IsInitialized()` was true, which turns false when the interpreter starts to shut down, so the array (and
+  through its DLPack capsule the first image) was leaked. It now uses `nb::is_alive()`.
+- **Docs: the pixel size of text.** `font::metrics(pixel_height)` and `draw_text(size)` take the height from the
+  descent to the ascent (hhea ascent minus descent), not the em, and the header said "em-height". The documentation
+  now says so, and says to scale outlines by `size / (ascent - descent)` to match `draw_text` (`size /
+  units_per_em` makes `size` the em, which is smaller text in most fonts).
+- **Docs: the order of matrix calls.** Each call is applied to a point first, so `matrix().translate(40, 40).scale(3, 3)`
+  is "scale, then move"; two snippets of the README had it the other way round.
 
 ## [0.9.0] - 2026-11-01
 

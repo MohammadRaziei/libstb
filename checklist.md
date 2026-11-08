@@ -216,3 +216,6 @@
       `Font.face_count` و `Font.shape` (با `direction`/`kerning`/`ligatures`)، در واحد فونت و y رو به بالا مثل C++؛
       `Outline(font.outline(g))` کار می‌کند. `shape` برای متن‌های 512 بایتی و بیشتر GIL را آزاد می‌کند. تست‌ها در
       `tests/python/test_font.py`؛ مستندات در `docs/guide.md` («From Python»).
+- [x] **`data/` و مثال‌ها و تست‌هایی که از آن می‌خوانند.** چهار عکس، یک RGBA ساخته‌شده با libstb، فونت Vazirmatn (Regular و Bold)؛ لایسنس‌ها در
+      `data/README.md`؛ همه‌ی مثال‌ها و نوت‌بوک‌ها روی آن‌ها؛ تست‌های `test_sample_data.py`، `test_sample_fonts.py`، `test_sample_data.cpp`.
+- [x] **باگ leak هنگام خروج** (`np.from_dlpack(img)` سپس `Image.from_dlpack`) درست شد (`nb::is_alive()`) و تست دارد.

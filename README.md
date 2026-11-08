@@ -291,7 +291,7 @@ dependency. `fill_mask` gives the coverage as a gray image for your own composit
 import libstb as stb
 
 heart = stb.Outline().move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close()
-big = heart.transformed(stb.Matrix().scale(3, 3).translate(40, 40))    # scale, then move
+big = heart.transformed(stb.Matrix().translate(40, 40).scale(3, 3))    # scale, then move (the last call applies first)
 
 img = stb.Image.open("photo.jpg")
 art = img.fill_outline(big, "#e63946").stroke_outline(big, "white", 3, join="round", dashes=[8, 4])
@@ -304,7 +304,7 @@ heart.fill_mask(100, 100).write("heart_mask.png")    # the coverage as a gray Im
 ```cpp
 stb::outline heart;
 heart.move_to(50, 90).cubic_to(0, 50, 30, 10, 50, 40).cubic_to(70, 10, 100, 50, 50, 90).close();
-const stb::outline big = heart.transformed(stb::matrix().scale(3, 3).translate(40, 40));   // scale, then move
+const stb::outline big = heart.transformed(stb::matrix().translate(40, 40).scale(3, 3));   // scale, then move (the last call applies first)
 
 stb::image img = stb::image::open("photo.jpg");
 stb::fill(img, big, stb::color("#e63946"));           // anti-aliased, in place
@@ -503,7 +503,9 @@ on yours.
 - [`docs/guide.md`](docs/guide.md): the full reference (every call, SIMD, threads, EXIF, DLPack,
   Pillow, errors, logging, design and source layout).
 - `docs/`: the Sphinx (Python) and Doxygen (C++) sources of the documentation site.
-- [`examples/`](examples): runnable Python scripts, C++ programs and notebooks.
+- [`examples/`](examples): runnable Python scripts, C++ programs and notebooks. They run on the pictures and fonts of
+  [`data/`](data) (photographs, an RGBA picture, a Persian and Latin font; licenses in `data/README.md`), so
+  `python examples/python/05_font_render.py` and the C++ programs work without arguments.
 - [`docs/adr/`](docs/adr): why logging works the way it does (three short decision records).
 - [`CHANGELOG.md`](CHANGELOG.md) and [`NOTICE.md`](NOTICE.md).
 
