@@ -33,6 +33,18 @@ rights reserved. They are used under the FreeType License (FTL, https://freetype
 which asks for this credit and for the license text to be available with any redistribution; the
 FreeType License is also distributed with plutovg as `FTL.TXT`.
 
+## Sample data (`data/`)
+
+The pictures and fonts of `data/` are used by the examples and the tests; they are not part of the library or of
+the wheel. Each can be redistributed, and `data/README.md` lists what and where from:
+
+- `data/images/camera.png`, `chelsea.png`: CC0 (photographs by Lav Varshney and Stefan van der Walt), from
+  scikit-image. `astronaut.png` (NASA) and `rocket.jpg` (SpaceX) are public domain, also from scikit-image.
+  `badge.png` is drawn by `data/make_badge.py` with libstb (MIT).
+- `data/fonts/Vazirmatn-Regular.ttf`, `Vazirmatn-Bold.ttf`: Copyright 2015 The Vazirmatn Project Authors
+  (https://github.com/rastikerdar/vazirmatn), SIL Open Font License 1.1, the unmodified upstream files; the license
+  text is `data/fonts/OFL.txt`.
+
 ## stb license (MIT option)
 
 /*
