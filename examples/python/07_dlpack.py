@@ -8,15 +8,12 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-y, x = np.mgrid[0:64, 0:96]
-img = stb.Image(np.dstack([
-    (x * 255 // 95).astype(np.uint8),
-    (y * 255 // 63).astype(np.uint8),
-    np.full((64, 96), 128, np.uint8),
-]))
+img = stb.Image.open(DATA / "images" / "chelsea.png").resize(96, 64)
 
 # ---- Image -> framework --------------------------------------------------------------
 # The layout is fixed: uint8, (height, width, channels), on the CPU.

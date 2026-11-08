@@ -4,18 +4,10 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
-
-
-def make_test_image(width=160, height=100):
-    """A gradient with a white 'F' in the top-left corner, so every flip and turn shows."""
-    y, x = np.mgrid[0:height, 0:width]
-    px = np.dstack([x * 255 // (width - 1), y * 255 // (height - 1), np.full_like(x, 80)]).astype(np.uint8)
-    px[8:48, 8:16] = 255
-    px[8:16, 8:36] = 255
-    px[24:32, 8:28] = 255
-    return stb.Image(px)
 
 
 def contact_sheet(images, gap=10):
@@ -26,17 +18,17 @@ def contact_sheet(images, gap=10):
     return stb.Image(np.hstack([c.numpy() for c in cells]))
 
 
-img = make_test_image()
+img = stb.Image.open(DATA / "images" / "chelsea.png").thumbnail(240, 160)   # a cat: every flip and turn shows
 print("source        :", img.width, "x", img.height)
 
 # Crop: the rectangle must lie inside the image (ValueError otherwise).
-face = img.crop(8, 8, 40, 40)
+face = img.crop(80, 20, 100, 100)
 print("crop          :", face.width, "x", face.height)
 
 # Flips and quarter turns. rotate90 turns counter-clockwise (like np.rot90); a negative count turns the other way.
 flipped_h = img.flip_horizontal()
 flipped_v = img.flip_vertical()
-turned = img.rotate90()            # counter-clockwise: 160x100 becomes 100x160
+turned = img.rotate90()            # counter-clockwise: 240x160 becomes 160x240
 turned_back = turned.rotate90(-1)  # and back
 print("rotate90      :", turned.width, "x", turned.height, "| back to the original:",
       np.array_equal(turned_back.numpy(), img.numpy()))

@@ -6,11 +6,12 @@ from PIL import Image as PILImage
 
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-y, x = np.mgrid[0:60, 0:90]
-img = stb.Image(np.dstack([x * 255 // 89, y * 255 // 59, np.full_like(x, 120)]).astype(np.uint8))
+img = stb.Image.open(DATA / "images" / "chelsea.png")
 
 # libstb -> Pillow: the mode follows the channel count (L, LA, RGB, RGBA). L and RGBA are not copied:
 # the Pillow image looks at the pixels of `img` (read-only; Pillow copies on its first write). LA and RGB
@@ -18,6 +19,17 @@ img = stb.Image(np.dstack([x * 255 // 89, y * 255 // 59, np.full_like(x, 120)]).
 pil = img.to_pil()
 print("to_pil        :", pil.mode, pil.size)
 print("gray and alpha:", img.convert(stb.PixelFormat.GRAY).to_pil().mode, img.convert(stb.PixelFormat.RGBA).to_pil().mode)
+
+# The sharing, seen from here: a change to the Image shows in the Pillow image for L and RGBA, not for RGB.
+rgba = stb.Image.open(DATA / "images" / "badge.png")
+shared = rgba.to_pil()
+snapshot = shared.copy()                                   # to_pil().copy() is independent of `rgba`
+rgba.numpy()[0, 0] = (255, 0, 0, 255)
+print("RGBA shares    :", shared.getpixel((0, 0)) == (255, 0, 0, 255), "| the .copy() does not:", snapshot.getpixel((0, 0)) != (255, 0, 0, 255))
+scratch = img.copy()
+scratch_pil = scratch.to_pil()
+scratch.numpy()[0, 0] = (1, 2, 3)
+print("RGB is a copy  :", scratch_pil.getpixel((0, 0)) != (1, 2, 3))
 
 # Pillow -> libstb.
 back = stb.Image.from_pil(pil)

@@ -4,21 +4,19 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-y, x = np.mgrid[0:200, 0:320]
-pixels = np.dstack([
-    (x * 255 // 319).astype(np.uint8),
-    (y * 255 // 199).astype(np.uint8),
-    ((x // 16 + y // 16) % 2 * 255).astype(np.uint8),
-])
+pixels = stb.imread(DATA / "images" / "chelsea.png")             # uint8 ndarray (H, W, C)
+print("source :", pixels.shape, pixels.dtype, "| a gray file:", stb.imread(DATA / "images" / "camera.png").shape)
 
 # The format comes from the extension; options go to the formats that have them.
-stb.imwrite(OUT / "pattern.png", pixels)
-stb.imwrite(OUT / "pattern_q30.jpg", pixels, quality=30)
-stb.imwrite(OUT / "pattern_c9.png", pixels, compression=9)
-stb.imwrite(OUT / "pattern.tga", pixels, rle=False)
+stb.imwrite(OUT / "chelsea.png", pixels)
+stb.imwrite(OUT / "chelsea_q30.jpg", pixels, quality=30)
+stb.imwrite(OUT / "chelsea_c9.png", pixels, compression=9)
+stb.imwrite(OUT / "chelsea.tga", pixels, rle=False)
 
 # An option the format does not have is an error, never silently ignored.
 try:
@@ -27,11 +25,14 @@ except ValueError as e:
     print("ValueError:", e)
 
 # Header only, then the pixels.
-print("iminfo :", stb.iminfo(OUT / "pattern.png"))
-back = stb.imread(OUT / "pattern.png")
+print("iminfo :", stb.iminfo(OUT / "chelsea.png"))
+back = stb.imread(OUT / "chelsea.png")
 print("imread :", back.shape, back.dtype)
 print("exact  :", np.array_equal(back, pixels))
 
 # Same options as Image.open.
-print("rgba   :", stb.imread(OUT / "pattern.png", format=stb.PixelFormat.RGBA).shape)
-print("flipped:", np.array_equal(stb.imread(OUT / "pattern.png", flip=True), pixels[::-1]))
+print("rgba   :", stb.imread(OUT / "chelsea.png", format=stb.PixelFormat.RGBA).shape)
+print("flipped:", np.array_equal(stb.imread(OUT / "chelsea.png", flip=True), pixels[::-1]))
+
+# imresize: an ndarray in, an ndarray out.
+print("resize :", stb.imresize(pixels, 160, 120).shape)

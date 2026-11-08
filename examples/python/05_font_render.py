@@ -1,37 +1,23 @@
-"""Render text with a TrueType font: metrics, a text bitmap, and a glyph atlas.
+"""Render text with a TrueType font: metrics, a text bitmap, a picture with labels (Persian too), and a glyph atlas.
 
 Usage: python 05_font_render.py [path/to/font.ttf]
 
-Only use fonts you trust: stb_truetype does no bounds checking.
+The default font is data/fonts/Vazirmatn-Regular.ttf (Persian, Arabic and Latin; SIL OFL 1.1).
+Only use fonts you trust: the font reader checks its bounds but has not been fuzzed.
+
+For the glyph-level API (outlines, shaping, your own renderer), see 13_font_glyphs_and_shape.py.
 """
 import sys
 from pathlib import Path
 
-import numpy as np
-
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/Library/Fonts/Arial.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "C:/Windows/Fonts/arial.ttf",
-]
-
-
-def find_font():
-    if len(sys.argv) > 1:
-        return Path(sys.argv[1])
-    for c in CANDIDATES:
-        if Path(c).exists():
-            return Path(c)
-    sys.exit("No font found: pass one as an argument.")
-
-
-font = stb.Font.open(find_font())
+font = stb.Font.open(sys.argv[1] if len(sys.argv) > 1 else DATA / "fonts" / "Vazirmatn-Regular.ttf")
 size = 32
 
 print("metrics :", font.metrics(size))
@@ -46,10 +32,18 @@ print("text    :", text.bitmap.width, "x", text.bitmap.height,
 text.bitmap.write(OUT / "hello.png")
 
 # Draw it straight onto an image: draw_text returns a new Image. (x, y) is the top-left
-# of the text; color is an int, (r, g, b) or (r, g, b, a).
-ramp = (40 + np.arange(480) * 3 // 4).astype(np.uint8)            # a plain gradient (needs numpy)
-background = stb.Image(np.stack([np.tile(ramp, (120, 1))] * 2 + [np.full((120, 480), 160, np.uint8)], axis=-1))
-labeled = background.draw_text("Hello\nworld", font, size, 20, 16, color=(255, 255, 255))
+# of the text; color is an int, (r, g, b) or (r, g, b, a), or a name like "white".
+photo = stb.Image.open(DATA / "images" / "astronaut.png")
+labeled = photo.draw_text("Hello\nworld", font, size, 20, 16, color=(255, 255, 255))
+
+# Persian and Arabic: write the text as you would type it. Joining forms, ligatures and the
+# right-to-left order are done for you, and mixed text lays out in the right order.
+labeled = labeled.draw_text("سلام دنیا", font, 48, 20, 110, color="#ffd166")
+labeled = labeled.draw_text("libstb یعنی کتابخانه", font, 30, 20, 190, color="#9be7ff")
+
+# Another face is just another Font.
+bold = stb.Font.open(DATA / "fonts" / "Vazirmatn-Bold.ttf")
+labeled = labeled.draw_text("Bold", bold, 44, 20, 400, color="white")
 labeled.write(OUT / "labeled.png")
 
 # One glyph.

@@ -4,22 +4,17 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-# A round, semi-transparent red badge (RGBA) ...
-size = 120
-y, x = np.mgrid[0:size, 0:size]
-inside = (x - size / 2) ** 2 + (y - size / 2) ** 2 < (size / 2 - 2) ** 2
-badge_px = np.zeros((size, size, 4), np.uint8)
-badge_px[inside] = (220, 30, 30, 200)
-badge = stb.Image(badge_px)
+# A round badge with a feathered, transparent rim (RGBA) ...
+badge = stb.Image.open(DATA / "images" / "badge.png")
+print("badge         :", badge.width, "x", badge.height, badge.channels, "channels")
 
-# ... and an opaque RGB background.
-yy, xx = np.mgrid[0:200, 0:300]
-background = stb.Image(
-    np.dstack([xx * 255 // 299, yy * 255 // 199, np.full_like(xx, 140)]).astype(np.uint8)
-)
+# ... and an opaque RGB photo.
+background = stb.Image.open(DATA / "images" / "chelsea.png")
 
 # convert(format): PixelFormat.GRAY, GRAY_ALPHA, RGB or RGBA (or the name, "gray" ...).
 gray = background.convert(stb.PixelFormat.GRAY)
@@ -35,7 +30,7 @@ print("split/merge   :", [p.channels for p in (r, g, b)], "->", swapped.channels
 # blend(overlay, x, y): the usual "over" operator. The overlay may hang over the edge.
 # mode= ("multiply", "screen", ...) and opacity= change how it mixes; it returns a new Image.
 placed = background.blend(badge, 20, 30)
-clipped = background.blend(badge, 250, 150)  # only part of it lands inside
+clipped = background.blend(badge, 360, 200)  # only part of it lands inside
 print("blend         :", placed.channels, "channels (the base's channel count is kept)")
 
 # flatten(background): blend the alpha channel onto a colour and drop it (white by default).

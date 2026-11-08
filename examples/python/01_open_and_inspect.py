@@ -4,26 +4,17 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
+src = DATA / "images" / "astronaut.png"
 
-def make_gradient(width=320, height=200):
-    """A red/green gradient, uint8, shape (height, width, 3)."""
-    y, x = np.mgrid[0:height, 0:width]
-    r = (x * 255 // (width - 1)).astype(np.uint8)
-    g = (y * 255 // (height - 1)).astype(np.uint8)
-    b = np.full_like(r, 128)
-    return np.dstack([r, g, b])
-
-
-# Make a file to work with.
-src = OUT / "gradient.png"
-stb.imwrite(src, make_gradient())
-
-# Header only: no pixels are decoded.
-info = stb.iminfo(src)
-print("header :", info.width, info.height, info.channels)
+# Header only: no pixels are decoded. The pictures of data/images come as gray, RGB, RGBA and a real JPEG.
+for name in ("camera.png", "astronaut.png", "badge.png", "rocket.jpg"):
+    info = stb.iminfo(DATA / "images" / name)
+    print(f"header {name:14s}:", info.width, "x", info.height, "|", info.channels, "channel(s)")
 
 # Just the pixels, as a numpy array.
 pixels = stb.imread(src)
@@ -43,9 +34,16 @@ print("bottom-right :", pixels[-1, -1])
 rgba = stb.Image.open(src, format=stb.PixelFormat.RGBA)
 print("rgba   :", rgba.channels, "channels, alpha =", rgba.numpy()[0, 0, 3])
 
+gray = stb.Image.open(src, format=stb.PixelFormat.GRAY)
+print("gray   :", gray.channels, "channel, top-left =", gray.numpy()[0, 0])
+
 flipped = stb.Image.open(src, flip=True)
 print("flipped: top-left is now", flipped.numpy()[0, 0])
 
-# Open from bytes works too.
-again = stb.Image.open(src.read_bytes())
-print("bytes  :", again.width, again.height, again.channels)
+# Open from bytes works too (an upload, a socket, a database column), and the format is found from the bytes.
+again = stb.Image.open((DATA / "images" / "rocket.jpg").read_bytes())
+print("bytes  :", again.width, again.height, again.channels, "(a JPEG)")
+
+# Write a copy: the format follows the extension.
+img.write(OUT / "astronaut_copy.jpg")
+print("wrote", OUT / "astronaut_copy.jpg")

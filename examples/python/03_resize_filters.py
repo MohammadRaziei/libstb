@@ -4,25 +4,18 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-
-def make_test_image(size=128):
-    """Checkerboard over a gradient: sharp edges show off the filters."""
-    y, x = np.mgrid[0:size, 0:size]
-    grad = (x * 255 // (size - 1)).astype(np.uint8)
-    checks = ((x // 8 + y // 8) % 2 * 255).astype(np.uint8)
-    return stb.Image(np.dstack([grad, checks, 255 - grad]))
-
-
-img = make_test_image()
+img = stb.Image.open(DATA / "images" / "astronaut.png")
 print("source:", img.width, img.height)
 
 # Filter by name (case-insensitive; "-" and " " count as "_").
 for name in ("nearest", "linear", "cubic", "bspline", "mitchell", "box", "auto"):
-    small = img.resize(48, 48, name)
-    big = img.resize(384, 384, name)
+    small = img.resize(128, 128, name)
+    big = img.resize(768, 768, name)
     small.write(OUT / f"resize_{name}_small.png")
     big.write(OUT / f"resize_{name}_big.png")
     print(f"{name:8s} -> {small.width}x{small.height} and {big.width}x{big.height}")

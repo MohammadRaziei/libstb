@@ -4,19 +4,13 @@ from pathlib import Path
 import numpy as np
 import libstb as stb
 
-OUT = Path(__file__).parent / "output"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parents[1] / "data"        # the sample pictures and fonts of the repository (see data/README.md)
+OUT = HERE / "output"
 OUT.mkdir(exist_ok=True)
 
-
-def make_image(width=320, height=200):
-    y, x = np.mgrid[0:height, 0:width]
-    r = (x * 255 // (width - 1)).astype(np.uint8)
-    g = (y * 255 // (height - 1)).astype(np.uint8)
-    b = ((x // 16 + y // 16) % 2 * 255).astype(np.uint8)
-    return stb.Image(np.dstack([r, g, b]))
-
-
-img = make_image()
+img = stb.Image.open(DATA / "images" / "chelsea.png")
+print("source:", img.width, "x", img.height, "-", img.width * img.height * img.channels, "bytes of pixels")
 
 # to_* returns the file's bytes, each format with its own settings.
 print("to_png(compression=1):", len(img.to_png(compression=1)), "bytes")
@@ -28,20 +22,26 @@ print("to_tga(rle=True):", len(img.to_tga(rle=True)), "bytes")
 print("to_tga(rle=False):", len(img.to_tga(rle=False)), "bytes")
 
 # write_* encodes and writes the file (only if encoding succeeded).
-img.write_png(OUT / "pattern_best.png", compression=9)
-img.write_jpg(OUT / "pattern_q40.jpg", quality=40)
-img.write_bmp(OUT / "pattern.bmp")
-img.write_tga(OUT / "pattern.tga", rle=True)
+img.write_png(OUT / "chelsea_best.png", compression=9)
+img.write_jpg(OUT / "chelsea_q40.jpg", quality=40)
+img.write_bmp(OUT / "chelsea.bmp")
+img.write_tga(OUT / "chelsea.tga", rle=True)
 
 # write() picks the format from the extension and uses default settings.
-img.write(OUT / "pattern_default.jpeg")
+img.write(OUT / "chelsea_default.jpeg")
 
 # An unknown extension is a ValueError.
 try:
-    img.write(OUT / "pattern.webp")
+    img.write(OUT / "chelsea.webp")
 except ValueError as e:
     print("ValueError:", e)
 
 # PNG is lossless: decoding it gives back exactly the same pixels.
 back = stb.Image.open(img.to_png())
 print("png round trip exact:", np.array_equal(back.numpy(), img.numpy()))
+
+# JPEG is not: the difference is what the quality setting trades for size.
+for quality in (20, 90):
+    jpeg = stb.Image.open(img.to_jpg(quality=quality))
+    worst = int(np.abs(jpeg.numpy().astype(int) - img.numpy().astype(int)).max())
+    print(f"jpeg quality {quality}: the worst channel is off by {worst}")

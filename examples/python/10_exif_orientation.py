@@ -33,13 +33,8 @@ def jpeg_with_orientation(jpg, orientation):
     return jpg[:2] + b"\xff\xe1" + struct.pack(">H", len(data) + 2) + data + jpg[2:]
 
 
-# A recognisable picture: a gradient with a white 'F' in the top-left corner.
-y, x = np.mgrid[0:60, 0:90]
-px = np.dstack([x * 255 // 89, y * 255 // 59, np.full_like(x, 90)]).astype(np.uint8)
-px[6:34, 6:11] = 255
-px[6:11, 6:24] = 255
-px[16:21, 6:19] = 255
-upright = stb.Image(px)
+# A recognisable picture: a cat, so a turn or a mirror is easy to see.
+upright = stb.Image.open(Path(__file__).resolve().parents[2] / "data" / "images" / "chelsea.png").resize(150, 100)
 
 # A phone held sideways stores the picture turned and writes orientation 6 ("turn 90 degrees
 # clockwise to see it upright"). Store it turned the opposite way and tag it.
