@@ -129,6 +129,50 @@ def test_random_persian_text_shapes_like_harfbuzz_glyph_for_glyph_and_advance_fo
     assert checked > 250
 
 
+def test_vowelled_persian_text_puts_marks_where_harfbuzz_does_from_the_gpos_anchors():
+    import unicodedata
+
+    hb, hbfont = _hb()
+    font = Font.open(REGULAR)
+    rng = random.Random(11)
+    marks = [chr(c) for c in (0x064B, 0x064C, 0x064D, 0x064E, 0x064F, 0x0650, 0x0651, 0x0652)]
+
+    def vowelled():
+        text = ""
+        for _ in range(rng.randint(1, 8)):
+            if rng.random() < 0.12:
+                text += " "  # a mark without a letter is not what this test is about
+                continue
+            text += rng.choice(LETTERS)
+            # at most two marks, in the canonical order HarfBuzz sorts them into (shadda first)
+            text += "".join(sorted((rng.choice(marks) for _ in range(rng.choice([0, 0, 1, 2]))),
+                                   key=lambda c: 0 if c == "\u0651" else unicodedata.combining(c)))
+        return text.strip()
+
+    checked = 0
+    for _ in range(300):
+        text = vowelled()
+        if not text:
+            continue
+        buf = hb.Buffer()
+        buf.add_str(text)
+        buf.guess_segment_properties()
+        buf.direction, buf.script = "rtl", "Arab"
+        hb.shape(hbfont, buf, {"kern": False, "curs": False})
+        # where each glyph is drawn: the pen before it plus its offset (HarfBuzz lists a mark before its letter)
+        theirs, pen = [], 0
+        for info, pos in zip(buf.glyph_infos, buf.glyph_positions):
+            theirs.append((info.codepoint, pen + pos.x_offset, pos.y_offset))
+            pen += pos.x_advance
+        ours, pen = [], 0.0
+        for g in font.shape(text, direction="rtl", kerning="none"):
+            ours.append((g.glyph, round(pen + g.x_offset), round(g.y_offset)))
+            pen += g.x_advance
+        assert sorted(ours) == sorted(theirs), text
+        checked += 1
+    assert checked > 250
+
+
 @pytest.mark.parametrize("text", ["AV", "To", "Wa", "Hello, AV kerning", "Typography", "AVATAR"])
 def test_latin_kerning_advances_equal_harfbuzz(text):
     hb, hbfont = _hb()
