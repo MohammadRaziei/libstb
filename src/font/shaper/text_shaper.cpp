@@ -11,12 +11,14 @@ namespace stb {
 
 arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offset) {
     arabic_layout r;
-    const otl::byte_view table = otl::find_table(file, font_offset, otl::make_tag('G', 'S', 'U', 'B'));
+    using otl::make_tag;
+    const std::initializer_list<std::uint32_t> scripts = {make_tag('a', 'r', 'a', 'b'), make_tag('D', 'F', 'L', 'T')};
+    r.defs = otl::gdef(otl::find_table(file, font_offset, make_tag('G', 'D', 'E', 'F')));
+    r.marks = otl::mark_positioner(otl::find_table(file, font_offset, make_tag('G', 'P', 'O', 'S')), scripts);
+    const otl::byte_view table = otl::find_table(file, font_offset, make_tag('G', 'S', 'U', 'B'));
     if (table.empty()) return r;
-    r.defs = otl::gdef(otl::find_table(file, font_offset, otl::make_tag('G', 'D', 'E', 'F')));
     r.gsub = otl::gsub_table(table);
 
-    using otl::make_tag;
     const std::uint32_t isol = make_tag('i', 's', 'o', 'l'), fina = make_tag('f', 'i', 'n', 'a'),
                         medi = make_tag('m', 'e', 'd', 'i'), init = make_tag('i', 'n', 'i', 't'),
                         rlig = make_tag('r', 'l', 'i', 'g');
@@ -40,7 +42,6 @@ arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offse
             s.push_back({{make_tag('r', 'c', 'l', 't')}, mask_all});
         return s;
     };
-    const std::initializer_list<std::uint32_t> scripts = {make_tag('a', 'r', 'a', 'b'), make_tag('D', 'F', 'L', 'T')};
     r.plan = r.gsub.make_plan(scripts, 0, stages(true));
     r.plan_plain = r.gsub.make_plan(scripts, 0, stages(false));
     r.usable = !r.plan.stages().empty();
@@ -107,7 +108,8 @@ void apply_gsub(const arabic_layout& al, const otl::shaping_plan& plan, std::vec
 namespace {
 
 // Shadda goes first among the marks of one letter, so a vowel sign stacks above it.
-void shadda_first(std::vector<visual_glyph>& out, std::size_t first) {
+template <class Glyph>
+void shadda_first(std::vector<Glyph>& out, std::size_t first) {
     for (std::size_t i = first; i < out.size();) {
         if (!arabic::is_mark(out[i].cp)) {
             ++i;
@@ -116,7 +118,7 @@ void shadda_first(std::vector<visual_glyph>& out, std::size_t first) {
         std::size_t j = i;
         while (j < out.size() && arabic::is_mark(out[j].cp)) ++j;
         std::stable_partition(out.begin() + std::ptrdiff_t(i), out.begin() + std::ptrdiff_t(j),
-                              [](const visual_glyph& s) { return s.cp == 0x0651; });
+                              [](const Glyph& s) { return s.cp == 0x0651; });
         i = j;
     }
 }
@@ -179,7 +181,7 @@ void text_shaper::append_in_visual_order(const std::vector<otl::glyph_record>& g
     const bidi::result order = bidi::resolve(classes, direction);
 
     for (std::uint32_t k : order.order) {
-        visual_glyph s{g[k].gid, g[k].cp, g[k].cluster};
+        visual_glyph s{g[k].gid, g[k].cp, g[k].cluster, g[k].attached, g[k].mark_x, g[k].mark_y};
         if (s.cp == 0x200E || s.cp == 0x200F) continue;  // LRM, RLM: only steered the order
         if (order.level[k] & 1) {
             const char32_t m = bidi::mirrored(s.cp);
@@ -205,8 +207,13 @@ void text_shaper::shape_line(std::u32string_view line, std::size_t first, const 
     std::vector<otl::glyph_record> g = to_glyphs(line, first, al);  // 1-2. glyphs in logical order
     if (al && al->usable) apply_gsub(*al, options.ligatures ? al->plan : al->plan_plain, g);  // 3. GSUB features
 
+    if (al && al->marks.usable()) {                                   // 4. GPOS mark attachment
+        shadda_first(g, 0);  // so that a vowel sign attaches to the shadda, not the other way round
+        al->marks.position(g, &al->defs);
+    }
+
     const std::size_t begin = out.size();
-    append_in_visual_order(g, options.direction, out);               // 4. visual order
+    append_in_visual_order(g, options.direction, out);               // 5. visual order
     shadda_first(out, begin);
 }
 

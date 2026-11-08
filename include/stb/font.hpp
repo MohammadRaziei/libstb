@@ -237,10 +237,11 @@ public:
     //     back to 0. Each line is shaped and ordered on its own.
     //   - Kerning (options.kerning) is added to the advance of the first glyph of the pair, so the
     //     pen needs nothing else. Marks (the harakat of Arabic script) take no advance and do not
-    //     break a pair; they are centred on the ink of the letter before them and stacked above or
-    //     below it with x_offset and y_offset. The font's GPOS mark attachment is not read, and a
-    //     mark may therefore sit up to a pixel off where draw_text puts it, which snaps it to its
-    //     pixel grid.
+    //     break a pair and are placed with x_offset and y_offset. Where the font's GPOS (features
+    //     mark and mkmk: mark to base, to ligature and to mark) has an anchor for the mark, that
+    //     decides, as in other shapers; any other mark is centred on the ink of the letter before
+    //     it and stacked above or below it.
+    //   - glyph_kind says what a glyph with glyph 0 is: a line break or a missing character.
     //
     // Only right-to-left scripts get the GSUB treatment so far: other text is one glyph per
     // character. Throws invalid_argument on malformed UTF-8, limit_error for text over 4 GiB.

@@ -9,7 +9,9 @@
 // Fonts of tests/data:
 //   libstb-test.ttf          rectangles: A advances 600, B 500, a space 300, legacy `kern` (A, B) = -100
 //   libstb-fa-gsub-test.ttf  Persian letters whose shapes all come from GSUB (checked against HarfBuzz in test_font.cpp)
-//   libstb-fa-test.ttf       Persian letters as presentation forms, with harakat
+//   libstb-fa-test.ttf       Persian letters as presentation forms, with harakat (no GPOS: marks are centred)
+//   libstb-fa-gpos-test.ttf  one letter, a lam-alef ligature and three marks with GPOS mark attachment
+//                            whose anchors give round positions (see tests/data/make_mark_test_font.py)
 
 namespace {
 
@@ -19,7 +21,6 @@ std::string data(const char* name) { return std::string(LIBSTB_TEST_DATA_DIR) + 
 stb::font rects() { return stb::font::open(data("libstb-test.ttf")); }
 stb::font gsub_font() { return stb::font::open(data("libstb-fa-gsub-test.ttf")); }
 stb::font marks_font() { return stb::font::open(data("libstb-fa-test.ttf")); }
-
 stb::font gpos_font() { return stb::font::open(data("libstb-fa-gpos-test.ttf")); }
 
 bool close_to(float a, float b) { return a - b < 1e-3f && b - a < 1e-3f; }
@@ -222,4 +223,76 @@ UTEST(libstb_font_shape_tests, test_kind_in_a_right_to_left_line) {
     ASSERT_TRUE(g[1].kind == stb::glyph_kind::normal);
     ASSERT_TRUE(g[2].kind == stb::glyph_kind::line_break);
     ASSERT_TRUE(g[3].kind == stb::glyph_kind::normal);
+}
+
+// ------------------------------------------------------------------ GPOS mark attachment
+
+namespace {
+
+// Where a glyph is drawn from the origin of the letter before it, which is what GPOS anchors give:
+// the pen after the letter (its advance) plus the mark's offset.
+float from_letter_x(const std::vector<stb::shaped_glyph>& g, std::size_t mark) { return g[mark - 1].x_advance + g[mark].x_offset; }
+
+}  // namespace
+
+UTEST(libstb_font_shape_tests, test_a_mark_goes_where_the_gpos_anchors_put_it) {
+    const stb::font f = gpos_font();
+    const std::vector<stb::shaped_glyph> above = f.shape("\u0628\u064E");  // beh + fatha
+    ASSERT_EQ(std::size_t(2), above.size());
+    ASSERT_TRUE(above[1].x_advance == 0.0f);
+    ASSERT_TRUE(close_to(from_letter_x(above, 1), 300 - 100));  // beh anchor 300, fatha anchor 100
+    ASSERT_TRUE(close_to(above[1].y_offset, 700 - 0));
+    ASSERT_TRUE(above[1].kind == stb::glyph_kind::normal);
+
+    const std::vector<stb::shaped_glyph> below = f.shape("\u0628\u0650");  // beh + kasra
+    ASSERT_EQ(std::size_t(2), below.size());
+    ASSERT_TRUE(close_to(from_letter_x(below, 1), 300 - 100));
+    ASSERT_TRUE(close_to(below[1].y_offset, -100 - 80));
+}
+
+UTEST(libstb_font_shape_tests, test_a_mark_on_a_mark_follows_it_through_mark_to_mark) {
+    const stb::font f = gpos_font();
+    for (const char* text : {"\u0628\u0651\u064E", "\u0628\u064E\u0651"}) {  // either order is typed
+        const std::vector<stb::shaped_glyph> g = f.shape(text);
+        ASSERT_EQ(std::size_t(3), g.size());
+        ASSERT_EQ(f.glyph_index(0x0651), g[1].glyph);  // shadda comes first
+        ASSERT_EQ(f.glyph_index(0x064E), g[2].glyph);
+        ASSERT_TRUE(close_to(from_letter_x(g, 1), 300 - 150));
+        ASSERT_TRUE(close_to(g[1].y_offset, 700));
+        // the fatha hangs on the shadda: its anchor (150, 300) from the shadda, which is itself at (150, 700)
+        ASSERT_TRUE(close_to(g[0].x_advance + g[2].x_offset, 150 + 150 - 100));
+        ASSERT_TRUE(close_to(g[2].y_offset, 700 + 300 - 0));
+        ASSERT_TRUE(g[1].x_advance == 0.0f && g[2].x_advance == 0.0f);
+    }
+}
+
+UTEST(libstb_font_shape_tests, test_a_mark_on_a_ligature_hangs_on_its_last_component) {
+    const stb::font f = gpos_font();
+    const std::vector<stb::shaped_glyph> g = f.shape("\u0644\u0627\u064E");  // lam + alef + fatha
+    ASSERT_EQ(std::size_t(2), g.size());
+    ASSERT_EQ(f.glyph_index(0xFEFB), g[0].glyph);
+    ASSERT_TRUE(close_to(from_letter_x(g, 1), 700 - 100));
+    ASSERT_TRUE(close_to(g[1].y_offset, 900));
+}
+
+UTEST(libstb_font_shape_tests, test_a_mark_the_font_has_no_anchor_for_is_centred_on_its_letter) {
+    const stb::font f = gpos_font();
+    const std::vector<stb::shaped_glyph> g = f.shape("\u0627\u064E");  // alef + fatha: alef has no anchors
+    ASSERT_EQ(std::size_t(2), g.size());
+    const stb::glyph_metrics alef = f.glyph_info(g[0].glyph), fatha = f.glyph_info(g[1].glyph);
+    ASSERT_TRUE(close_to(g[0].x_advance + g[1].x_offset + 0.5f * (fatha.x_min + fatha.x_max),
+                         0.5f * (alef.x_min + alef.x_max)));
+    ASSERT_TRUE(close_to(fatha.y_min + g[1].y_offset, alef.y_max + 0.05f * 1000));
+}
+
+UTEST(libstb_font_shape_tests, test_gpos_marks_stay_with_their_own_letter) {
+    const stb::font f = gpos_font();
+    // beh + fatha, beh + kasra: in visual order the second letter is on the left; each mark sits on its own letter
+    const std::vector<stb::shaped_glyph> g = f.shape("\u0628\u064E\u0628\u0650");
+    ASSERT_EQ(std::size_t(4), g.size());
+    ASSERT_EQ(f.glyph_index(0x0650), g[1].glyph);
+    ASSERT_TRUE(close_to(from_letter_x(g, 1), 200));
+    ASSERT_TRUE(close_to(g[1].y_offset, -180));
+    ASSERT_TRUE(close_to(from_letter_x(g, 3), 200));
+    ASSERT_TRUE(close_to(g[3].y_offset, 700));
 }

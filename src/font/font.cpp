@@ -154,8 +154,9 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
     const float ascent = asc * s;
     const float line_h = (asc - desc + gap) * s;
 
-    // Marks (harakat) are placed without a GPOS table: centred on the ink of the letter before them
-    // and stacked above or below its ink box. `base` is that letter.
+    // A mark the font's GPOS has no anchor for (harakat in a font without mark attachment) is
+    // centred on the ink of the letter before it and stacked above or below its ink box. `base` is
+    // that letter.
     struct ink_box { bool valid = false; float cx = 0, top = 0, bottom = 0; } base;
     const float mark_gap = 0.05f * px;
 
@@ -164,6 +165,7 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
     int line = 0;
     int prev = 0;
     bool has_prev = false;
+    float base_x = 0;  // the pen where the last glyph that takes room was put: GPOS marks hang on it
     for (const visual_glyph& sg : glyphs) {
         if (sg.cp == U'\n' && sg.gid == 0) {
             lay.width = std::max(lay.width, x);
@@ -176,6 +178,10 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
         if (sg.cp == U'\r') continue;
         const int gid = int(sg.gid);
         const float baseline = ascent + line * line_h;
+        if (sg.attached && has_prev) {  // placed by the font's GPOS: takes no room, breaks no pair
+            lay.items.push_back({gid, base_x + float(sg.mark_x) * s, baseline - float(sg.mark_y) * s});
+            continue;
+        }
         const truetype::box ink = f.face.bitmap_box(gid, s, s);
         const int bx0 = ink.x0, by0 = ink.y0, bx1 = ink.x1, by1 = ink.y1;
         const bool has_ink = bx1 > bx0 && by1 > by0;
@@ -195,6 +201,7 @@ layout do_layout(const font::impl& f, const std::u32string& logical, float px) {
         int adv = 0, lsb = 0;
         f.face.h_metrics(gid, adv, lsb);
         lay.items.push_back({gid, x, baseline});
+        base_x = x;
         base = has_ink ? ink_box{true, x + 0.5f * float(bx0 + bx1), float(by0), float(by1)} : ink_box{};
         x += adv * s;
         prev = gid;
@@ -452,7 +459,8 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options
 
     // Positions in font units, with the same rules do_layout applies to pixels: a glyph advances by
     // its hmtx advance, kerning with the glyph before it goes into that glyph's advance, and a mark
-    // takes no room, is centred on the ink of the letter before it and stacks above or below it.
+    // takes no room. A mark goes where the font's GPOS says (vg.attached); without an anchor it is
+    // centred on the ink of the letter before it and stacks above or below it.
     const float mark_gap = 0.05f * float(design_metrics().units_per_em);
     struct ink_box {
         bool valid = false;
@@ -482,6 +490,12 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options
             base = ink_box{};
             continue;
         }
+        if (vg.attached && prev != no_glyph) {  // placed by the font's GPOS, from the origin of its letter
+            sg.y_offset = float(vg.mark_y);
+            marks.push_back({out.size(), prev, float(vg.mark_x)});
+            out.push_back(sg);  // no advance, and the kerning pair goes on across it
+            continue;
+        }
         const glyph_metrics gm = glyph_info(vg.gid);
         const bool has_ink = gm.has_outline && gm.x_max > gm.x_min && gm.y_max > gm.y_min;
         if (base.valid && has_ink && is_arabic_mark(vg.cp)) {
@@ -508,6 +522,7 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options
     // A mark is drawn from the pen where it comes, which is after the advance of its letter (kerning
     // included, known only now): the offset takes that advance back.
     for (const attached_mark& m : marks) out[m.glyph].x_offset = m.x - out[m.letter].x_advance;
+
     return out;
 }
 
