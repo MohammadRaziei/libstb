@@ -140,14 +140,22 @@ struct shape_options {
     bool ligatures = true;
 };
 
+// What a shaped glyph is. `glyph == 0` alone does not say: a line break and a character the font has
+// no glyph for both have glyph 0.
+//   normal      a glyph of the font
+//   notdef      a character the font has no glyph for: glyph 0 is the font's ".notdef" glyph, to draw
+//   line_break  a '\n': nothing to draw, the caller starts the next line
+enum class glyph_kind : std::uint8_t { normal, notdef, line_break };
+
 // One glyph of the result, with the pen implied: a glyph is drawn at (pen.x + x_offset, pen.y +
 // y_offset) and the pen then moves right by x_advance. All in font units, y up.
 struct shaped_glyph {
-    std::uint32_t glyph = 0;    // glyph index of the font (what outline() and glyph_info() take); 0 for a line break
+    std::uint32_t glyph = 0;    // glyph index of the font (what outline() and glyph_info() take); 0 for a line break or a missing glyph
     std::uint32_t cluster = 0;  // byte offset in the UTF-8 text of the first character this glyph stands for
     float x_advance = 0;        // the glyph's advance plus the kerning to the next glyph; 0 for a mark
     float x_offset = 0;         // mark placement: from the pen to where the glyph is drawn
     float y_offset = 0;
+    glyph_kind kind = glyph_kind::normal;
 };
 
 // A TrueType/OpenType font. Cheap to copy (copies share one immutable

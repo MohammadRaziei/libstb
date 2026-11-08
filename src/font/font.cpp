@@ -474,7 +474,9 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options
         shaped_glyph sg;
         sg.glyph = vg.gid;
         sg.cluster = byte_at[vg.cluster];
+        sg.kind = vg.gid == 0 ? glyph_kind::notdef : glyph_kind::normal;
         if (vg.cp == U'\n' && vg.gid == 0) {  // a new line: the caller moves the pen
+            sg.kind = glyph_kind::line_break;
             out.push_back(sg);
             prev = no_glyph;
             base = ink_box{};

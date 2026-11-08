@@ -20,6 +20,8 @@ stb::font rects() { return stb::font::open(data("libstb-test.ttf")); }
 stb::font gsub_font() { return stb::font::open(data("libstb-fa-gsub-test.ttf")); }
 stb::font marks_font() { return stb::font::open(data("libstb-fa-test.ttf")); }
 
+stb::font gpos_font() { return stb::font::open(data("libstb-fa-gpos-test.ttf")); }
+
 bool close_to(float a, float b) { return a - b < 1e-3f && b - a < 1e-3f; }
 
 U clusters(const std::vector<stb::shaped_glyph>& g) {
@@ -195,4 +197,29 @@ UTEST(libstb_font_shape_tests, test_malformed_utf8_is_refused) {
     const stb::font f = rects();
     ASSERT_THROWS(f.shape("A\xFF"), std::invalid_argument);
     ASSERT_THROWS(f.shape("\xC3"), std::invalid_argument);
+}
+
+// ------------------------------------------------------------------ glyph_kind
+
+UTEST(libstb_font_shape_tests, test_a_line_break_and_a_missing_glyph_are_told_apart_by_kind) {
+    const stb::font f = rects();
+    const std::vector<stb::shaped_glyph> g = f.shape("A\nC");  // the font has no C
+    ASSERT_EQ(std::size_t(3), g.size());
+    ASSERT_TRUE(g[0].kind == stb::glyph_kind::normal);
+    ASSERT_TRUE(g[1].kind == stb::glyph_kind::line_break);
+    ASSERT_TRUE(g[2].kind == stb::glyph_kind::notdef);
+    ASSERT_EQ(std::uint32_t(0), g[1].glyph);  // both have glyph 0: only the kind differs
+    ASSERT_EQ(std::uint32_t(0), g[2].glyph);
+    ASSERT_TRUE(g[2].x_advance == 500.0f);  // the .notdef glyph is drawn and moves the pen
+}
+
+UTEST(libstb_font_shape_tests, test_kind_in_a_right_to_left_line) {
+    const stb::font f = gpos_font();
+    // beh, a character the font lacks (seen), a line break
+    const std::vector<stb::shaped_glyph> g = f.shape("\u0628\u0633\n\u0628");
+    ASSERT_EQ(std::size_t(4), g.size());
+    ASSERT_TRUE(g[0].kind == stb::glyph_kind::notdef);  // visual order: seen is on the left
+    ASSERT_TRUE(g[1].kind == stb::glyph_kind::normal);
+    ASSERT_TRUE(g[2].kind == stb::glyph_kind::line_break);
+    ASSERT_TRUE(g[3].kind == stb::glyph_kind::normal);
 }
