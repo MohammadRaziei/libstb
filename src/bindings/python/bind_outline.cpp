@@ -51,11 +51,12 @@ stb::stroke_style make_style(float width, const std::string& cap, const std::str
 
 stb::matrix matrix_or_identity(const std::optional<stb::matrix>& m) { return m ? *m : stb::matrix{}; }
 
-stb::draw_options make_options(const std::optional<stb::matrix>& m, nb::handle blend, float opacity) {
+stb::draw_options make_options(const std::optional<stb::matrix>& m, nb::handle blend, float opacity, nb::handle composite) {
     stb::draw_options o;
     o.transform = matrix_or_identity(m);
     o.blend = to_blend_mode(blend);
     o.opacity = opacity;
+    o.composite = to_composite_op(composite);
     return o;
 }
 
@@ -352,22 +353,23 @@ void bind_outline(nb::module_& m) {
         nb::type<stb::image>(), "fill_outline",
         nb::cpp_function(
             [](const stb::image& self, const outline& p, nb::handle color, const std::string& rule,
-               const std::optional<matrix>& t, nb::handle blend, float opacity) {
+               const std::optional<matrix>& t, nb::handle blend, float opacity, nb::handle composite) {
                 const stb::color c = text_colour(color);
                 const stb::fill_rule r = to_rule(rule);
-                const stb::draw_options o = make_options(t, blend, opacity);
+                const stb::draw_options o = make_options(t, blend, opacity, composite);
                 nb::gil_scoped_release unlock;
                 stb::image out = self.copy();
                 stb::fill(out, p, c, r, o);
                 return out;
             },
             nb::name("fill_outline"), nb::scope(nb::type<stb::image>()), nb::is_method(), "outline"_a, "color"_a, nb::kw_only(),
-            "rule"_a = "non_zero", "matrix"_a = nb::none(), "blend"_a = "normal", "opacity"_a = 1.0f,
+            "rule"_a = "non_zero", "matrix"_a = nb::none(), "blend"_a = "normal", "opacity"_a = 1.0f, "composite"_a = "source_over",
             "A copy of this Image with the inside of `outline` filled with `color` (an int, (r, g, b), (r, g, b, a) or a \n"
             "string such as \"red\"), anti-aliased and blended like Image.blend. `rule` is \"non_zero\" or \"even_odd\"; \n"
             "`matrix` (a Matrix) moves the outline to pixel positions; `blend` is a BlendMode or its name; `opacity` \n"
-            "(0..1) scales the colour's alpha. Parts outside the image are ignored. ValueError for a bad rule, \n"
-            "blend or opacity.\n\n"
+            "(0..1) scales the colour's alpha; `composite` is a CompositeOp or its name (\"source_over\", the usual \"over\", by \n"
+            "default; any other operator acts only where the outline is, by its coverage, so \"clear\" cuts a smooth hole). \n"
+            "Parts outside the image are ignored. ValueError for a bad rule, blend, composite or opacity.\n\n"
             ">>> img.fill_outline(libstb.Outline().add_circle(50, 50, 30), \"#09f\")"));
 
     nb::setattr(
@@ -375,10 +377,10 @@ void bind_outline(nb::module_& m) {
         nb::cpp_function(
             [](const stb::image& self, const outline& p, nb::handle color, float width, const std::string& cap,
                const std::string& join, float miter_limit, const std::optional<std::vector<float>>& dashes,
-               float dash_offset, const std::optional<matrix>& t, nb::handle blend, float opacity) {
+               float dash_offset, const std::optional<matrix>& t, nb::handle blend, float opacity, nb::handle composite) {
                 const stb::color c = text_colour(color);
                 const stb::stroke_style st = make_style(width, cap, join, miter_limit, dashes, dash_offset);
-                const stb::draw_options o = make_options(t, blend, opacity);
+                const stb::draw_options o = make_options(t, blend, opacity, composite);
                 nb::gil_scoped_release unlock;
                 stb::image out = self.copy();
                 stb::stroke(out, p, c, st, o);
@@ -386,7 +388,7 @@ void bind_outline(nb::module_& m) {
             },
             nb::name("stroke_outline"), nb::scope(nb::type<stb::image>()), nb::is_method(), "outline"_a, "color"_a, "width"_a = 1.f,
             nb::kw_only(), "cap"_a = "butt", "join"_a = "miter", "miter_limit"_a = 4.f, "dashes"_a = nb::none(),
-            "dash_offset"_a = 0.f, "matrix"_a = nb::none(), "blend"_a = "normal", "opacity"_a = 1.0f,
+            "dash_offset"_a = 0.f, "matrix"_a = nb::none(), "blend"_a = "normal", "opacity"_a = 1.0f, "composite"_a = "source_over",
             "A copy of this Image with the outline of `outline` drawn in `color`, `width` wide (in outline units; a \n"
             "`matrix` scales it). `cap` is \"butt\", \"round\" or \"square\" (the ends of an open contour); `join` is \n"
             "\"miter\", \"round\" or \"bevel\" (the corners); a miter longer than `miter_limit` * width / 2 becomes a \n"
@@ -429,6 +431,10 @@ void bind_outline(nb::module_& m) {
              "Move the outline to where it is drawn (a Matrix).")
         .def("blend", [](outline_item& t, nb::handle mode) -> outline_item& { return t.blend(to_blend_mode(mode)); }, "mode"_a,
              keep, "How the colours mix: a BlendMode or its name.")
+        .def("composite", [](outline_item& t, nb::handle op) -> outline_item& { return t.composite(to_composite_op(op)); },
+             "op"_a, keep,
+             "How the alpha is shared with what is below: a CompositeOp or its name (\"source_over\" by default). Any "
+             "other operator acts only where the outline is, by its coverage.")
         .def("opacity", [](outline_item& t, float o) -> outline_item& { return t.opacity(o); }, "opacity"_a, keep,
              "Scales the alpha, 0..1. ValueError outside 0..1.");
 

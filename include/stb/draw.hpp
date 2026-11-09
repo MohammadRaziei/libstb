@@ -353,6 +353,13 @@ public:
             options_.opacity = o;
             return *this;
         }
+        // How the alpha is shared with what is below (composite_op::source_over by default). The other operators act
+        // only where the outline is, in proportion to its coverage (see draw_options).
+        outline_item& composite(composite_op op) {
+            check();
+            options_.composite = op;
+            return *this;
+        }
 
     private:
         friend class canvas;

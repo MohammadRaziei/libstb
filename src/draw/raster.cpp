@@ -119,6 +119,46 @@ void check_options(const image& img, const draw_options& options) {
     }
 }
 
+std::uint8_t unit_to_byte(float v) { return std::uint8_t(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f); }
+
+// One pixel of the image moved towards the pixel the operator made, by `k` (the coverage, 0..1). With alpha the
+// mix is done on premultiplied colours (the right one for alpha), without it directly.
+void mix_pixel(std::uint8_t* d, const std::uint8_t* r, int colours, bool alpha, float k) {
+    if (!alpha) {
+        for (int i = 0; i < colours; ++i) d[i] = unit_to_byte((float(d[i]) + (float(r[i]) - float(d[i])) * k) / 255.f);
+        return;
+    }
+    const float da = float(d[colours]) / 255.f, ra = float(r[colours]) / 255.f;
+    const float oa = da + (ra - da) * k;
+    for (int i = 0; i < colours; ++i) {
+        const float pd = float(d[i]) / 255.f * da, pr = float(r[i]) / 255.f * ra;
+        d[i] = unit_to_byte(oa > 0.f ? (pd + (pr - pd) * k) / oa : 0.f);
+    }
+    d[colours] = unit_to_byte(oa);
+}
+
+// The Porter-Duff operators other than source_over. image::blend runs the operator on a copy of the part of the image
+// under the shape's bounding box, with the colour at its full alpha (the coverage is NOT in it); then each covered
+// pixel of the image moves towards that result by its coverage. Pixels the shape does not cover stay as they were.
+void paint_composite(image& img, const color& c, const draw_options& options, const std::vector<span>& spans, int x0,
+                     int y0, int x1, int y1) {
+    const int w = x1 - x0, h = y1 - y0;
+    image result = img.crop(x0, y0, w, h);
+    image source(w, h, pixel_format::rgba);
+    source.fill(c);
+    result.blend(source, 0, 0, options.blend, options.opacity, options.composite);
+
+    const int ch = img.channels();
+    const bool alpha = ch == 2 || ch == 4;
+    const int colours = alpha ? ch - 1 : ch;
+    for (const span& s : spans) {
+        std::uint8_t* d = img.data() + std::size_t(s.y) * img.stride() + std::size_t(s.x) * std::size_t(ch);
+        const std::uint8_t* r = result.data() + std::size_t(s.y - y0) * result.stride() + std::size_t(s.x - x0) * std::size_t(ch);
+        const float k = float(s.coverage) / 255.f;
+        for (int i = 0; i < s.len; ++i, d += ch, r += ch) mix_pixel(d, r, colours, alpha, k);
+    }
+}
+
 // Paints the spans that `produce` reports as `c` onto `img`: a layer the size of their bounding box
 // holds the colour with the coverage as alpha, and image::blend puts it on the image (so the blend
 // mode, the opacity and the pixel formats work exactly as for any other overlay).
@@ -136,7 +176,12 @@ void paint(image& img, const color& c, const draw_options& options, Produce&& pr
             y1 = std::max(y1, s.y + 1);
         }
     });
-    if (spans.empty() || c.a() == 0 || options.opacity == 0.f) return;
+    if (spans.empty()) return;
+    if (options.composite != composite_op::source_over) {
+        paint_composite(img, c, options, spans, x0, y0, x1, y1);
+        return;
+    }
+    if (c.a() == 0 || options.opacity == 0.f) return;
 
     image layer(x1 - x0, y1 - y0, pixel_format::rgba);
     layer.fill(color(c.r(), c.g(), c.b(), 0));

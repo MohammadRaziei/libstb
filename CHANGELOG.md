@@ -12,7 +12,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   `color::try_parse(text, &used)` (no exception, reads a prefix) understand `rgb()`, `rgba()`, `hsl()` and `hsla()` in the
   comma and the space/slash forms, with percentages, `deg`/`grad`/`rad`/`turn` hues and clamping, as CSS does.
 - **Porter-Duff operators.** `enum class composite_op` (13 operators) and a last parameter `op` of `image::blend` (Python:
-  `CompositeOp`, `Image.blend(..., op=)`, and `canvas::image_item::composite(op)` / `CanvasImage.composite(op)`); `blend_mode::exclusion` (`BlendMode.EXCLUSION`).
+  `CompositeOp`, `Image.blend(..., op=)`, `canvas::image_item::composite(op)` / `CanvasImage.composite(op)`, and for shapes `draw_options::composite`, `canvas::outline_item::composite(op)`, `Image.fill_outline/stroke_outline(composite=)`, `CanvasOutline.composite(op)`: there an operator other than `source_over` acts only where the shape is, by its coverage, so `clear` cuts a smooth hole); `blend_mode::exclusion` (`BlendMode.EXCLUSION`).
 - **Geometry.** `outline::arc_to` (the SVG endpoint arc, as cubics), `outline::tight_bounds()` (exact box, curve extremes
   instead of control points), `matrix::map_rect` and `matrix::map(const point*, point*, n)`; in Python `Outline.arc_to`,
   `Outline.tight_bounds`, `Matrix.map_rect`, `Matrix.map_points`.

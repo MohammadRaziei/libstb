@@ -98,6 +98,25 @@ def solid4(w, h, v):
     return stb.Image(np.full((h, w, 4), v, np.uint8))
 
 
+def test_fill_outline_with_clear_cuts_a_hole_by_coverage():
+    base = solid4(20, 20, 255)
+    circle = stb.Outline().add_circle(10, 10, 6)
+    out = np.asarray(base.fill_outline(circle, (0, 0, 0), composite="clear"))
+    assert out[10, 10, 3] == 0 and out[0, 0, 3] == 255 and out[19, 19, 3] == 255
+    assert ((out[..., 3] > 0) & (out[..., 3] < 255)).sum() > 8
+    plain = np.asarray(base.fill_outline(circle, (0, 0, 0)))
+    assert plain[10, 10, 3] == 255            # the default is still "over"
+    with pytest.raises(ValueError):
+        base.fill_outline(circle, (0, 0, 0), composite="xor")
+
+
+def test_canvas_outline_composite():
+    c = stb.Canvas(solid4(20, 20, 255))
+    c.add_outline(stb.Outline().add_circle(10, 10, 6)).fill((0, 0, 0)).composite("clear")
+    out = np.asarray(c.finish())
+    assert out[10, 10, 3] == 0 and out[0, 0, 3] == 255
+
+
 # -------------------------------------------------------------------------------------------- geometry
 
 

@@ -421,3 +421,59 @@ UTEST(libstb_blend_tests, test_a_canvas_image_takes_a_composite_operator) {
     ASSERT_EQ(0, out(2, 0, 3));
     ASSERT_EQ(200, out(3, 0, 3));
 }
+
+// ------------------------------------------------------ operators on shapes (by coverage)
+
+namespace {
+stb::outline circle() {
+    stb::outline o;
+    o.add_circle(10.f, 10.f, 6.f);
+    return o;
+}
+stb::draw_options with_composite(composite_op op) {
+    stb::draw_options o;
+    o.composite = op;
+    return o;
+}
+}  // namespace
+
+UTEST(libstb_blend_tests, test_clear_cuts_a_smooth_hole_in_the_shape_and_leaves_the_rest) {
+    stb::image img = solid(20, 20, 4, 255);
+    stb::fill(img, circle(), stb::color(0, 0, 0), stb::fill_rule::non_zero, with_composite(composite_op::clear));
+    ASSERT_EQ(0, img(10, 10, 3));    // inside: gone
+    ASSERT_EQ(255, img(0, 0, 3));    // far outside the circle, inside its bounding box's corner: untouched
+    ASSERT_EQ(255, img(19, 19, 3));  // outside the shape's bounding box
+    int partial = 0;
+    for (int y = 0; y < 20; ++y)
+        for (int x = 0; x < 20; ++x) partial += img(x, y, 3) > 0 && img(x, y, 3) < 255 ? 1 : 0;
+    ASSERT_TRUE(partial > 8);        // the edge is anti-aliased, not a staircase
+}
+
+UTEST(libstb_blend_tests, test_other_operators_act_where_the_shape_is) {
+    stb::image keep = solid(20, 20, 4, 255);
+    stb::fill(keep, circle(), stb::color(0, 0, 0, 128), stb::fill_rule::non_zero, with_composite(composite_op::destination_in));
+    ASSERT_EQ(128, keep(10, 10, 3));  // 255 * (128 / 255) where the circle is
+    ASSERT_EQ(255, keep(0, 0, 3));    // elsewhere: as it was
+    ASSERT_EQ(255, keep(19, 0, 3));
+
+    stb::image src = solid(20, 20, 4, 200);
+    stb::fill(src, circle(), stb::color(10, 20, 30, 255), stb::fill_rule::non_zero, with_composite(composite_op::source_in));
+    ASSERT_EQ(10, src(10, 10, 0));    // the colour of the circle,
+    ASSERT_EQ(200, src(10, 10, 3));   // with the alpha of what was below (source_in: sa * ab)
+    ASSERT_EQ(200, src(0, 0, 0));     // elsewhere: as it was
+}
+
+UTEST(libstb_blend_tests, test_an_operator_on_an_image_without_alpha_mixes_by_coverage) {
+    stb::image img = solid(20, 20, 3, 200);
+    stb::fill(img, circle(), stb::color(0, 0, 0), stb::fill_rule::non_zero, with_composite(composite_op::source));
+    ASSERT_EQ(0, img(10, 10, 0));
+    ASSERT_EQ(200, img(0, 0, 0));
+}
+
+UTEST(libstb_blend_tests, test_a_canvas_outline_takes_a_composite_operator) {
+    stb::canvas c(solid(20, 20, 4, 255));
+    c.add_outline(circle()).fill(stb::color(0, 0, 0)).composite(composite_op::clear);
+    const stb::image out = c.finish();
+    ASSERT_EQ(0, out(10, 10, 3));
+    ASSERT_EQ(255, out(0, 0, 3));
+}

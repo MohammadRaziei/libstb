@@ -123,10 +123,17 @@ STB_API void rasterize_stroke(const outline& p, const stroke_style& style, const
 //   transform   moves the outline to pixel positions
 //   blend       how the colour mixes with what is below (see image::blend)
 //   opacity     0..1, scales the colour's own alpha
+//   composite   how the alpha is shared with what is below (see composite_op). The usual
+//               source_over is the plain "over". Any other operator acts only where the shape is,
+//               in proportion to its coverage: a pixel half covered gets the middle between what
+//               was there and what the operator makes of it, so  fill(img, circle, c) with
+//               composite_op::clear cuts a smooth hole in the shape of the circle and leaves the
+//               rest of the image alone (the way Skia and Cairo's bounded operators work).
 struct draw_options {
     matrix transform;
     blend_mode blend = blend_mode::normal;
     float opacity = 1.f;
+    composite_op composite = composite_op::source_over;
 };
 
 // Fills the inside of `p` with `c`, anti-aliased, blended over `img` like image::blend does with a
