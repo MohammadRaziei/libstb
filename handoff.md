@@ -281,3 +281,12 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
   دستور بالای `reference.c` را اجرا کن و خروجی را در `reference_hashes.h` بگذار. برای پیدا کردن اولین پیکسل متفاوت:
   `STB_RASTER_DUMP=dir ./test_stb_cpp` و `./reference dir2` و فایل‌های `.bin` را مقایسه کن.
 - ASan/UBSan روی تست‌های raster/outline/matrix تمیز بود. یک یافته‌ی UBSan از قبل در کد resize/SIMD هست (store ناهم‌تراز `double` در `emmintrin.h`)؛ ربطی به این تغییرها ندارد.
+
+## 2026-11-09: بررسی leak و issue #4 (فقط بررسی، کدی عوض نشد)
+
+- **leak:** روی بیلد لینوکس (CPython 3.12) ۵۰۰۰ تکرار از copy، DLPack، resize، encode، to_pil، Font.shape، draw_text، Canvas و مسیر خطا: RSS ثابت (36.6 MB). پیام
+  `nanobind: leaked ...` در خروج فقط با thread daemon که هنوز Image نگه داشته بازتولید شد (رفتار CPython). چهار شکل دیگر (handler در `__main__`، handler نگه‌دارنده‌ی Image،
+  BufferingHandler با DLPack، cycle ساده) پیام ندادند؛ جمله‌ی «هنوز باز» بالا در بخش leak احتمالاً قدیمی است (مثال 15 را اجرا نکردم).
+  دو جای عمدی: `bridge_state` در `bind_logging.cpp` هرگز آزاد نمی‌شود و `KeepAlive` بدون interpreter delete نمی‌کند. پیشنهاد (تأیید نشده): وصل کردن `bridge_state` به teardown ماژول و تست «خروج بدون پیام».
+- **issue #4** (novasvg نسخه‌های محلی دارد چون libstb ندارد): ۱) Porter-Duff و `blend_mode::exclusion`، ۲) رنگ CSS (۱۴۸ نام، rgb/hsl، `color::try_parse`)، ۳) `matrix::map_rect` و `map` آرایه‌ای،
+  ۴) `outline::arc_to`، ۵) `outline::tight_bounds`. API پیشنهادی در چت نوشته شد و **هنوز تأیید کاربر نیامده**؛ پیاده‌سازی نشده. ترتیب پیشنهادی: ۵، ۳، ۴، ۲، ۱.
