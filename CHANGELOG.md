@@ -7,6 +7,8 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-09
+
 ### Added
 - **CSS colours.** `color::from_name` knows all 148 CSS keywords (and `transparent`); `color::from_string` and the new
   `color::try_parse(text, &used)` (no exception, reads a prefix) understand `rgb()`, `rgba()`, `hsl()` and `hsla()` in the
@@ -583,7 +585,8 @@ First state: C++17 core over the stb single-header libraries with image decoding
 encoding (PNG, JPEG, BMP, TGA), resizing with selectable filters, TrueType font rendering, and a
 nanobind Python binding.
 
-[Unreleased]: https://github.com/mohammadraziei/libstb/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/mohammadraziei/libstb/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mohammadraziei/libstb/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mohammadraziei/libstb/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mohammadraziei/libstb/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mohammadraziei/libstb/compare/v0.6.0...v0.7.0
