@@ -107,16 +107,16 @@ template <int SC, int DC>
 void convert_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { convert_row<SC, DC>(s, d, n); }
 template <int SC, int DC>
 void composite_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { composite_row<SC, DC>(s, d, n); }
-template <bool Inverse>
-void premultiply_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { detail::premultiply_row<Inverse>(s, d, n); }
+template <detail::premultiply_kind K>
+void premultiply_base(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { detail::premultiply_row<K>(s, d, n); }
 
 #ifdef STB_HAVE_AVX2_DISPATCH
 template <int SC, int DC>
 STB_TARGET_AVX2 void convert_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { convert_row<SC, DC>(s, d, n); }
 template <int SC, int DC>
 STB_TARGET_AVX2 void composite_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { composite_row<SC, DC>(s, d, n); }
-template <bool Inverse>
-STB_TARGET_AVX2 void premultiply_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { detail::premultiply_row<Inverse>(s, d, n); }
+template <detail::premultiply_kind K>
+STB_TARGET_AVX2 void premultiply_avx2(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { detail::premultiply_row<K>(s, d, n); }
 #define STB_PICK(FN, SC, DC) (avx ? &FN##_avx2<SC, DC> : &FN##_base<SC, DC>)
 #else
 #define STB_PICK(FN, SC, DC) (&FN##_base<SC, DC>)
@@ -146,20 +146,33 @@ row_fn pick_composite(int sc, int dc, backend be) {  // sc is 2 or 4
     }
 }
 
-row_fn pick_premultiply(bool inverse, backend be) {
-    if (be == backend::scalar) return detail::pick_premultiply_scalar(inverse);
+row_fn pick_premultiply(detail::premultiply_kind kind, backend be) {
+    using kind_t = detail::premultiply_kind;
+    if (be == backend::scalar) return detail::pick_premultiply_scalar(kind);
 #ifdef STB_HAVE_AVX2_DISPATCH
-    if (be == backend::avx2) return inverse ? &premultiply_avx2<true> : &premultiply_avx2<false>;
+    if (be == backend::avx2) {
+        switch (kind) {
+            case kind_t::to_argb: return &premultiply_avx2<kind_t::to_argb>;
+            case kind_t::from_argb: return &premultiply_avx2<kind_t::from_argb>;
+            case kind_t::to_rgba: return &premultiply_avx2<kind_t::to_rgba>;
+            default: return &premultiply_avx2<kind_t::from_rgba>;
+        }
+    }
 #endif
-    return inverse ? &premultiply_base<true> : &premultiply_base<false>;
+    switch (kind) {
+        case kind_t::to_argb: return &premultiply_base<kind_t::to_argb>;
+        case kind_t::from_argb: return &premultiply_base<kind_t::from_argb>;
+        case kind_t::to_rgba: return &premultiply_base<kind_t::to_rgba>;
+        default: return &premultiply_base<kind_t::from_rgba>;
+    }
 }
 
 // Runs one of the row kernels over a width x height block whose rows are `*_stride` bytes
 // apart. Rows that are packed back to back (and equal strides) are one call.
-void premultiply_rows(bool inverse, std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
+void premultiply_rows(detail::premultiply_kind kind, std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
                       std::size_t src_stride, int width, int height) noexcept {
     if (width <= 0 || height <= 0) return;
-    const row_fn fn = pick_premultiply(inverse, detail::current_backend());
+    const row_fn fn = pick_premultiply(kind, detail::current_backend());
     const std::size_t w = std::size_t(width), h = std::size_t(height);
     if (dst_stride == 4 * w && src_stride == 4 * w) {
         fn(src, dst, w * h);
@@ -414,14 +427,50 @@ image image::flatten(std::array<std::uint8_t, 3> background) const& {
     return std::move(base).blend(*this);
 }
 
+// gray + alpha: one colour channel per pixel, so the same channel arithmetic as the four-channel kernels
+// (no packed-word trick and no backend dispatch: it is the less common format).
+namespace {
+template <bool Inverse>
+image premultiply_gray_alpha(const image& in) {
+    image out = allocate(in.width(), in.height(), 2);
+    for (int y = 0; y < in.height(); ++y) {
+        const std::uint8_t* s = in.data() + std::size_t(y) * in.stride();
+        std::uint8_t* d = out.data() + std::size_t(y) * out.stride();
+        for (int x = 0; x < in.width(); ++x, s += 2, d += 2) {
+            d[0] = std::uint8_t(Inverse ? detail::unpremultiply_channel(s[0], s[1]) : detail::premultiply_channel(s[0], s[1]));
+            d[1] = s[1];
+        }
+    }
+    return out;
+}
+}  // namespace
+
+image image::premultiplied() const {
+    need_pixels(*this);
+    if (channels_ == 2) return premultiply_gray_alpha<false>(*this);
+    if (channels_ != 4) return copy();  // no alpha: nothing to multiply
+    image out = allocate(width_, height_, 4);
+    premultiply_rows(detail::premultiply_kind::to_rgba, out.data(), out.stride(), data(), stride(), width_, height_);
+    return out;
+}
+
+image image::unpremultiplied() const {
+    need_pixels(*this);
+    if (channels_ == 2) return premultiply_gray_alpha<true>(*this);
+    if (channels_ != 4) return copy();
+    image out = allocate(width_, height_, 4);
+    premultiply_rows(detail::premultiply_kind::from_rgba, out.data(), out.stride(), data(), stride(), width_, height_);
+    return out;
+}
+
 void rgba_to_premultiplied_argb(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
                                 std::size_t src_stride, int width, int height) noexcept {
-    premultiply_rows(false, dst, dst_stride, src, src_stride, width, height);
+    premultiply_rows(detail::premultiply_kind::to_argb, dst, dst_stride, src, src_stride, width, height);
 }
 
 void premultiplied_argb_to_rgba(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
                                 std::size_t src_stride, int width, int height) noexcept {
-    premultiply_rows(true, dst, dst_stride, src, src_stride, width, height);
+    premultiply_rows(detail::premultiply_kind::from_argb, dst, dst_stride, src, src_stride, width, height);
 }
 
 }  // namespace stb

@@ -7,6 +7,13 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Added
+- **`image::premultiplied()` and `image::unpremultiplied()`** (Python: `Image.premultiplied()`, `Image.unpremultiplied()`):
+  a copy with the colour channels multiplied by alpha (`c * a / 255`) and the inverse (`c * 255 / a`, alpha 0 gives zeros),
+  for `rgba` and `gray_alpha`; other formats come back as a copy. The bytes keep the order R, G, B, A and the image does not
+  track that it is premultiplied (the default storage stays straight RGBA). Same integers as `rgba_to_premultiplied_argb`
+  (the channel arithmetic is now shared), run by the SIMD backend in use for RGBA.
+
 ### Fixed
 - `color::try_parse` / `from_string`: `hsl()` and `hsla()` are converted in float32, as browsers do, so a value that is a
   .5 tie in exact arithmetic rounds the way Chromium paints it (`hsl(90, 100%, 76.2745098039%)` is now R=195, not 194).

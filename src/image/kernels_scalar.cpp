@@ -14,8 +14,8 @@ void convert_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { con
 template <int SC, int DC>
 void composite_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { composite_row<SC, DC>(s, d, n); }
 
-template <bool Inverse>
-void premultiply_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { premultiply_row<Inverse>(s, d, n); }
+template <premultiply_kind K>
+void premultiply_scalar(const std::uint8_t* s, std::uint8_t* d, std::size_t n) { premultiply_row<K>(s, d, n); }
 
 #define STB_PICK_SCALAR(FN, SC, DC) (&FN##_scalar<SC, DC>)
 
@@ -35,8 +35,13 @@ row_fn pick_composite_scalar(int sc, int dc) {
     }
 }
 
-row_fn pick_premultiply_scalar(bool inverse) {
-    return inverse ? &premultiply_scalar<true> : &premultiply_scalar<false>;
+row_fn pick_premultiply_scalar(premultiply_kind kind) {
+    switch (kind) {
+        case premultiply_kind::to_argb: return &premultiply_scalar<premultiply_kind::to_argb>;
+        case premultiply_kind::from_argb: return &premultiply_scalar<premultiply_kind::from_argb>;
+        case premultiply_kind::to_rgba: return &premultiply_scalar<premultiply_kind::to_rgba>;
+        default: return &premultiply_scalar<premultiply_kind::from_rgba>;
+    }
 }
 
 }  // namespace stb::detail

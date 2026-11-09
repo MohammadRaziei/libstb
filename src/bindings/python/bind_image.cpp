@@ -678,6 +678,14 @@ void bind_image(nb::module_& m) {
         .def("with_alpha", &image::with_alpha, "mask"_a, release(),
              "A new Image with `mask` (gray, the same size) as its alpha channel: GRAY -> GRAY_ALPHA, RGB -> RGBA,\n"
              "and an existing alpha is replaced. 0 hides a pixel, 255 shows it.")
+        .def("premultiplied", &image::premultiplied, release(),
+             "A new Image whose colour channels are multiplied by alpha (c * a / 255, truncated); RGBA and\n"
+             "GRAY_ALPHA only, the other formats come back as a copy. The Image does not remember it is\n"
+             "premultiplied: blend, the encoders and resize expect straight alpha, so call unpremultiplied()\n"
+             "before using the result as an ordinary Image.")
+        .def("unpremultiplied", &image::unpremultiplied, release(),
+             "The inverse of premultiplied(): c * 255 / a (truncated); alpha 0 gives zeros. The round trip is\n"
+             "not exact where alpha is small.")
         .def_static(
             "hstack",
             [](nb::iterable images, int gap, nb::handle background, nb::handle where) {

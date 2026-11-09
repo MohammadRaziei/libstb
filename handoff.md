@@ -301,3 +301,10 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
 - Python: `Outline.arc_to`، `Outline.tight_bounds`، `Matrix.map_rect`، `Matrix.map_points`، `BlendMode.EXCLUSION`، `CompositeOp`، `Image.blend(..., op=)`.
 - CI ویندوز run اول: `std::min/max` در تست‌ها خطا داد (macro در windows.h). در تست‌ها از `STB_MIN/STB_MAX` استفاده شود. دو warning قدیمی هم ریشه‌ای رفع شد (`fopen` در test_sample_data با ifstream، `utest_result` بلااستفاده در test_logging_os با یک assertion واقعی).
 - docs/guide.md و CHANGELOG به‌روز شدند.
+
+## 2026-11-10: `image::premultiplied()` / `unpremultiplied()` (تأیید کاربر: پیشنهاد «الف»)
+
+- متد خالص const که کپی جدید برمی‌گرداند؛ ترتیب بایت‌ها همان R,G,B,A می‌ماند و `image` فلگ premultiplied ندارد (ذخیره‌ی پیش‌فرض همچنان straight RGBA). فقط `rgba` و `gray_alpha` معنا دارند، بقیه کپی ساده.
+- کرنل: `premultiply_row<premultiply_kind>` با چهار نوع (`to_argb`، `from_argb`، `to_rgba`، `from_rgba`) در `src/image/kernels.hpp`؛ حساب هر کانال در `premultiply_channel` / `unpremultiply_channel` مشترک است (gray_alpha هم از همین استفاده می‌کند). همان integerهای توابع آزاد، با همان dispatch (avx2 / sse2 یا neon / scalar). gray_alpha بدون SIMD است.
+- تست: `tests/cpp/test_premultiply.cpp` (همه‌ی جفت‌های (c, a) روی هر backend، سازگاری با توابع ARGB، gray_alpha، wrap) و `tests/python/test_premultiply.py`.
+- issueهای جدید `libstb-issues (2).md`: #7 (hsl .5) قبلاً رفع شده؛ #8 (`font::shape` برای LTR از GSUB/GPOS رد می‌شود) و #9 (نوع/فرمت premultiplied در `image`) هنوز بررسی و پیاده نشده‌اند. #9 همان گزینه‌ی «ب» است که کاربر برای متدها رد کرد، پس پیشنهاد API جدید لازم دارد.

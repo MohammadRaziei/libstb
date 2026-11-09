@@ -330,3 +330,123 @@ UTEST(libstb_premultiply_tests, test_works_on_an_image_buffer) {
             for (int k = 0; k < 3; ++k) ASSERT_TRUE(back(x, y, k) <= img(x, y, k));
         }
 }
+
+// ------------------------------------------------- image::premultiplied / unpremultiplied
+//
+// The same reference formulas, but the premultiplied side keeps the bytes in the order R, G, B, A.
+
+UTEST(libstb_premultiply_tests, test_image_methods_match_the_reference_on_every_backend) {
+    constexpr int n = 256;  // x is the colour value, y the alpha
+    stb::image straight(n, n, stb::pixel_format::rgba);
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) {
+            std::uint8_t* p = straight.data() + std::size_t(y) * straight.stride() + 4 * std::size_t(x);
+            p[0] = std::uint8_t(x);
+            p[1] = std::uint8_t(green_of(x));
+            p[2] = std::uint8_t(blue_of(x));
+            p[3] = std::uint8_t(y);
+        }
+    for_each_backend([&](const std::string& backend) {
+        const stb::image pre = straight.premultiplied();
+        ASSERT_EQ(n, pre.width());
+        ASSERT_EQ(n, pre.height());
+        ASSERT_EQ(4, stb::channel_count(pre.format()));
+        bool ok = true;
+        for (int y = 0; y < n && ok; ++y)
+            for (int x = 0; x < n; ++x) {
+                const std::uint32_t w = reference_premultiply(x, green_of(x), blue_of(x), y);  // 0xAARRGGBB
+                const int want[4] = {int((w >> 16) & 255), int((w >> 8) & 255), int(w & 255), int(w >> 24)};
+                for (int k = 0; k < 4; ++k)
+                    if (int(pre(x, y, k)) != want[k]) {
+                        UTEST_PRINTF("%s: colour %d alpha %d channel %d: got %d, want %d\n", backend.c_str(), x, y, k,
+                                     int(pre(x, y, k)), want[k]);
+                        ok = false;
+                        break;
+                    }
+            }
+        EXPECT_TRUE(report(ok, msg() << backend << ": premultiplied() differs from the reference"));
+
+        // The inverse, on every (colour, alpha) pair including colours above their alpha (wraps like a byte store).
+        const stb::image back = straight.unpremultiplied();
+        ok = true;
+        for (int y = 0; y < n && ok; ++y)
+            for (int x = 0; x < n; ++x) {
+                // `straight` read as premultiplied RGBA is the ARGB word with R and B exchanged
+                const std::uint32_t argb = std::uint32_t(y) << 24 | std::uint32_t(x) << 16 | std::uint32_t(green_of(x)) << 8 | std::uint32_t(blue_of(x));
+                const std::array<std::uint8_t, 4> want = reference_unpremultiply(argb);
+                for (int k = 0; k < 4; ++k)
+                    if (back(x, y, k) != want[std::size_t(k)]) {
+                        UTEST_PRINTF("%s: colour %d alpha %d channel %d: got %d, want %d\n", backend.c_str(), x, y, k,
+                                     int(back(x, y, k)), int(want[std::size_t(k)]));
+                        ok = false;
+                        break;
+                    }
+            }
+        EXPECT_TRUE(report(ok, msg() << backend << ": unpremultiplied() differs from the reference"));
+    });
+}
+
+UTEST(libstb_premultiply_tests, test_image_methods_agree_with_the_argb_functions) {
+    const stb::image img = testutil::gradient(37, 11, 4);
+    bytes argb(std::size_t(img.height()) * img.stride());
+    stb::rgba_to_premultiplied_argb(argb.data(), img.stride(), img.data(), img.stride(), img.width(), img.height());
+    const stb::image pre = img.premultiplied();
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x) {
+            const std::uint32_t w = word_at(argb.data() + std::size_t(y) * img.stride() + 4 * std::size_t(x));
+            ASSERT_EQ(int((w >> 16) & 255), int(pre(x, y, 0)));
+            ASSERT_EQ(int((w >> 8) & 255), int(pre(x, y, 1)));
+            ASSERT_EQ(int(w & 255), int(pre(x, y, 2)));
+            ASSERT_EQ(int(w >> 24), int(pre(x, y, 3)));
+        }
+}
+
+UTEST(libstb_premultiply_tests, test_image_methods_leave_the_original_and_round_trip_opaque_and_clear) {
+    stb::image img(3, 1, stb::pixel_format::rgba, {10, 20, 30, 255, 200, 100, 50, 0, 90, 80, 70, 128});
+    const stb::image before = img.copy();
+    const stb::image pre = img.premultiplied();
+    EXPECT_TRUE(report(std::memcmp(img.data(), before.data(), 12) == 0, msg() << "the original changed"));
+    // opaque pixels do not change; alpha 0 gives zeros; 128 halves (rounding down)
+    EXPECT_EQ(10, int(pre(0, 0, 0)));
+    EXPECT_EQ(30, int(pre(0, 0, 2)));
+    for (int k = 0; k < 4; ++k) EXPECT_EQ(0, int(pre(1, 0, k)));
+    EXPECT_EQ(45, int(pre(2, 0, 0)));
+    EXPECT_EQ(128, int(pre(2, 0, 3)));
+    const stb::image back = pre.unpremultiplied();
+    for (int k = 0; k < 4; ++k) EXPECT_EQ(int(img(0, 0, k)), int(back(0, 0, k)));  // opaque: exact
+    for (int k = 0; k < 4; ++k) EXPECT_EQ(0, int(back(1, 0, k)));                   // clear: all zeros
+    for (int k = 0; k < 3; ++k) EXPECT_TRUE(back(2, 0, k) <= img(2, 0, k));         // loses precision, never gains
+}
+
+UTEST(libstb_premultiply_tests, test_image_methods_on_gray_alpha_and_formats_without_alpha) {
+    stb::image ga(4, 1, stb::pixel_format::gray_alpha, {200, 255, 200, 0, 200, 128, 7, 1});
+    const stb::image pre = ga.premultiplied();
+    ASSERT_EQ(2, stb::channel_count(pre.format()));
+    EXPECT_EQ(200, int(pre(0, 0, 0)));
+    EXPECT_EQ(0, int(pre(1, 0, 0)));
+    EXPECT_EQ(100, int(pre(2, 0, 0)));  // 200 * 128 / 255
+    EXPECT_EQ(0, int(pre(3, 0, 0)));    // 7 * 1 / 255
+    for (int x = 0; x < 4; ++x) EXPECT_EQ(int(ga(x, 0, 1)), int(pre(x, 0, 1)));
+    const stb::image back = pre.unpremultiplied();
+    EXPECT_EQ(200, int(back(0, 0, 0)));
+    EXPECT_EQ(0, int(back(1, 0, 0)));
+    EXPECT_EQ(199, int(back(2, 0, 0)));  // 100 * 255 / 128, truncated
+    EXPECT_EQ(0, int(back(3, 0, 0)));    // alpha 1 with colour 0
+
+    const stb::image rgb = testutil::gradient(5, 3, 3);
+    const stb::image rgb_pre = rgb.premultiplied();
+    ASSERT_EQ(3, stb::channel_count(rgb_pre.format()));
+    EXPECT_TRUE(report(std::memcmp(rgb.data(), rgb_pre.data(), std::size_t(rgb.height()) * rgb.stride()) == 0, msg() << "rgb"));
+    const stb::image gray = testutil::gradient(5, 3, 1);
+    EXPECT_TRUE(report(std::memcmp(gray.data(), gray.unpremultiplied().data(), std::size_t(gray.height()) * gray.stride()) == 0, msg() << "gray"));
+}
+
+UTEST(libstb_premultiply_tests, test_image_methods_work_on_wrapped_memory_without_touching_it) {
+    bytes mem = {10, 20, 30, 128, 40, 50, 60, 255};
+    const bytes keep = mem;
+    stb::image view = stb::image::wrap(2, 1, stb::pixel_format::rgba, mem.data());
+    const stb::image pre = view.premultiplied();
+    EXPECT_TRUE(report(mem == keep, msg() << "the wrapped memory changed"));
+    EXPECT_EQ(5, int(pre(0, 0, 0)));
+    EXPECT_EQ(40, int(pre(1, 0, 0)));
+}

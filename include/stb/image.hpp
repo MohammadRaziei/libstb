@@ -373,6 +373,18 @@ public:
     // This image with `mask` (gray, the same size) as its alpha channel: gray -> gray_alpha, rgb ->
     // rgba, and an existing alpha channel is replaced. 0 hides a pixel, 255 shows it.
     image with_alpha(const image& mask) const;
+    // A copy whose colour channels are multiplied by alpha (c' = c * a / 255, truncated), for the formats with
+    // alpha (rgba, gray_alpha); the bytes stay in the same order (R, G, B, A), only their meaning changes. The
+    // other formats have nothing to multiply, so they come back as a plain copy. The result is NOT tracked: the
+    // image does not remember that it is premultiplied, and blend(), the encoders and resize all expect straight
+    // alpha, so convert it back with unpremultiplied() (or hand the bytes to something that wants premultiplied
+    // data) before using it as an ordinary image. It is the same arithmetic as rgba_to_premultiplied_argb, which
+    // also moves the bytes into the packed ARGB32 word that rasterizers draw into. The result owns its pixels.
+    image premultiplied() const;
+    // The inverse: c' = c * 255 / a (truncated), and a pixel with alpha 0 becomes all zeros. For input that is
+    // not valid premultiplied data (c > a) the quotient wraps modulo 256, as in rgba_to_premultiplied_argb's pair.
+    // premultiplied() followed by unpremultiplied() is not exact: colours lose precision where alpha is small.
+    image unpremultiplied() const;
 
     // --- drawing into this image (these change THIS image: use copy() to keep the original) ---
     // `overlay` blended on top at (x, y). The overlay may hang over the edges (it is clipped) and
