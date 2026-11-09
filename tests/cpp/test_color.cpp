@@ -463,6 +463,9 @@ UTEST(libstb_color_tests, test_hsl_functions) {
     ASSERT_TRUE(is(parse("hsla(0, 0%, 100%, 0.25)"), 255, 255, 255, 64));
     ASSERT_TRUE(is(parse("hsl(0 0% 0% / 50%)"), 0, 0, 0, 128));
     ASSERT_TRUE(is(parse("hsl(0, 0%, 150%)"), 255, 255, 255));     // clamped
+    // A .5 tie in exact arithmetic that float32 puts just above: browsers paint 195 (issue #5; novasvg's mermaid golden).
+    ASSERT_TRUE(is(parse("hsl(90, 100%, 76.2745098039%)"), 195, 255, 134));
+    ASSERT_TRUE(is(parse("hsla(90 100% 76.2745098039% / 0.5)"), 195, 255, 134, 128));
 }
 
 UTEST(libstb_color_tests, test_things_that_are_not_colours) {

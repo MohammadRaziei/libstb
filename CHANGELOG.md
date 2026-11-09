@@ -7,6 +7,10 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Fixed
+- `color::try_parse` / `from_string`: `hsl()` and `hsla()` are converted in float32, as browsers do, so a value that is a
+  .5 tie in exact arithmetic rounds the way Chromium paints it (`hsl(90, 100%, 76.2745098039%)` is now R=195, not 194).
+
 ## [0.10.0] - 2026-11-09
 
 ### Added

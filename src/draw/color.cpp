@@ -149,23 +149,27 @@ std::optional<color> rgb_function(const css_args& a) {
 std::optional<color> hsl_function(const css_args& a) {
     if (!a.v[1].percent || !a.v[2].percent || a.v[1].unit.size() || a.v[2].unit.size()) return std::nullopt;
     constexpr double pi = 3.14159265358979323846;
-    double h = a.v[0].value;
+    double hue = a.v[0].value;
     if (a.v[0].percent) return std::nullopt;
     const std::string& u = a.v[0].unit;
-    if (u == "grad") h *= 0.9;
-    else if (u == "rad") h *= 180.0 / pi;
-    else if (u == "turn") h *= 360.0;
+    if (u == "grad") hue *= 0.9;
+    else if (u == "rad") hue *= 180.0 / pi;
+    else if (u == "turn") hue *= 360.0;
     else if (!u.empty() && u != "deg") return std::nullopt;
-    h = std::fmod(h, 360.0);
-    if (h < 0) h += 360.0;
-    const double sat = std::clamp(a.v[1].value, 0.0, 100.0) / 100.0;
-    const double lig = std::clamp(a.v[2].value, 0.0, 100.0) / 100.0;
-    const double chroma = sat * std::min(lig, 1.0 - lig);
-    auto channel = [&](double n) {
-        const double k = std::fmod(n + h / 30.0, 12.0);
-        return (lig - chroma * std::max(-1.0, std::min(std::min(k - 3.0, 9.0 - k), 1.0))) * 255.0;
+    hue = std::fmod(hue, 360.0);
+    if (hue < 0) hue += 360.0;
+    // The conversion is done in float, as browsers do: a value that is a .5 tie in exact arithmetic then lands on
+    // the side the browser's float rounding puts it (hsl(90, 100%, 76.2745098039%) is 194.5 + 1.5e-5 in float,
+    // 194.5 - 1e-9 in double, and Chromium paints 195).
+    const float h = float(hue);
+    const float sat = std::clamp(float(a.v[1].value), 0.0f, 100.0f) / 100.0f;
+    const float lig = std::clamp(float(a.v[2].value), 0.0f, 100.0f) / 100.0f;
+    const float chroma = sat * std::min(lig, 1.0f - lig);
+    auto channel = [&](float n) {
+        const float k = std::fmod(n + h / 30.0f, 12.0f);
+        return (lig - chroma * std::max(-1.0f, std::min(std::min(k - 3.0f, 9.0f - k), 1.0f))) * 255.0f;
     };
-    return color(to_byte(channel(0)), to_byte(channel(8)), to_byte(channel(4)),
+    return color(to_byte(channel(0.0f)), to_byte(channel(8.0f)), to_byte(channel(4.0f)),
                  a.count == 4 ? alpha_byte(a.v[3]) : uint8_t(255));
 }
 
