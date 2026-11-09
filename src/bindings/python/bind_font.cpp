@@ -347,6 +347,11 @@ void bind_font(nb::module_& m) {
             "How the colours mix: a BlendMode or its name (\"normal\" by default, \"multiply\", \"screen\", \"overlay\", "
             "\"darken\", \"lighten\", \"add\", \"difference\").")
         .def(
+            "composite", [](image_item& t, nb::handle op) -> image_item& { return t.composite(to_composite_op(op)); },
+            "op"_a, keep,
+            "How the alpha is shared with what is below: a CompositeOp or its name (\"source_over\", the usual\n"
+            "\"over\", by default; the others work inside the image's rectangle, as in Image.blend).")
+        .def(
             "opacity", [](image_item& t, float o) -> image_item& { return t.opacity(o); }, "opacity"_a, keep,
             "Scales the image's alpha, 0..1 (1 by default). ValueError outside 0..1.");
 

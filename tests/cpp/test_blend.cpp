@@ -411,3 +411,13 @@ UTEST(libstb_blend_tests, test_operator_names_round_trip) {
     ASSERT_THROWS(stb::composite_op_from_name("xor"), std::invalid_argument);
     ASSERT_THROWS(stb::composite_op_from_name("Source_Over"), std::invalid_argument);
 }
+
+UTEST(libstb_blend_tests, test_a_canvas_image_takes_a_composite_operator) {
+    stb::canvas c(solid(4, 1, 4, 200));
+    c.add_image(solid(2, 1, 4, 50), 1, 0).composite(composite_op::clear);
+    const stb::image out = c.finish();
+    ASSERT_EQ(200, out(0, 0, 3));
+    ASSERT_EQ(0, out(1, 0, 3));
+    ASSERT_EQ(0, out(2, 0, 3));
+    ASSERT_EQ(200, out(3, 0, 3));
+}

@@ -189,6 +189,13 @@ public:
             mode_ = m;
             return *this;
         }
+        // How the alpha is shared with what is below (composite_op::source_over by default, the usual
+        // "over"). The other operators work inside the image's rectangle, as in image::blend.
+        image_item& composite(composite_op op) {
+            check();
+            op_ = op;
+            return *this;
+        }
         // Scales the image's alpha, 0..1 (1 by default). Throws invalid_argument outside 0..1.
         image_item& opacity(float o) {
             check();
@@ -206,6 +213,7 @@ public:
         image img_;
         int x_, y_;
         blend_mode mode_ = blend_mode::normal;
+        composite_op op_ = composite_op::source_over;
         float opacity_ = 1.0f;
     };
 
@@ -459,7 +467,7 @@ public:
                 if (t->bg_) fill_box(*t);
                 t->font_->draw_text_in_place(img_, t->text_, t->px_, t->x_, t->y_, t->color_, t->align_);
             } else if (const image_item* i = std::get_if<image_item>(&it)) {
-                img_.blend(i->img_, i->x_, i->y_, i->mode_, i->opacity_);
+                img_.blend(i->img_, i->x_, i->y_, i->mode_, i->opacity_, i->op_);
             } else if (const outline_item* pi = std::get_if<outline_item>(&it)) {
                 if (pi->fill_) stb::fill(img_, pi->outline_, *pi->fill_, pi->rule_, pi->options_);
                 if (pi->stroke_) stb::stroke(img_, pi->outline_, *pi->stroke_, pi->style_, pi->options_);

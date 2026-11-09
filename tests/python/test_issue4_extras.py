@@ -87,6 +87,17 @@ def test_composite_default_is_source_over_and_names_are_checked():
         a.blend(b, op=3)
 
 
+def test_canvas_image_composite():
+    c = stb.Canvas(solid4(4, 1, 200))
+    c.add_image(solid4(2, 1, 50), 1, 0).composite("clear")
+    out = np.asarray(c.finish())
+    assert out[0, :, 3].tolist() == [200, 0, 0, 200]
+
+
+def solid4(w, h, v):
+    return stb.Image(np.full((h, w, 4), v, np.uint8))
+
+
 # -------------------------------------------------------------------------------------------- geometry
 
 
