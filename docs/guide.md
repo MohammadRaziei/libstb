@@ -96,7 +96,7 @@ a colour first. `img.split()` gives one single-channel `Image` per channel and
 `base.blend(overlay, x=0, y=0, mode="normal", opacity=1.0)` returns a new image with
 `overlay` blended on top (with the usual "over" operator and straight alpha for
 `mode="normal"`; `"multiply"`, `"screen"`, `"overlay"`, `"darken"`, `"lighten"`, `"add"` and
-`"difference"` are the Photoshop modes of those names, and `opacity` scales the overlay's alpha): the overlay may hang over the edges, may have any
+`"difference"` and `"exclusion"` are the Photoshop modes of those names, `opacity` scales the overlay's alpha, and `op` picks how the alpha is shared: `"source_over"` (the usual "over", the default) or another Porter-Duff operator such as `"source_in"`, `"destination_out"`, `"exclusive_or"` or `"plus_lighter"`, which work inside the overlay's rectangle only): the overlay may hang over the edges, may have any
 channel count (no alpha means opaque), and the result keeps the base's channel
 count. Its alpha equals Pillow's `alpha_composite`; the colour is within one level
 wherever the pixel is visible (where alpha is almost 0 the colour is ill-defined,

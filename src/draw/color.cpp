@@ -94,7 +94,9 @@ bool read_args(std::string_view s, std::size_t& i, css_args& a, bool hue_first) 
     skip_space(s, i);
     if (!read_number(s, i, a.v[0], hue_first)) return false;
     a.count = 1;
+    std::size_t before = i;
     skip_space(s, i);
+    bool separated = i > before;  // white space after the first value (the space form needs it between values)
     a.comma = i < s.size() && s[i] == ',';
     if (a.comma) {
         while (a.count < 4) {
@@ -108,9 +110,12 @@ bool read_args(std::string_view s, std::size_t& i, css_args& a, bool hue_first) 
         }
     } else {
         while (a.count < 3) {
-            const std::size_t before = i;
-            skip_space(s, i);
-            if (i == before || i >= s.size() || s[i] == ')' || s[i] == '/') return false;  // needs white space, then a value
+            if (a.count > 1) {
+                before = i;
+                skip_space(s, i);
+                separated = i > before;
+            }
+            if (!separated || i >= s.size() || s[i] == ')' || s[i] == '/') return false;  // needs white space, then a value
             if (!read_number(s, i, a.v[a.count], false)) return false;
             ++a.count;
         }
@@ -137,7 +142,7 @@ std::optional<color> rgb_function(const css_args& a) {
     const bool any_percent = a.v[0].percent || a.v[1].percent || a.v[2].percent;
     if (a.comma && any_percent && !all_percent) return std::nullopt;  // the comma form does not mix
     uint8_t c[3];
-    for (int k = 0; k < 3; ++k) c[k] = to_byte(a.v[k].percent ? a.v[k].value * 2.55 : a.v[k].value);
+    for (int k = 0; k < 3; ++k) c[k] = to_byte(a.v[k].percent ? a.v[k].value * 255.0 / 100.0 : a.v[k].value);  // not * 2.55: 50% must be 127.5
     return color(c[0], c[1], c[2], a.count == 4 ? alpha_byte(a.v[3]) : uint8_t(255));
 }
 

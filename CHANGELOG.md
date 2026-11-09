@@ -8,6 +8,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **CSS colours.** `color::from_name` knows all 148 CSS keywords (and `transparent`); `color::from_string` and the new
+  `color::try_parse(text, &used)` (no exception, reads a prefix) understand `rgb()`, `rgba()`, `hsl()` and `hsla()` in the
+  comma and the space/slash forms, with percentages, `deg`/`grad`/`rad`/`turn` hues and clamping, as CSS does.
+- **Porter-Duff operators.** `enum class composite_op` (13 operators) and a last parameter `op` of `image::blend` (Python:
+  `CompositeOp`, `Image.blend(..., op=)`); `blend_mode::exclusion` (`BlendMode.EXCLUSION`).
+- **Geometry.** `outline::arc_to` (the SVG endpoint arc, as cubics), `outline::tight_bounds()` (exact box, curve extremes
+  instead of control points), `matrix::map_rect` and `matrix::map(const point*, point*, n)`; in Python `Outline.arc_to`,
+  `Outline.tight_bounds`, `Matrix.map_rect`, `Matrix.map_points`.
 - **GPOS kerning and positioning for Arabic script runs.** The font's `kern`, `dist` lookups are run
   (single and pair adjustment, contextual and chained contextual lookups, extension lookups), chosen by the
   script's features instead of scanning every pair lookup. Vazirmatn (whose Arabic kerning is a chained
@@ -163,6 +171,8 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   `bind_outline.cpp`, and the resizer's SIMD vector header is `src/image/resize/simd_vec.hpp`.
 
 ### Fixed
+- The Python logging bridge no longer keeps its Python objects alive for ever: an `atexit` hook removes the handler
+  and frees them while the interpreter is whole.
 - **"nanobind: leaked 1 instances!" at the end of a script** that did `shared = np.from_dlpack(img)` and
   `back = Image.from_dlpack(shared)`. The reference an image keeps to what it views was dropped only while
   `Py_IsInitialized()` was true, which turns false when the interpreter starts to shut down, so the array (and

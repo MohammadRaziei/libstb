@@ -1,3 +1,5 @@
+#include <fstream>
+#include <iterator>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -83,12 +85,11 @@ UTEST(libstb_sample_data_tests, test_decoding_from_memory_is_decoding_from_the_f
     for (const picture& p : pictures) {
         std::vector<std::uint8_t> bytes;
         {
-            FILE* f = std::fopen(image_path(p.name).c_str(), "rb");
-            ASSERT_TRUE(f != nullptr);
-            std::uint8_t buf[4096];
-            std::size_t n;
-            while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n);
-            std::fclose(f);
+            std::ifstream f(image_path(p.name), std::ios::binary);
+            ASSERT_TRUE(f.good());
+            const std::string raw((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            bytes.resize(raw.size());
+            std::memcpy(bytes.data(), raw.data(), raw.size());
         }
         ASSERT_TRUE(same_pixels(stb::image::decode(bytes.data(), bytes.size()), stb::image::open(image_path(p.name))));
     }
@@ -306,8 +307,8 @@ UTEST(libstb_sample_data_tests, test_draw_text_puts_ink_inside_the_measured_box)
             for (int x = 0; x < out.width(); ++x)
                 if (out(x, y, 0) < 255) {
                     ++ink;
-                    min_x = std::min(min_x, x), max_x = std::max(max_x, x);
-                    min_y = std::min(min_y, y), max_y = std::max(max_y, y);
+                    min_x = STB_MIN(min_x, x), max_x = STB_MAX(max_x, x);
+                    min_y = STB_MIN(min_y, y), max_y = STB_MAX(max_y, y);
                 }
         ASSERT_TRUE(ink > 100);
         ASSERT_TRUE(min_x >= 8 && max_x <= 10 + box.width + 2);

@@ -143,6 +143,7 @@ UTEST(libstb_logging_os_tests, test_an_event_log_handler_registers_its_source_an
     // Nothing is written to the Event Log: a test run must not leave entries in the machine's log.
     static_assert(std::is_base_of<lg::handler, lg::event_log_handler>::value, "a handler");
     static_assert(std::is_move_constructible<lg::event_log_handler>::value, "add_handler moves it into the logger");
+    ASSERT_TRUE(std::is_move_assignable<lg::event_log_handler>::value);  // the `b = ...` below
 
     lg::event_log_handler a("libstb-test");
     lg::event_log_handler b(std::move(a));  // the registration goes with the handler, and is released once

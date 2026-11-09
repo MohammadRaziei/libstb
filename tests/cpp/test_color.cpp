@@ -1,5 +1,8 @@
+#include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "test_common.hpp"
 
@@ -381,4 +384,125 @@ UTEST(libstb_color_tests, test_from_rgb_rejects_rgba_values) {
         threw = true;
     }
     ASSERT_TRUE(threw);
+}
+
+// ------------------------------------------------------------------ CSS keywords and functions
+
+namespace {
+
+struct css_row {
+    std::string name;
+    int r = 0, g = 0, b = 0;
+};
+
+// tests/data/css_colors.txt: "name r g b" per line, the 148 CSS keywords (taken from Pillow, which has the same table).
+std::vector<css_row> css_rows() {
+    std::vector<css_row> rows;
+    std::ifstream in(std::string(LIBSTB_TEST_DATA_DIR) + "/css_colors.txt");
+    css_row row;
+    while (in >> row.name >> row.r >> row.g >> row.b) rows.push_back(row);
+    return rows;
+}
+
+bool is(const std::optional<color>& c, int r, int g, int b, int a = 255) {
+    return c && c->r() == r && c->g() == g && c->b() == b && c->a() == a;
+}
+
+std::optional<color> parse(const std::string& s) { return color::try_parse(s); }
+
+}  // namespace
+
+UTEST(libstb_color_tests, test_all_148_css_keywords) {
+    const std::vector<css_row> rows = css_rows();
+    ASSERT_EQ(148u, rows.size());
+    bool all = true;
+    for (const css_row& row : rows) {
+        const color want(uint8_t(row.r), uint8_t(row.g), uint8_t(row.b));
+        std::string upper = row.name;
+        for (char& c : upper) c = char(c - 'a' + 'A');
+        all = all && color::from_name(row.name) == want && color::from_string(row.name) == want &&
+              color::from_name(upper) == want && parse(row.name) == std::optional<color>(want);
+    }
+    ASSERT_TRUE(all);
+    ASSERT_TRUE(color::from_name("rebeccapurple") == color(102, 51, 153));
+    ASSERT_TRUE(color::from_name("grey") == color::from_name("gray"));
+    ASSERT_TRUE(is(parse("transparent"), 0, 0, 0, 0));
+    ASSERT_TRUE(is(parse("TRANSPARENT"), 0, 0, 0, 0));
+    ASSERT_THROWS(color::from_name("notacolor"), invalid_color_error);
+}
+
+UTEST(libstb_color_tests, test_rgb_functions) {
+    ASSERT_TRUE(is(parse("rgb(255, 128, 0)"), 255, 128, 0));
+    ASSERT_TRUE(is(parse("rgb(255 128 0)"), 255, 128, 0));
+    ASSERT_TRUE(is(parse("RGB(1,2,3)"), 1, 2, 3));
+    ASSERT_TRUE(is(parse("  rgb( 1 , 2 , 3 )"), 1, 2, 3));
+    ASSERT_TRUE(is(parse("rgba(255, 0, 0, 0.5)"), 255, 0, 0, 128));
+    ASSERT_TRUE(is(parse("rgb(0 0 255 / 50%)"), 0, 0, 255, 128));
+    ASSERT_TRUE(is(parse("rgb(0 0 255 / 1)"), 0, 0, 255, 255));
+    ASSERT_TRUE(is(parse("rgb(0 0 255 / 0)"), 0, 0, 255, 0));
+    ASSERT_TRUE(is(parse("rgb(100%, 0%, 0%)"), 255, 0, 0));
+    ASSERT_TRUE(is(parse("rgb(50%, 50%, 50%)"), 128, 128, 128));
+    ASSERT_TRUE(is(parse("rgb(300, -5, 0)"), 255, 0, 0));          // out of range: clamped
+    ASSERT_TRUE(is(parse("rgb(1.5, 2.4, 2.5)"), 2, 2, 3));         // rounded
+    ASSERT_TRUE(is(parse("rgb(1e2 0 0)"), 100, 0, 0));
+    ASSERT_TRUE(is(parse("rgb(10% 20 30)"), 26, 20, 30));          // the space form may mix
+    ASSERT_TRUE(is(parse("rgb(0 0 0 / 2)"), 0, 0, 0, 255));        // alpha clamped
+}
+
+UTEST(libstb_color_tests, test_hsl_functions) {
+    ASSERT_TRUE(is(parse("hsl(0, 100%, 50%)"), 255, 0, 0));
+    ASSERT_TRUE(is(parse("hsl(120, 100%, 25%)"), 0, 128, 0));
+    ASSERT_TRUE(is(parse("hsl(240 100% 50%)"), 0, 0, 255));
+    ASSERT_TRUE(is(parse("hsl(0.5turn, 100%, 50%)"), 0, 255, 255));
+    ASSERT_TRUE(is(parse("hsl(180deg, 100%, 50%)"), 0, 255, 255));
+    ASSERT_TRUE(is(parse("hsl(200grad, 100%, 50%)"), 0, 255, 255));
+    ASSERT_TRUE(is(parse("hsl(3.14159265rad, 100%, 50%)"), 0, 255, 255));
+    ASSERT_TRUE(is(parse("hsl(-120, 100%, 50%)"), 0, 0, 255));     // hues wrap
+    ASSERT_TRUE(is(parse("hsl(400, 100%, 50%)"), 255, 170, 0));
+    ASSERT_TRUE(is(parse("hsl(40, 100%, 50%)"), 255, 170, 0));
+    ASSERT_TRUE(is(parse("hsla(0, 0%, 100%, 0.25)"), 255, 255, 255, 64));
+    ASSERT_TRUE(is(parse("hsl(0 0% 0% / 50%)"), 0, 0, 0, 128));
+    ASSERT_TRUE(is(parse("hsl(0, 0%, 150%)"), 255, 255, 255));     // clamped
+}
+
+UTEST(libstb_color_tests, test_things_that_are_not_colours) {
+    const char* bad[] = {"",           "   ",         "rgb(1,2)",         "rgb(1 2,3)",       "rgb(1, 2%, 3)",
+                         "rgb(1,2,3",  "rgb(1 2 3 4)", "rgb(1 2 3 / )",   "rgb(,,)",          "rgb(10px 0 0)",
+                         "rgb 1,2,3",  "foo(1,2,3)",  "hsl(0, 100, 50%)", "hsl(0px, 100%, 50%)", "hsl(0%, 100%, 50%)",
+                         "#ff00zz",    "#12345",      "#ff",              "redx",             "red(",
+                         "currentColor", "none",      "1,2,3",            "rgb(1,2,3,)",      "rgb(1 2 3/)"};
+    bool all = true;
+    for (const char* s : bad) all = all && !parse(s).has_value();
+    ASSERT_TRUE(all);
+    ASSERT_THROWS(color::from_string("rgb(1,2)"), invalid_color_error);
+    ASSERT_THROWS(color::from_string("rgb(1,2,3)x"), invalid_color_error);
+    ASSERT_THROWS(color::from_string("foo(1,2,3)"), invalid_color_error);
+}
+
+UTEST(libstb_color_tests, test_try_parse_reads_a_prefix_and_says_how_much) {
+    std::size_t used = 99;
+    ASSERT_TRUE(is(color::try_parse("red url(#x)", &used), 255, 0, 0));
+    ASSERT_EQ(3u, used);
+    ASSERT_TRUE(is(color::try_parse("  #f80 rest", &used), 255, 136, 0));
+    ASSERT_EQ(6u, used);
+    ASSERT_TRUE(is(color::try_parse("rgb(1,2,3) fallback", &used), 1, 2, 3));
+    ASSERT_EQ(10u, used);
+    ASSERT_TRUE(is(color::try_parse("transparent;", &used), 0, 0, 0, 0));
+    ASSERT_EQ(11u, used);
+    ASSERT_TRUE(is(color::try_parse("#ff880080", &used), 255, 136, 0, 128));
+    ASSERT_EQ(9u, used);
+    used = 99;
+    ASSERT_FALSE(color::try_parse("currentColor", &used).has_value());
+    ASSERT_EQ(99u, used);  // untouched when nothing is found
+    ASSERT_TRUE(color::try_parse("blue", nullptr).has_value());
+}
+
+UTEST(libstb_color_tests, test_from_string_takes_functions_and_keeps_its_old_forms) {
+    ASSERT_TRUE(color::from_string(" rgb(1, 2, 3) ") == color(1, 2, 3));
+    ASSERT_TRUE(color::from_string("rgba(0,0,0,0)") == color(0, 0, 0, 0));
+    ASSERT_TRUE(color("hsl(120, 100%, 25%)") == color(0, 128, 0));
+    ASSERT_TRUE(color::from_string("#f80") == color(255, 136, 0));
+    ASSERT_TRUE(color::from_string("ff8800") == color(255, 136, 0));
+    ASSERT_TRUE(color::from_string("skyblue") == color(135, 206, 235));
+    ASSERT_THROWS(color::from_string(""), invalid_color_error);
 }

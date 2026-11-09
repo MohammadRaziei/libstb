@@ -325,3 +325,89 @@ UTEST(libstb_blend_tests, test_canvas_keeps_its_own_copy_of_the_image_and_checks
     ASSERT_THROWS(item->blend(stb::blend_mode::screen), std::invalid_argument);
     ASSERT_THROWS(c.add_image(solid(1, 1, 3, 1), 0, 0), std::invalid_argument);
 }
+
+// ----------------------------------------------------------- exclusion and the Porter-Duff operators
+
+namespace {
+using stb::composite_op;
+
+// One RGBA pixel below (200, 100, 50, alpha 128) under one overlay pixel (10, 20, 30, alpha 204).
+stb::image rgba_pixel(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a) {
+    return stb::image(1, 1, stb::pixel_format::rgba, {r, g, b, a});
+}
+stb::image with_op(composite_op op, stb::blend_mode m = stb::blend_mode::normal) {
+    return rgba_pixel(200, 100, 50, 128).blend(rgba_pixel(10, 20, 30, 204), 0, 0, m, 1.0f, op);
+}
+bool pixel_is(const stb::image& i, int r, int g, int b, int a) {
+    return i(0, 0, 0) == r && i(0, 0, 1) == g && i(0, 0, 2) == b && i(0, 0, 3) == a;
+}
+}  // namespace
+
+UTEST(libstb_blend_tests, test_exclusion_mode) {
+    using stb::blend_mode;
+    ASSERT_EQ(127, blended(blend_mode::exclusion, 200, 128));  // 200 + 128 - 2 * 200 * 128 / 255
+    ASSERT_EQ(77, blended(blend_mode::exclusion, 0, 77));      // black below: the overlay
+    ASSERT_EQ(155, blended(blend_mode::exclusion, 255, 100));  // white below: the overlay inverted
+    ASSERT_EQ(200, blended(blend_mode::exclusion, 200, 0));    // black on top changes nothing
+    ASSERT_TRUE(stb::blend_mode_name(blend_mode::exclusion) == "exclusion");
+    ASSERT_TRUE(stb::blend_mode_from_name("exclusion") == blend_mode::exclusion);
+}
+
+UTEST(libstb_blend_tests, test_each_operator_gives_its_alpha_and_colours) {
+    ASSERT_TRUE(pixel_is(with_op(composite_op::clear), 0, 0, 0, 0));
+    ASSERT_TRUE(pixel_is(with_op(composite_op::source), 10, 20, 30, 204));
+    ASSERT_TRUE(pixel_is(with_op(composite_op::destination), 200, 100, 50, 128));
+    ASSERT_TRUE(pixel_is(with_op(composite_op::source_in), 10, 20, 30, 102));       // 0.8 * 0.502
+    ASSERT_TRUE(pixel_is(with_op(composite_op::destination_in), 200, 100, 50, 102));
+    ASSERT_TRUE(pixel_is(with_op(composite_op::source_out), 10, 20, 30, 102));      // 0.8 * (1 - 0.502)
+    ASSERT_TRUE(pixel_is(with_op(composite_op::destination_out), 200, 100, 50, 26)); // 0.502 * 0.2
+    ASSERT_EQ(255, with_op(composite_op::plus_lighter)(0, 0, 3));                   // 0.8 + 0.502, at most 1
+    ASSERT_EQ(127, with_op(composite_op::exclusive_or)(0, 0, 3));                   // 0.8 * 0.498 + 0.502 * 0.2
+    // atop keeps the alpha below, over keeps the larger union.
+    ASSERT_EQ(128, with_op(composite_op::source_atop)(0, 0, 3));
+    ASSERT_EQ(204, with_op(composite_op::destination_atop)(0, 0, 3));
+    ASSERT_EQ(with_op(composite_op::source_over)(0, 0, 3), with_op(composite_op::destination_over)(0, 0, 3));
+}
+
+UTEST(libstb_blend_tests, test_source_over_is_the_default_and_the_old_over) {
+    const stb::image base = gradient(9, 7, 4);
+    const stb::image over = gradient(5, 5, 4);
+    ASSERT_TRUE(same(base.copy().blend(over, 2, 1), base.copy().blend(over, 2, 1, stb::blend_mode::normal, 1.0f, composite_op::source_over)));
+    ASSERT_TRUE(same(base.copy().blend(over, 2, 1, stb::blend_mode::multiply, 0.5f),
+                     base.copy().blend(over, 2, 1, stb::blend_mode::multiply, 0.5f, composite_op::source_over)));
+}
+
+UTEST(libstb_blend_tests, test_an_operator_works_inside_the_overlay_only) {
+    stb::image base = solid(4, 1, 4, 200);
+    base.blend(solid(2, 1, 4, 50), 1, 0, stb::blend_mode::normal, 1.0f, composite_op::clear);
+    ASSERT_EQ(200, base(0, 0, 3));
+    ASSERT_EQ(0, base(1, 0, 3));
+    ASSERT_EQ(0, base(2, 0, 3));
+    ASSERT_EQ(200, base(3, 0, 3));
+    // The overlay hanging over the edge is clipped, as for the plain blend.
+    stb::image edge = solid(3, 1, 4, 200);
+    edge.blend(solid(5, 1, 4, 50), 2, 0, stb::blend_mode::normal, 1.0f, composite_op::clear);
+    ASSERT_EQ(200, edge(1, 0, 3));
+    ASSERT_EQ(0, edge(2, 0, 3));
+}
+
+UTEST(libstb_blend_tests, test_operators_over_an_image_without_alpha_give_a_result_over_black) {
+    const stb::image rgb(1, 1, stb::pixel_format::rgb, {200, 100, 50});
+    const stb::image top = rgba_pixel(10, 20, 30, 204);
+    ASSERT_EQ(160, rgb.copy().blend(top, 0, 0, stb::blend_mode::normal, 1.0f, composite_op::destination_in)(0, 0, 0));  // 200 * 0.8
+    ASSERT_EQ(0, rgb.copy().blend(top, 0, 0, stb::blend_mode::normal, 1.0f, composite_op::clear)(0, 0, 0));
+    ASSERT_EQ(8, rgb.copy().blend(top, 0, 0, stb::blend_mode::normal, 1.0f, composite_op::source)(0, 0, 0));  // 10 * 0.8
+    ASSERT_EQ(200, rgb.copy().blend(top, 0, 0, stb::blend_mode::normal, 1.0f, composite_op::destination)(0, 0, 0));
+}
+
+UTEST(libstb_blend_tests, test_operator_names_round_trip) {
+    int n = 0;
+    for (int i = 0; i <= int(composite_op::plus_lighter); ++i) {
+        const composite_op op = composite_op(i);
+        ASSERT_TRUE(stb::composite_op_from_name(stb::composite_op_name(op)) == op);
+        ++n;
+    }
+    ASSERT_EQ(13, n);
+    ASSERT_THROWS(stb::composite_op_from_name("xor"), std::invalid_argument);
+    ASSERT_THROWS(stb::composite_op_from_name("Source_Over"), std::invalid_argument);
+}

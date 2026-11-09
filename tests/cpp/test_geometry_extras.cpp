@@ -184,7 +184,8 @@ UTEST(libstb_geometry_extras_tests, test_an_arc_stays_on_its_ellipse) {
             const float t = float(i) / 20.f, u = 1.f - t;
             const float x = u * u * u * cur.x + 3 * u * u * t * c.p[0].x + 3 * u * t * t * c.p[1].x + t * t * t * c.p[2].x;
             const float y = u * u * u * cur.y + 3 * u * u * t * c.p[0].y + 3 * u * t * t * c.p[1].y + t * t * t * c.p[2].y;
-            worst = std::max(worst, std::fabs(std::hypot(x - 10.f, y - 10.f) - 10.f));
+            const float off = std::fabs(std::hypot(x - 10.f, y - 10.f) - 10.f);
+            worst = STB_MAX(worst, off);
         }
         cur = c.p[2];
     }
@@ -260,12 +261,13 @@ UTEST(libstb_geometry_extras_tests, test_tight_bounds_match_a_dense_sampling_of_
                 x = u * u * p[0].x + 2 * u * t * p[1].x + t * t * p[2].x;
                 y = u * u * p[0].y + 2 * u * t * p[1].y + t * t * p[2].y;
             }
-            x0 = std::min(x0, x), y0 = std::min(y0, y), x1 = std::max(x1, x), y1 = std::max(y1, y);
+            x0 = STB_MIN(x0, x), y0 = STB_MIN(y0, y), x1 = STB_MAX(x1, x), y1 = STB_MAX(y1, y);
         }
         const outline_bounds t = tight(o);
         const outline_bounds c = *o.bounds();
-        worst = std::max({worst, std::fabs(t.x0 - float(x0)), std::fabs(t.y0 - float(y0)), std::fabs(t.x1 - float(x1)),
-                          std::fabs(t.y1 - float(y1))});
+        const float errs[4] = {std::fabs(t.x0 - float(x0)), std::fabs(t.y0 - float(y0)), std::fabs(t.x1 - float(x1)),
+                               std::fabs(t.y1 - float(y1))};
+        for (const float e : errs) worst = STB_MAX(worst, e);
         inside = inside && t.x0 >= c.x0 && t.y0 >= c.y0 && t.x1 <= c.x1 && t.y1 <= c.y1;  // never beyond the control box
     }
     ASSERT_TRUE(worst < 0.01f);  // sampling misses the exact extreme by less than that at 20000 steps
