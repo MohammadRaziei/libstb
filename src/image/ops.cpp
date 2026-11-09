@@ -357,7 +357,7 @@ image image::merge(const std::vector<image>& channels) {
 
 // --------------------------------------------------------------------- alpha
 
-image& image::blend(const image& overlay, int x, int y, blend_mode mode, float opacity) & {
+image& image::blend(const image& overlay, int x, int y, blend_mode mode, float opacity, composite_op op) & {
     need_pixels(*this);
     need_pixels(overlay);
     if (!(opacity >= 0.0f && opacity <= 1.0f)) throw std::invalid_argument("opacity must be in 0..1");
@@ -371,7 +371,7 @@ image& image::blend(const image& overlay, int x, int y, blend_mode mode, float o
     const std::size_t n = std::size_t(x1 - x0);
     // The common case (the "over" operator at full opacity) has integer kernels; anything else
     // goes through the general floating-point row.
-    const bool plain = mode == blend_mode::normal && opacity == 1.0f;
+    const bool plain = mode == blend_mode::normal && opacity == 1.0f && op == composite_op::source_over;
     // An overlay without alpha is opaque: its rows replace the destination's (converted to
     // this image's channel count); one with alpha is blended.
     const bool mixes = sc == 2 || sc == 4;
@@ -383,7 +383,7 @@ image& image::blend(const image& overlay, int x, int y, blend_mode mode, float o
         const std::uint8_t* s = overlay.data() + std::size_t(py - y) * overlay.stride() +
                                 std::size_t(x0 - x) * std::size_t(sc);
         if (!plain)
-            detail::blend_row(s, sc, d, dc, n, mode, opacity);
+            detail::blend_row(s, sc, d, dc, n, mode, opacity, op);
         else if (fn)
             fn(s, d, n);
         else
@@ -392,8 +392,8 @@ image& image::blend(const image& overlay, int x, int y, blend_mode mode, float o
     return *this;
 }
 
-image&& image::blend(const image& overlay, int x, int y, blend_mode mode, float opacity) && {
-    blend(overlay, x, y, mode, opacity);
+image&& image::blend(const image& overlay, int x, int y, blend_mode mode, float opacity, composite_op op) && {
+    blend(overlay, x, y, mode, opacity, op);
     return std::move(*this);
 }
 

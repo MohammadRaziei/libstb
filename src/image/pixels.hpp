@@ -67,10 +67,10 @@ inline void pixel_of(const color& c, pixel_format f, std::uint8_t* px) {
 }
 
 // n pixels of `src` (sc channels) blended onto n pixels of `dst` (dc channels) in place: any
-// mode and opacity (0..1), in floating point. blend_mode::normal with opacity 1 has the integer
-// kernels instead (ops.cpp); this is the general case.
+// mode, opacity (0..1) and Porter-Duff operator, in floating point. blend_mode::normal with opacity 1 and
+// composite_op::source_over has the integer kernels instead (ops.cpp); this is the general case.
 void blend_row(const std::uint8_t* src, int sc, std::uint8_t* dst, int dc, std::size_t n, blend_mode mode,
-               float opacity);
+               float opacity, composite_op op);
 
 }  // namespace detail
 }  // namespace stb

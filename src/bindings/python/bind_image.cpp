@@ -344,7 +344,26 @@ void bind_image(nb::module_& m) {
         .value("DARKEN", stb::blend_mode::darken)
         .value("LIGHTEN", stb::blend_mode::lighten)
         .value("ADD", stb::blend_mode::add)
-        .value("DIFFERENCE", stb::blend_mode::difference);
+        .value("DIFFERENCE", stb::blend_mode::difference)
+        .value("EXCLUSION", stb::blend_mode::exclusion);
+
+    nb::enum_<stb::composite_op>(m, "CompositeOp",
+                                 "How Image.blend shares the alpha between the overlay and the pixels below (the\n"
+                                 "Porter-Duff operators). Functions that take a CompositeOp also take its lower-case\n"
+                                 "name, e.g. \"source_in\".")
+        .value("CLEAR", stb::composite_op::clear)
+        .value("SOURCE", stb::composite_op::source)
+        .value("DESTINATION", stb::composite_op::destination)
+        .value("SOURCE_OVER", stb::composite_op::source_over)
+        .value("DESTINATION_OVER", stb::composite_op::destination_over)
+        .value("SOURCE_IN", stb::composite_op::source_in)
+        .value("DESTINATION_IN", stb::composite_op::destination_in)
+        .value("SOURCE_OUT", stb::composite_op::source_out)
+        .value("DESTINATION_OUT", stb::composite_op::destination_out)
+        .value("SOURCE_ATOP", stb::composite_op::source_atop)
+        .value("DESTINATION_ATOP", stb::composite_op::destination_atop)
+        .value("EXCLUSIVE_OR", stb::composite_op::exclusive_or)
+        .value("PLUS_LIGHTER", stb::composite_op::plus_lighter);
 
     nb::enum_<stb::align>(m, "Align",
                           "Where the shorter images of Image.hstack / vstack sit across the stack. Functions that "
@@ -627,19 +646,21 @@ void bind_image(nb::module_& m) {
             "(the inverse of split()). Raises ValueError otherwise.")
         .def(
             "blend",
-            [](const image& i, const image& overlay, int x, int y, nb::handle mode, float opacity) {
+            [](const image& i, const image& overlay, int x, int y, nb::handle mode, float opacity, nb::handle op) {
                 const stb::blend_mode m = to_blend_mode(mode);
+                const stb::composite_op o = to_composite_op(op);
                 nb::gil_scoped_release unlock;
-                return i.copy().blend(overlay, x, y, m, opacity);
+                return i.copy().blend(overlay, x, y, m, opacity, o);
             },
-            "overlay"_a, "x"_a = 0, "y"_a = 0, "mode"_a = "normal", "opacity"_a = 1.0f,
+            "overlay"_a, "x"_a = 0, "y"_a = 0, "mode"_a = "normal", "opacity"_a = 1.0f, "op"_a = "source_over",
             "A new Image: this one with `overlay` blended on top at (x, y). `mode` is a BlendMode or its name\n"
             "(\"normal\" is the usual \"over\" operator with straight alpha; \"multiply\", \"screen\", \"overlay\",\n"
-            "\"darken\", \"lighten\", \"add\" and \"difference\" are the Photoshop modes of those names), and\n"
-            "`opacity` (0..1) scales the overlay's alpha. The overlay may hang over the edges (it is\n"
+            "\"darken\", \"lighten\", \"add\", \"difference\" and \"exclusion\" are the Photoshop modes of those names), and\n"
+            "`opacity` (0..1) scales the overlay's alpha. `op` is a CompositeOp or its name (\"source_over\", the\n"
+            "usual \"over\", by default; the other Porter-Duff operators work inside the overlay's rectangle only). The overlay may hang over the edges (it is\n"
             "clipped) and may have any channel count: without alpha it is opaque, gray is replicated\n"
             "into colour. The result has this image's channel count; if that has no alpha, the\n"
-            "overlay's alpha just weights the blend. ValueError for an unknown mode or an opacity outside 0..1.")
+            "overlay's alpha just weights the blend. ValueError for an unknown mode or operator, or an opacity outside 0..1.")
         .def(
             "fill",
             [](const image& i, nb::handle color, int x, int y, std::optional<int> width, std::optional<int> height) {

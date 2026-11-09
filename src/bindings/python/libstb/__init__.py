@@ -37,7 +37,7 @@ from .image import DEFAULT_MAX_BYTES, Image, ImageInfo, PixelFormat
 from .font import (Atlas, AtlasGlyph, DesignMetrics, Font, FontMetrics, Glyph, GlyphMetrics, RenderedText,
                    ShapedGlyph, TextSize, estimate_metrics, estimate_text)
 from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
-from .libstb_py import (Align, BlendMode, Canvas, CanvasImage, CanvasOutline, CanvasShape, CanvasText, DecodeError, EncodeError,
+from .libstb_py import (Align, BlendMode, CompositeOp, Canvas, CanvasImage, CanvasOutline, CanvasShape, CanvasText, DecodeError, EncodeError,
                         Error, LimitError, Matrix, Outline, Resizer)
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
@@ -171,7 +171,7 @@ def get_cmake_dir():
 __all__ = [
     "Image", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "logging_bridge", "imresize",
     "Resizer",
-    "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "Align", "FontMetrics", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
+    "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "CompositeOp", "Align", "FontMetrics", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",
     "Error", "DecodeError", "EncodeError", "LimitError",

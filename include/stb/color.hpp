@@ -10,8 +10,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -57,7 +59,7 @@ public:
     /// form, so a stray int (`color c = 5;`) does not turn into a colour by accident.
     color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r_(r), g_(g), b_(b), a_(a) {}
 
-    /// Parses a hex or CSS-name string, see from_string().
+    /// Parses a hex string, a CSS keyword or a CSS function, see from_string().
     color(const std::string& str) : color(from_string(str)) {}
 
     /// So that a string literal converts directly (`c.set_color("white")`): const char* ->
@@ -127,10 +129,31 @@ public:
     // ---- Factories ----
 
     /**
-     * @brief Parses "#RGB", "#RGBA", "#RRGGBB", "#RRGGBBAA", the same without '#', or a CSS name.
-     * @throws invalid_color_error on an empty string, bad hex digits or length, or an unknown name.
+     * @brief Parses a CSS colour: "#RGB", "#RGBA", "#RRGGBB", "#RRGGBBAA", the same without '#', any of the
+     * 148 CSS keywords or "transparent" (case-insensitive), or rgb(), rgba(), hsl(), hsla() (see try_parse()).
+     * A string with a '(' may have white space around it; the others are taken exactly as they are.
+     * @throws invalid_color_error on an empty string, bad hex digits or length, an unknown name, or a function
+     * that is malformed or followed by other text.
      */
     static color from_string(const std::string& str);
+
+    /**
+     * @brief Reads one CSS colour from the START of `text`, without throwing: for text that holds a colour
+     * followed by other things (an SVG attribute like "red url(#x)"), or that often is not a colour at all.
+     *
+     * Skips leading white space, then takes a hash colour ("#f80", "#ff8800", "#ff880080", "#f808"), a CSS
+     * keyword ("skyblue", "transparent"), or a function: rgb() / rgba() with three numbers or three percentages
+     * (a number is 0..255, a percentage 0..100%) and an optional alpha (a number 0..1 or a percentage), and
+     * hsl() / hsla() with a hue (a number of degrees, or with the unit deg, grad, rad or turn), saturation and
+     * lightness in percent, and an optional alpha. Components are separated by commas, or by white space with
+     * the alpha after a '/'; the two styles do not mix, and the comma form needs all numbers or all
+     * percentages in rgb(). Out of range values are clamped, as CSS does. Keywords and function names are
+     * case-insensitive, and a keyword must be a whole word ("redx" is not "red").
+     *
+     * @param used if not null, set to the number of bytes read (white space included) when a colour is found.
+     * @return the colour, or nullopt (and `used` untouched) when `text` does not start with one.
+     */
+    static std::optional<color> try_parse(std::string_view text, std::size_t* used = nullptr);
 
     /**
      * @brief Parses a hex string: "#RGB", "#RGBA", "#RRGGBB" or "#RRGGBBAA".
@@ -141,8 +164,8 @@ public:
     /**
      * @brief Looks up a CSS color name (case-insensitive; "gray" and "grey" both work).
      *
-     * Known names: black, white, red, green, lime, blue, yellow, cyan, magenta, silver, gray,
-     * grey, maroon, olive, purple, teal, navy, orange, pink, brown, transparent.
+     * All 148 CSS keywords (aliceblue ... yellowgreen, with both gray and grey spellings, and
+     * rebeccapurple) and transparent.
      * @throws invalid_color_error if the name is not recognized.
      */
     static color from_name(const std::string& name);

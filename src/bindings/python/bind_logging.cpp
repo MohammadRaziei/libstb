@@ -23,8 +23,9 @@ stb::logging::level g_previous_level = stb::logging::level::notset;     // the l
 // What a record needs from Python, made once. Python's own loggers are looked up once per name and kept,
 // and a record is built into Python strings only when that logger is enabled for it: when Python's level
 // filters it out (the usual case at WARNING) the cost is one cached dict lookup and one isEnabledFor call.
-// The object is never freed: a record can arrive while the interpreter shuts down, and a destructor that
-// runs after it would touch a dead interpreter. (One small leak at exit, no more.)
+// It is freed by an atexit hook (below), while the interpreter is still whole: the hook first removes the
+// handler, so no record can arrive any more, then drops these references under the GIL. A destructor
+// of a static would run after the interpreter is gone and touch it.
 struct bridge_state {
     nb::object get_logger;  // logging.getLogger
     nb::dict loggers;       // record name -> logging.Logger
@@ -35,9 +36,10 @@ void forward(const stb::logging::record& r) {
     // Never throw into libstb (a logger must not make the call that logs fail), never touch Python once
     // it is shut down (Py_IsFinalizing is not in the stable ABI the extension is built for;
     // Py_IsInitialized turns false early enough in Py_FinalizeEx).
-    if (!Py_IsInitialized() || g_state == nullptr) return;
+    if (!Py_IsInitialized()) return;
     try {
         nb::gil_scoped_acquire gil;
+        if (g_state == nullptr) return;  // read under the GIL: the atexit hook frees it under the GIL too
         const nb::str name(r.name.data(), r.name.size());
         nb::object lg;
         if (PyObject* hit = PyDict_GetItemWithError(g_state->loggers.ptr(), name.ptr())) {  // borrowed
@@ -82,4 +84,13 @@ void bind_logging(nb::module_& m) {
 
     g_state = new bridge_state{nb::module_::import_("logging").attr("getLogger"), nb::dict()};
     set_bridge(true);
+
+    // At interpreter exit: stop the bridge, then release the Python objects it holds (they would
+    // otherwise stay referenced for ever). Runs with the GIL, before finalization starts.
+    m.def("_bridge_atexit", [] {
+        set_bridge(false);
+        delete g_state;
+        g_state = nullptr;
+    });
+    nb::module_::import_("atexit").attr("register")(m.attr("_bridge_atexit"));
 }

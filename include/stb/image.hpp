@@ -63,11 +63,45 @@ enum class blend_mode : std::uint8_t {
     lighten,     // max(b, s)
     add,         // min(1, b + s)
     difference,  // |b - s|
+    exclusion,   // b + s - 2 b s: like difference with less contrast; mid gray stays mid gray
 };
-// "normal", "multiply", "screen", "overlay", "darken", "lighten", "add" or "difference".
+// "normal", "multiply", "screen", "overlay", "darken", "lighten", "add", "difference" or "exclusion".
 STB_API std::string_view blend_mode_name(blend_mode m) noexcept;
 // The inverse of blend_mode_name (lower case only). Throws invalid_argument for any other text.
 STB_API blend_mode blend_mode_from_name(std::string_view name);
+
+// How the overlay and the pixels below it share the alpha (the Porter-Duff operators of the W3C
+// "Compositing and Blending" specification), on top of how the colours mix (blend_mode). With S the
+// overlay (its alpha times the opacity) and D what is below:
+//   clear             nothing (transparent)          source_over       S over D (the usual one, the default)
+//   source            S only                         destination_over  D over S
+//   destination       D only (nothing changes)       source_in         S where D is, nothing else
+//   destination_in    D where S is                   source_out        S where D is not
+//   destination_out   D where S is not               source_atop       S over D, only where D is
+//   destination_atop  D over S, only where S is      exclusive_or      S and D where the other is not
+//   plus_lighter      S + D, at most 1 (the CSS "plus-lighter")
+// The operator works inside the part of the image the overlay lands on (clipped to the image); pixels
+// outside it are not touched. On an image without alpha the result is taken over black, so
+// source_over looks as it always did and clear gives black.
+enum class composite_op : std::uint8_t {
+    clear,
+    source,
+    destination,
+    source_over,
+    destination_over,
+    source_in,
+    destination_in,
+    source_out,
+    destination_out,
+    source_atop,
+    destination_atop,
+    exclusive_or,
+    plus_lighter,
+};
+// The lower-case name of the enumerator ("source_over", "exclusive_or", ...).
+STB_API std::string_view composite_op_name(composite_op op) noexcept;
+// The inverse of composite_op_name (lower case only). Throws invalid_argument for any other text.
+STB_API composite_op composite_op_from_name(std::string_view name);
 
 // Where the shorter images of hstack / vstack sit across the stack: at the start (top or left),
 // in the middle, or at the end (bottom or right).
@@ -348,11 +382,13 @@ public:
     // straight alpha), `opacity` (0..1) scales the overlay's alpha. If this image wraps memory it
     // does not own (see wrap()), that memory changes. Returns *this, so calls chain, and on a
     // temporary the temporary itself: `stb::image b = a.copy().blend(logo, 16, 16);`.
+    // `op` is how the alpha is shared (composite_op::source_over, the usual "over", by default; the
+    // others work inside the overlay's rectangle only, see composite_op).
     // Throws invalid_argument on an empty image or an opacity outside 0..1.
     image& blend(const image& overlay, int x = 0, int y = 0, blend_mode mode = blend_mode::normal,
-                 float opacity = 1.0f) &;
+                 float opacity = 1.0f, composite_op op = composite_op::source_over) &;
     image&& blend(const image& overlay, int x = 0, int y = 0, blend_mode mode = blend_mode::normal,
-                  float opacity = 1.0f) &&;
+                  float opacity = 1.0f, composite_op op = composite_op::source_over) &&;
     // Overwrite every pixel, or the rectangle (x, y, width, height) clipped to the image, with
     // `color` (no blending: its alpha is stored as is, and dropped on a format without alpha;
     // gray formats take its luma). A rectangle that is entirely outside changes nothing. Throws

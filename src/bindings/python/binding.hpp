@@ -80,6 +80,13 @@ inline stb::blend_mode to_blend_mode(nb::handle h) {
     throw nb::type_error("mode must be a BlendMode or its name, e.g. 'multiply'");
 }
 
+inline stb::composite_op to_composite_op(nb::handle h) {
+    if (nb::isinstance<nb::str>(h)) return stb::composite_op_from_name(nb::cast<std::string>(h));
+    stb::composite_op o;
+    if (nb::try_cast<stb::composite_op>(h, o, /*convert=*/false)) return o;
+    throw nb::type_error("op must be a CompositeOp or its name, e.g. 'source_in'");
+}
+
 inline stb::align to_align(nb::handle h) {
     if (nb::isinstance<nb::str>(h)) {
         const std::string n = nb::cast<std::string>(h);

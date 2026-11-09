@@ -169,6 +169,28 @@ void bind_outline(nb::module_& m) {
         .def(
             "map", [](const matrix& t, float x, float y) { return std::make_tuple(t.map(x, y).x, t.map(x, y).y); }, "x"_a,
             "y"_a, "The point (x, y) after the transform, as a tuple.")
+        .def(
+            "map_points",
+            [](const matrix& t, const std::vector<std::tuple<float, float>>& pts) {
+                std::vector<stb::point> in;
+                in.reserve(pts.size());
+                for (const auto& [x, y] : pts) in.push_back(stb::point{x, y});
+                t.map(in.data(), in.data(), in.size());
+                std::vector<std::tuple<float, float>> out;
+                out.reserve(in.size());
+                for (const stb::point& p : in) out.emplace_back(p.x, p.y);
+                return out;
+            },
+            "points"_a, "A list of (x, y) points after the transform (same arithmetic as map()).")
+        .def(
+            "map_rect",
+            [](const matrix& t, float x0, float y0, float x1, float y1) {
+                const stb::outline_bounds r = t.map_rect(stb::outline_bounds{x0, y0, x1, y1});
+                return std::make_tuple(r.x0, r.y0, r.x1, r.y1);
+            },
+            "x0"_a, "y0"_a, "x1"_a, "y1"_a,
+            "The bounding box (x0, y0, x1, y1) of the box with those corners after the transform: the box of its four\n"
+            "mapped corners, which is larger than the box for a rotation.")
         .def("inverse", &matrix::inverse, "The inverse matrix, or None if there is none (the determinant is 0).")
         .def_prop_ro("is_identity", &matrix::is_identity)
         .def("__eq__", [](const matrix& x, const matrix& y) { return x == y; }, nb::is_operator())
@@ -237,6 +259,16 @@ void bind_outline(nb::module_& m) {
                 return p.add_outline(other, matrix_or_identity(t));
             },
             "other"_a, "transform"_a = nb::none(), keep, "Append the commands of another outline, optionally moved by a Matrix.")
+        .def(
+            "arc_to",
+            [](outline& p, float rx, float ry, float x_axis_rotation, bool large_arc, bool sweep, float x, float y) -> outline& {
+                return p.arc_to(rx, ry, x_axis_rotation, large_arc, sweep, x, y);
+            },
+            "rx"_a, "ry"_a, "x_axis_rotation"_a, "large_arc"_a, "sweep"_a, "x"_a, "y"_a, keep,
+            "An SVG elliptical arc (the endpoint form of the path command \"A\") from the current point to (x, y),\n"
+            "as cubic curves. `x_axis_rotation` is in degrees; `large_arc` picks the longer of the two arcs and\n"
+            "`sweep` the one drawn clockwise on screen. As in SVG: the same end points add nothing, a radius of 0\n"
+            "gives a line, and radii that are too small are scaled up.")
         .def("transform", [](outline& p, const matrix& t) -> outline& { return p.transform(t); }, "matrix"_a, keep,
              "Move every point through `matrix`, in place. Returns the outline.")
         .def("transformed", &outline::transformed, "matrix"_a, "A copy moved through `matrix`.")
@@ -264,6 +296,15 @@ void bind_outline(nb::module_& m) {
                 return std::make_tuple(b->x0, b->y0, b->x1, b->y1);
             },
             "(x0, y0, x1, y1): the box around all the points, control points included, or None when empty.")
+        .def_prop_ro(
+            "tight_bounds",
+            [](const outline& p) -> std::optional<std::tuple<float, float, float, float>> {
+                const auto b = p.tight_bounds();
+                if (!b) return std::nullopt;
+                return std::make_tuple(b->x0, b->y0, b->x1, b->y1);
+            },
+            "(x0, y0, x1, y1): the exact box of what the outline draws (curve extremes, not control points), or None\n"
+            "when there is nothing. Always inside `bounds`.")
         .def_prop_ro(
             "commands",
             [](const outline& p) {

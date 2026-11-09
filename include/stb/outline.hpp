@@ -17,6 +17,14 @@ struct point {
 constexpr bool operator==(point a, point b) noexcept { return a.x == b.x && a.y == b.y; }
 constexpr bool operator!=(point a, point b) noexcept { return !(a == b); }
 
+// An axis-aligned box: the bounds of an outline (bounds(), tight_bounds()) and of a mapped box
+// (matrix::map_rect). x0 <= x1 and y0 <= y1 whenever libstb makes one.
+struct outline_bounds {
+    float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    float width() const noexcept { return x1 - x0; }
+    float height() const noexcept { return y1 - y0; }
+};
+
 // A 2D affine transform, in the SVG / canvas convention:
 //     x' = a * x + c * y + e
 //     y' = b * x + d * y + f
@@ -51,6 +59,12 @@ struct STB_API matrix {
 
     point map(point p) const noexcept;
     point map(float x, float y) const noexcept { return map(point{x, y}); }
+    // `n` points at once: dst[i] = map(src[i]). `src` and `dst` may be the same array (in place) but
+    // must not otherwise overlap. Same arithmetic as map(point), so the same bits.
+    void map(const point* src, point* dst, std::size_t n) const noexcept;
+    // The bounding box of the four corners of `r` after the transform (for a rotation it is larger
+    // than `r`). A box that is not x0 <= x1, y0 <= y1 is taken as it is, corner by corner.
+    outline_bounds map_rect(const outline_bounds& r) const noexcept;
 
     // The inverse, or nullopt if the matrix cannot be inverted (its determinant is 0).
     std::optional<matrix> inverse() const noexcept;
@@ -86,14 +100,6 @@ constexpr bool operator==(const outline_command& a, const outline_command& b) no
     return a.op == b.op && a.p[0] == b.p[0] && a.p[1] == b.p[1] && a.p[2] == b.p[2];
 }
 constexpr bool operator!=(const outline_command& a, const outline_command& b) noexcept { return !(a == b); }
-
-// The smallest axis-aligned box holding all the points of an outline, control points included (so a
-// curve may bulge less than the box says, never more).
-struct outline_bounds {
-    float x0 = 0, y0 = 0, x1 = 0, y1 = 0;  // x0 <= x1 and y0 <= y1
-    float width() const noexcept { return x1 - x0; }
-    float height() const noexcept { return y1 - y0; }
-};
 
 // A vector shape: any number of contours made of straight lines and quadratic or cubic curves, in
 // float coordinates (x to the right, y down, like pixels). An outline is a plain value: copying it
@@ -140,6 +146,17 @@ public:
     outline& add_ellipse(float cx, float cy, float rx, float ry);
     outline& add_circle(float cx, float cy, float r) { return add_ellipse(cx, cy, r, r); }
 
+    // An SVG elliptical arc (the endpoint form of the path command "A") from the current point to
+    // (x, y), made of cubic curves, at most one per quarter turn. `x_axis_rotation_deg` turns the
+    // ellipse's x axis (degrees, clockwise on screen); of the four arcs through the two points,
+    // `large_arc` picks the one longer than half the ellipse and `sweep` the one drawn in the
+    // direction of growing angle (clockwise on screen). The rules of the SVG specification
+    // (implementation notes F.6.2 and F.6.6) apply: the same endpoints add nothing, a radius of 0
+    // gives a straight line, negative radii are taken as positive, and radii that are too small
+    // are scaled up until the arc fits. On an empty outline the arc starts at (0, 0). A coordinate
+    // that is NaN or infinite gives a straight line to (x, y), which the rasterizer then skips.
+    outline& arc_to(float rx, float ry, float x_axis_rotation_deg, bool large_arc, bool sweep, float x, float y);
+
     // Appends the commands of another outline or of a command list (a glyph outline), optionally
     // moved through `m`. Adding an outline to itself is allowed.
     outline& add_outline(const outline& other, const matrix& m = {});
@@ -169,8 +186,15 @@ public:
     // of the closed contour.
     std::optional<point> current_point() const noexcept;
 
-    // The control-point box (see outline_bounds); nullopt when the outline has no points.
+    // The box of all the points of all commands, control points included (so a curve may bulge less
+    // than the box says, never more); nullopt when the outline has no points.
     std::optional<outline_bounds> bounds() const noexcept;
+    // The exact box of the shape: the end points and the extreme points of every curve, found from
+    // its derivative, so a curve counts for what it draws and its control points do not (the box of
+    // the SVG "objectBoundingBox"). Always inside bounds(), and equal to it for straight lines.
+    // A command with a NaN or infinite coordinate is left out, as the rasterizer does. nullopt when
+    // nothing is left.
+    std::optional<outline_bounds> tight_bounds() const noexcept;
 
     friend bool operator==(const outline& a, const outline& b) noexcept { return a.commands_ == b.commands_; }
     friend bool operator!=(const outline& a, const outline& b) noexcept { return !(a == b); }

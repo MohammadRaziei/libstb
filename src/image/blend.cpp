@@ -33,6 +33,7 @@ float mix(blend_mode m, float b, float s) {
         case blend_mode::lighten: return std::max(b, s);
         case blend_mode::add: return std::min(1.0f, b + s);
         case blend_mode::difference: return std::fabs(b - s);
+        case blend_mode::exclusion: return b + s - 2.0f * b * s;
     }
     return s;
 }
@@ -51,17 +52,76 @@ std::string_view blend_mode_name(blend_mode m) noexcept {
         case blend_mode::lighten: return "lighten";
         case blend_mode::add: return "add";
         case blend_mode::difference: return "difference";
+        case blend_mode::exclusion: return "exclusion";
     }
     return {};
 }
 
 blend_mode blend_mode_from_name(std::string_view name) {
     for (const blend_mode m : {blend_mode::normal, blend_mode::multiply, blend_mode::screen, blend_mode::overlay,
-                               blend_mode::darken, blend_mode::lighten, blend_mode::add, blend_mode::difference}) {
+                               blend_mode::darken, blend_mode::lighten, blend_mode::add, blend_mode::difference,
+                               blend_mode::exclusion}) {
         if (blend_mode_name(m) == name) return m;
     }
     throw std::invalid_argument("unknown blend mode '" + std::string(name) +
-                                "' (normal, multiply, screen, overlay, darken, lighten, add, difference)");
+                                "' (normal, multiply, screen, overlay, darken, lighten, add, difference, exclusion)");
+}
+
+namespace {
+constexpr composite_op all_composite_ops[] = {
+    composite_op::clear,           composite_op::source,           composite_op::destination,
+    composite_op::source_over,     composite_op::destination_over, composite_op::source_in,
+    composite_op::destination_in,  composite_op::source_out,       composite_op::destination_out,
+    composite_op::source_atop,     composite_op::destination_atop, composite_op::exclusive_or,
+    composite_op::plus_lighter};
+
+// The Porter-Duff factors: the output is  sa * fa * (overlay colour) + ab * fb * (colour below).
+void porter_duff(composite_op op, float sa, float ab, float& fa, float& fb) {
+    switch (op) {
+        case composite_op::clear: fa = 0, fb = 0; return;
+        case composite_op::source: fa = 1, fb = 0; return;
+        case composite_op::destination: fa = 0, fb = 1; return;
+        case composite_op::source_over: fa = 1, fb = 1 - sa; return;
+        case composite_op::destination_over: fa = 1 - ab, fb = 1; return;
+        case composite_op::source_in: fa = ab, fb = 0; return;
+        case composite_op::destination_in: fa = 0, fb = sa; return;
+        case composite_op::source_out: fa = 1 - ab, fb = 0; return;
+        case composite_op::destination_out: fa = 0, fb = 1 - sa; return;
+        case composite_op::source_atop: fa = ab, fb = 1 - sa; return;
+        case composite_op::destination_atop: fa = 1 - ab, fb = sa; return;
+        case composite_op::exclusive_or: fa = 1 - ab, fb = 1 - sa; return;
+        case composite_op::plus_lighter: fa = 1, fb = 1; return;
+    }
+    fa = 1, fb = 1 - sa;
+}
+}  // namespace
+
+std::string_view composite_op_name(composite_op op) noexcept {
+    switch (op) {
+        case composite_op::clear: return "clear";
+        case composite_op::source: return "source";
+        case composite_op::destination: return "destination";
+        case composite_op::source_over: return "source_over";
+        case composite_op::destination_over: return "destination_over";
+        case composite_op::source_in: return "source_in";
+        case composite_op::destination_in: return "destination_in";
+        case composite_op::source_out: return "source_out";
+        case composite_op::destination_out: return "destination_out";
+        case composite_op::source_atop: return "source_atop";
+        case composite_op::destination_atop: return "destination_atop";
+        case composite_op::exclusive_or: return "exclusive_or";
+        case composite_op::plus_lighter: return "plus_lighter";
+    }
+    return {};
+}
+
+composite_op composite_op_from_name(std::string_view name) {
+    for (const composite_op op : all_composite_ops)
+        if (composite_op_name(op) == name) return op;
+    throw std::invalid_argument("unknown composite operator '" + std::string(name) +
+                                "' (clear, source, destination, source_over, destination_over, source_in, "
+                                "destination_in, source_out, destination_out, source_atop, destination_atop, "
+                                "exclusive_or, plus_lighter)");
 }
 
 namespace detail {
@@ -70,7 +130,7 @@ namespace detail {
 // below, and the colour is  ((1 - sa) ab cb + sa (1 - ab) cs + sa ab B(cb, cs)) / alpha_out.
 // Below an opaque pixel this is (1 - sa) cb + sa B(cb, cs); for blend_mode::normal it is "over".
 void blend_row(const std::uint8_t* src, int sc, std::uint8_t* dst, int dc, std::size_t n, blend_mode mode,
-               float opacity) {
+               float opacity, composite_op op) {
     const int colours = dc <= 2 ? 1 : 3;     // colour channels of the destination
     const bool dst_alpha = dc == 2 || dc == 4;
     for (std::size_t i = 0; i < n; ++i, src += sc, dst += dc) {
@@ -86,6 +146,23 @@ void blend_row(const std::uint8_t* src, int sc, std::uint8_t* dst, int dc, std::
         sa *= opacity;
         if (colours == 1) rgb[0] = 0.299f * rgb[0] + 0.587f * rgb[1] + 0.114f * rgb[2];  // overlay colour -> gray
         const float ab = dst_alpha ? float(dst[dc - 1]) / 255.0f : 1.0f;
+        if (op != composite_op::source_over) {
+            // The general Porter-Duff operator: the overlay colour first takes the blend mode against what is
+            // below, cs' = (1 - ab) cs + ab B(cb, cs); then co = sa fa cs' + ab fb cb is the (premultiplied)
+            // output colour and ao = sa fa + ab fb its alpha. Without alpha below the output is co as it is
+            // (over black).
+            float fa, fb;
+            porter_duff(op, sa, ab, fa, fb);
+            const float ao = std::min(1.0f, sa * fa + ab * fb);
+            for (int k = 0; k < colours; ++k) {
+                const float cb = float(dst[k]) / 255.0f, cs = rgb[k];
+                const float cs2 = (1.0f - ab) * cs + ab * mix(mode, cb, cs);
+                const float co = std::min(1.0f, sa * fa * cs2 + ab * fb * cb);
+                dst[k] = to_byte(!dst_alpha ? co : ao > 0.0f ? co / ao : 0.0f);
+            }
+            if (dst_alpha) dst[dc - 1] = to_byte(ao);
+            continue;
+        }
         const float out_a = sa + ab * (1.0f - sa);
         for (int k = 0; k < colours; ++k) {
             const float cb = float(dst[k]) / 255.0f, cs = rgb[k];

@@ -290,3 +290,13 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
   دو جای عمدی: `bridge_state` در `bind_logging.cpp` هرگز آزاد نمی‌شود و `KeepAlive` بدون interpreter delete نمی‌کند. پیشنهاد (تأیید نشده): وصل کردن `bridge_state` به teardown ماژول و تست «خروج بدون پیام».
 - **issue #4** (novasvg نسخه‌های محلی دارد چون libstb ندارد): ۱) Porter-Duff و `blend_mode::exclusion`، ۲) رنگ CSS (۱۴۸ نام، rgb/hsl، `color::try_parse`)، ۳) `matrix::map_rect` و `map` آرایه‌ای،
   ۴) `outline::arc_to`، ۵) `outline::tight_bounds`. API پیشنهادی در چت نوشته شد و **هنوز تأیید کاربر نیامده**؛ پیاده‌سازی نشده. ترتیب پیشنهادی: ۵، ۳، ۴، ۲، ۱.
+
+## 2026-11-09 (بعدازظهر): پیاده‌سازی issue #4، **هنوز بیلد کامل و تست نشده**
+
+کد نوشته شد ولی کار نیمه‌تمام زیپ شد. اول این‌ها را انجام بده: بیلد با CMake (`-DSTB_BUILD_TESTS=ON`)، رفع هر خطا یا warning، اجرای ctest و pytest.
+- `bind_logging.cpp`: `bridge_state` حالا با یک hook در atexit آزاد می‌شود (handler برداشته می‌شود، بعد state زیر GIL پاک می‌شود).
+- `outline.hpp/.cpp`: `matrix::map(const point*, point*, n)`، `matrix::map_rect(outline_bounds)`، `outline::arc_to(...)`، `outline::tight_bounds()`. `outline_bounds` بالاتر آمد (نوع `rect` جدید ساخته نشد).
+- `color.hpp/.cpp`: `color::try_parse(string_view, size_t* used)`، ۱۴۸ نام CSS (`src/draw/css_colors.hpp`، با Pillow و matplotlib چک شده)، `rgb()/rgba()/hsl()/hsla()`؛ `from_string` برای رشته‌های دارای `(` از همین parser می‌رود.
+- `image.hpp`, `blend.cpp`, `ops.cpp`, `pixels.hpp`: `blend_mode::exclusion`، `enum class composite_op` (۱۳ عملگر Porter-Duff، `exclusive_or` چون `xor` کلمه‌ی کلیدی است) و پارامتر آخر `op` در `image::blend`؛ فقط داخل مستطیل overlay اعمال می‌شود. canvas و `draw_options` به `composite_op` وصل نشده‌اند.
+- Python: `Outline.arc_to`، `Outline.tight_bounds`، `Matrix.map_rect`، `Matrix.map_points`، `BlendMode.EXCLUSION`، `CompositeOp`، پارامتر `op` در `Image.blend`.
+- تست‌ها: فقط `tests/cpp/test_geometry_extras.cpp` نوشته شده (و `tests/data/css_colors.txt`). **نوشته نشده:** تست‌های رنگ CSS در `test_color.cpp`، تست‌های `exclusion` و `composite_op` در `test_blend.cpp`، تست‌های پایتون، و به‌روزرسانی `docs/guide.md`. بعد از افزودن فایل تست جدید، cmake را دوباره configure کن.
