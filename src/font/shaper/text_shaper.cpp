@@ -14,9 +14,25 @@ arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offse
     using otl::make_tag;
     const std::initializer_list<std::uint32_t> scripts = {make_tag('a', 'r', 'a', 'b'), make_tag('D', 'F', 'L', 'T')};
     r.defs = otl::gdef(otl::find_table(file, font_offset, make_tag('G', 'D', 'E', 'F')));
-    r.gpos = otl::positioner(otl::find_table(file, font_offset, make_tag('G', 'P', 'O', 'S')), scripts);
+    const otl::byte_view gpos_table = otl::find_table(file, font_offset, make_tag('G', 'P', 'O', 'S'));
+    r.gpos = otl::positioner(gpos_table, scripts);
+
+    // Left-to-right scripts: the script's own tag, then the default one, then Latin (what other shapers
+    // fall back to for a font that has no table for the script).
+    const std::uint32_t ltr_tags[script_count] = {make_tag('l', 'a', 't', 'n'), make_tag('g', 'r', 'e', 'k'),
+                                                  make_tag('c', 'y', 'r', 'l')};
+    const std::uint32_t dflt = make_tag('D', 'F', 'L', 'T'), latn = ltr_tags[script_latn];
+    for (std::size_t k = 0; k < script_count; ++k) r.ltr[k].gpos = otl::positioner(gpos_table, {ltr_tags[k], dflt, latn});
+
     const otl::byte_view table = otl::find_table(file, font_offset, make_tag('G', 'S', 'U', 'B'));
-    if (table.empty()) return r;
+    const auto finish_ltr = [&r] {
+        r.shapes_ltr = false;
+        for (const script_layout& l : r.ltr) r.shapes_ltr = r.shapes_ltr || l.usable();
+    };
+    if (table.empty()) {
+        finish_ltr();
+        return r;
+    }
     r.gsub = otl::gsub_table(table);
 
     const std::uint32_t isol = make_tag('i', 's', 'o', 'l'), fina = make_tag('f', 'i', 'n', 'a'),
@@ -48,6 +64,27 @@ arabic_layout arabic_layout::build(otl::byte_view file, std::uint32_t font_offse
     r.has_forms = r.plan.has_feature(isol) || r.plan.has_feature(fina) || r.plan.has_feature(medi) ||
                   r.plan.has_feature(init);
     r.has_rlig = r.plan.has_feature(rlig);
+
+    // The same stages without the shapes of Arabic: decomposition, required ligatures, contextual
+    // alternates, then the optional ligatures (none of them when ligatures are off).
+    const auto ltr_stages = [&](bool ligatures) {
+        std::vector<otl::stage_request> s = {
+            {{make_tag('c', 'c', 'm', 'p'), make_tag('l', 'o', 'c', 'l')}, mask_all},
+            {{rlig}, mask_all},
+            {{make_tag('c', 'a', 'l', 't')}, mask_all},
+        };
+        if (ligatures)
+            s.push_back({{make_tag('l', 'i', 'g', 'a'), make_tag('c', 'l', 'i', 'g'), make_tag('r', 'c', 'l', 't')}, mask_all});
+        else
+            s.push_back({{make_tag('r', 'c', 'l', 't')}, mask_all});
+        return s;
+    };
+    for (std::size_t k = 0; k < script_count; ++k) {
+        r.ltr[k].plan = r.gsub.make_plan({ltr_tags[k], dflt, latn}, 0, ltr_stages(true));
+        r.ltr[k].plan_plain = r.gsub.make_plan({ltr_tags[k], dflt, latn}, 0, ltr_stages(false));
+        r.ltr[k].has_gsub = !r.ltr[k].plan.stages().empty();
+    }
+    finish_ltr();
     return r;
 }
 
@@ -208,10 +245,97 @@ void text_shaper::append_in_visual_order(const std::vector<otl::glyph_record>& g
     }
 }
 
+namespace {
+
+// The shaped script of a character: an index into arabic_layout::ltr, or -1 for the other scripts and
+// -2 for a character that takes the script of its neighbours (spaces, digits, punctuation, combining marks).
+int ltr_script_of(char32_t c) {
+    if (c < 0x80) return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ? int(script_latn) : -2;
+    if (c >= 0x0300 && c <= 0x036F) return -2;  // combining diacritical marks
+    if (c == 0x00AA || c == 0x00BA || (c >= 0x00C0 && c <= 0x024F && c != 0x00D7 && c != 0x00F7)) return int(script_latn);
+    if (c >= 0x0250 && c <= 0x02AF) return int(script_latn);  // IPA extensions
+    if (c >= 0x1E00 && c <= 0x1EFF) return int(script_latn);  // Latin extended additional
+    if (c >= 0x2C60 && c <= 0x2C7F) return int(script_latn);
+    if (c >= 0xA720 && c <= 0xA7FF) return int(script_latn);
+    if (c >= 0xFB00 && c <= 0xFB06) return int(script_latn);  // the Latin ligature characters
+    if ((c >= 0x0370 && c <= 0x03FF) || (c >= 0x1F00 && c <= 0x1FFF)) return c == 0x037E || c == 0x0387 ? -2 : int(script_grek);
+    if ((c >= 0x0400 && c <= 0x052F) || (c >= 0x1C80 && c <= 0x1C8F) || (c >= 0x2DE0 && c <= 0x2DFF) ||
+        (c >= 0xA640 && c <= 0xA69F))
+        return int(script_cyrl);
+    // Common characters: space and the punctuation, symbols and digits of the Latin-1 and General
+    // Punctuation blocks, and the other combining marks.
+    if (c < 0x00C0 || (c >= 0x2000 && c <= 0x206F) || (c >= 0x1AB0 && c <= 0x1AFF) || (c >= 0x1DC0 && c <= 0x1DFF) ||
+        (c >= 0x20D0 && c <= 0x20FF) || (c >= 0xFE20 && c <= 0xFE2F))
+        return -2;
+    return -1;
+}
+
+bool is_combining_mark(char32_t c) {
+    return (c >= 0x0300 && c <= 0x036F) || (c >= 0x1AB0 && c <= 0x1AFF) || (c >= 0x1DC0 && c <= 0x1DFF) ||
+           (c >= 0x20D0 && c <= 0x20FF) || (c >= 0xFE20 && c <= 0xFE2F);
+}
+
+}  // namespace
+
+void text_shaper::shape_ltr(std::u32string_view line, std::size_t first, const shaper_options& options,
+                            const arabic_layout& al, std::vector<visual_glyph>& out) const {
+    const std::size_t n = line.size();
+    std::vector<otl::glyph_record> g;
+    g.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::uint32_t gid = src_.glyph(line[i]);
+        // GDEF says what a glyph is; a font without glyph classes is guessed at from the character.
+        std::uint8_t cls = is_combining_mark(line[i]) ? std::uint8_t(otl::gc_mark) : std::uint8_t(otl::gc_base);
+        if (al.defs.has_glyph_classes()) cls = al.defs.glyph_class(gid);
+        g.push_back({gid, line[i], mask_all, cls, static_cast<std::uint32_t>(first + i)});
+    }
+
+    // The script of each character; a common one takes that of the character before it (the one
+    // after it at the start of the line, Latin when the whole line is common).
+    std::vector<int> script(n);
+    for (std::size_t i = 0; i < n; ++i) script[i] = ltr_script_of(line[i]);
+    int carry = -2;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (script[i] == -2) script[i] = carry;
+        else carry = script[i];
+    }
+    carry = -2;
+    for (std::size_t i = n; i-- > 0;) {
+        if (script[i] == -2) script[i] = carry;
+        else carry = script[i];
+    }
+    for (int& v : script)
+        if (v == -2) v = int(script_latn);
+
+    for (std::size_t a = 0; a < n;) {
+        std::size_t b = a;
+        while (b < n && script[b] == script[a]) ++b;
+        const bool shaped = script[a] >= 0 && al.ltr[std::size_t(script[a])].usable();
+        if (!shaped) {
+            for (std::size_t k = a; k < b; ++k) out.push_back({g[k].gid, g[k].cp, g[k].cluster});
+        } else {
+            const script_layout& sl = al.ltr[std::size_t(script[a])];
+            std::vector<otl::glyph_record> run(g.begin() + std::ptrdiff_t(a), g.begin() + std::ptrdiff_t(b));
+            if (sl.has_gsub) al.gsub.apply(options.ligatures ? sl.plan : sl.plan_plain, run, &al.defs);
+            if (sl.gpos.usable()) sl.gpos.position(run, &al.defs);
+            const bool kerned = sl.gpos.kerns();
+            for (const otl::glyph_record& r : run)
+                out.push_back({r.gid, r.cp, r.cluster, r.attached, r.mark_x, r.mark_y, r.kern, r.shift_x, r.shift_y, kerned});
+        }
+        a = b;
+    }
+}
+
 void text_shaper::shape_line(std::u32string_view line, std::size_t first, const shaper_options& options,
                              std::vector<visual_glyph>& out) const {
-    // Left-to-right text under a left-to-right (or automatic) paragraph is drawn as it is.
+    // Left-to-right text under a left-to-right (or automatic) paragraph: per script run, with the
+    // font's features when it has any for the script, else one glyph per character.
     if (options.direction != bidi::base_dir::rtl && !bidi::has_rtl(line)) {
+        const arabic_layout* ltr = src_.arabic();
+        if (ltr && ltr->shapes_ltr) {
+            shape_ltr(line, first, options, *ltr, out);
+            return;
+        }
         for (std::size_t i = 0; i < line.size(); ++i)
             out.push_back({src_.glyph(line[i]), line[i], static_cast<std::uint32_t>(first + i)});
         return;

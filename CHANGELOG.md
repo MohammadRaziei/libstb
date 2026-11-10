@@ -7,6 +7,18 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Changed
+- **Left-to-right text is shaped** (`font::shape`, and with it `draw_text`, `measure`, `render` and the canvas): a line without a
+  right-to-left letter used to be one glyph per character; it now runs the font's GSUB (`ccmp`, `locl`, `rlig`, `calt`, `liga`,
+  `clig`, `rclt`) and GPOS (`kern`, `dist`, `mark`, `mkmk`) per script run (Latin, Greek, Cyrillic), so "fi" is one glyph
+  (cluster 0; `shape_options::ligatures = false` gives two), accents are decomposed by `ccmp` and hung on their letter from the
+  font's anchors, and kerning comes from the feature. Fonts without features for the script, and other scripts, are unchanged
+  (one glyph per character). **Visible change:** text drawn with a font that has `liga` now shows its ligatures. Output equals HarfBuzz's
+  (glyphs, clusters, advances) on random strings of one script; the text is not Unicode-normalised first, and left-to-right words
+  inside a right-to-left line are still not shaped. Issue 8 of the novasvg list. Test font `libstb-latin-test.ttf` (`make_latin_test_font.py`).
+- `kerning_mode::kern_table` now means the legacy `kern` table only in `font::shape` for every script: the GPOS kerning that the
+  shaper computed (Arabic text had it already) is no longer added on top of it.
+
 ### Added
 - **`image::premultiplied()` and `image::unpremultiplied()`** (Python: `Image.premultiplied()`, `Image.unpremultiplied()`):
   a copy with the colour channels multiplied by alpha (`c * a / 255`) and the inverse (`c * 255 / a`, alpha 0 gives zeros),

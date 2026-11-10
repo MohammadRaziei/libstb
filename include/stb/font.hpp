@@ -134,9 +134,9 @@ enum class text_direction { automatic, ltr, rtl };
 struct shape_options {
     text_direction direction = text_direction::automatic;
     kerning_mode kerning = kerning_mode::automatic;
-    // false: the optional ligature features of the font (liga, clig) do not run, so Latin-style
-    // ligatures such as the Allah glyph stay as separate letters. The required ones (rlig: lam
-    // + alef) and the joining shapes always do: without them Arabic script is wrong, not plain.
+    // false: the optional ligature features of the font (liga, clig) do not run, so ligatures such as
+    // "fi" or the Allah glyph stay as separate letters. The required ones (rlig: lam + alef) and the
+    // joining shapes always do: without them Arabic script is wrong, not plain.
     bool ligatures = true;
 };
 

@@ -491,7 +491,7 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, 
     std::size_t prev = no_glyph;  // the last glyph that takes room: the next kerning goes to its advance
     std::uint32_t prev_gid = 0;
     bool prev_kerned = false;  // the kerning of the last glyph is the font's GPOS lookups (visual_glyph::kerned)
-    const bool kerning_on = options.kerning != kerning_mode::none;
+    const bool gpos_kerning = options.kerning == kerning_mode::automatic;
 
     std::vector<shaped_glyph> out;
     out.reserve(visual.size());
@@ -536,8 +536,9 @@ std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, 
             out.push_back(sg);
             continue;
         }
-        if (prev != no_glyph && !(vg.kerned && prev_kerned)) out[prev].x_advance += glyph_kerning(prev_gid, vg.gid, options.kerning);
-        sg.x_advance = gm.advance + (kerning_on ? float(vg.kern) : 0.0f);
+        // The font's GPOS kerning (vg.kern) is `automatic` kerning; kern_table asks for the legacy table only.
+        if (prev != no_glyph && !(gpos_kerning && vg.kerned && prev_kerned)) out[prev].x_advance += glyph_kerning(prev_gid, vg.gid, options.kerning);
+        sg.x_advance = gm.advance + (gpos_kerning ? float(vg.kern) : 0.0f);
         sg.x_offset = float(vg.shift_x);
         sg.y_offset = float(vg.shift_y);
         out.push_back(sg);

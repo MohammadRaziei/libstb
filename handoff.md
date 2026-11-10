@@ -315,3 +315,11 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
 - پایه‌ی مشترک `stb::detail::image_base` (width، height، `data_`، `owner_deleter`، ctor/dtor protected) که `image` و `premultiplied_image` از آن ارث می‌برند و با هم ارتباطی ندارند (پس `blend`، `to_png` و `resize` روی premultiplied وجود ندارد). `image` همان رابط public قبلی را دارد؛ فقط `channels_` و `stride()` (محاسبه‌ای) در خودش مانده. اسم `detail::image_base` انتخاب من بود (جایگزین `_image_base`): تغییرش یک rename است.
 - Python: `PremultipliedImage` (`from_image`، `to_image`، `copy`، ویژگی‌های `width`، `height`، `stride`، `empty`، و `__array_interface__` برای نمای uint32 بدون کپی). `wrap` در Python bind نشده (نیاز به GC و keep-alive دارد).
 - `stride()` در پایه نیست: `image` آن را از `width * channels` حساب می‌کند و `premultiplied_image` عضو خودش را دارد.
+
+## 2026-11-10: شکل‌دهی متن LTR (issue 8 de novasvg)
+
+- `text_shaper::shape_line` برای خط بدون حرف RTL دیگر «یک glyph برای هر نویسه» نیست: `shape_ltr` متن را به runهای هم‌اسکریپت (latn، grek، cyrl؛ فاصله/رقم/نقطه‌گذاری اسکریپت قبلی را می‌گیرد) می‌شکند و برای هر run از GSUB (`ccmp`، `locl`، `rlig`، `calt`، `liga`/`clig`، `rclt`) و GPOS (`kern`، `mark`، `mkmk`، ...) همان اسکریپت استفاده می‌کند. اسکریپت‌های دیگر (CJK، تایلندی، ...) و فونتی که feature ندارد همان مسیر سریع قبلی را دارند.
+- `arabic_layout` (اسم قدیمی ماند) حالا `ltr[3]` (`script_layout`: plan و plan_plain و positioner برای هر اسکریپت) و `shapes_ltr` هم دارد؛ GDEF و فهرست lookupهای GSUB با بخش عربی مشترک است و اولین بار که هر متنی با فونت شکل داده شود parse می‌شود (نه موقع open).
+- `font::shape`: `kerning_mode::kern_table` فقط جدول `kern` قدیمی است؛ kerning مربوط به GPOS شکل‌دهنده (`vg.kern` و `kerned`) فقط در حالت `automatic` اضافه می‌شود.
+- اعتبارسنجی: با HarfBuzz (uharfbuzz 0.57) روی رشته‌های تصادفی تک‌اسکریپتی DejaVu Sans (latn، grek، cyrl) و فونت مصنوعی: glyph و cluster (سطح MONOTONE_CHARACTERS) و advance صفر اختلاف؛ جای علامت‌ها (offset) روی فونت مصنوعی یکی است. فرق‌ها: HarfBuzz قبل از شکل‌دهی نویسه‌ها را compose می‌کند (e + U+0301 ← é)، ما نه؛ و کلمه‌ی لاتین داخل خط RTL هنوز شکل‌دهی نمی‌شود.
+- تست: `tests/cpp/test_ltr_shaping.cpp`، `tests/python/test_ltr_shaping.py` (با مقایسه‌ی HarfBuzz اگر نصب باشد)، فونت `tests/data/libstb-latin-test.ttf` از `make_latin_test_font.py`.

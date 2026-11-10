@@ -10,14 +10,17 @@
 //      attached to their letters;
 //   5. the line is ordered with the bidirectional algorithm, brackets are mirrored, and a
 //      letter's marks stay after it.
-// Lines without a right-to-left letter come back as one glyph per character (unless the paragraph
-// direction is forced to right-to-left).
+// Lines without a right-to-left letter (unless the paragraph direction is forced to right-to-left)
+// are shaped per script run (Latin, Greek, Cyrillic) with the font's GSUB (ccmp, locl, rlig, calt,
+// liga, clig, rclt) and GPOS (kern, mark, mkmk, ...) for that script; a character of another
+// script, and a font without any of those features, give one glyph per character as before.
 // Every glyph carries the index of the character it came from (visual_glyph::cluster), through
 // joining, ligatures, mirroring and reordering.
 //
 // Internal header: included only from src/font/.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -32,7 +35,21 @@ namespace stb {
 // Bits of glyph_record::mask: which features may act on a glyph.
 enum : std::uint32_t { mask_all = 1, mask_isol = 2, mask_fina = 4, mask_medi = 8, mask_init = 16 };
 
-// The GSUB and GPOS side of one font for Arabic script: parsed once, then shared by every shaping call.
+// The plans of one script of left-to-right text (Latin, Greek or Cyrillic).
+struct script_layout {
+    otl::shaping_plan plan;
+    otl::shaping_plan plan_plain;  // without the optional ligatures (liga, clig)
+    otl::positioner gpos;
+    bool has_gsub = false;         // the font has GSUB lookups for the script (or the default one)
+    bool usable() const { return has_gsub || gpos.usable(); }
+};
+
+// The scripts of left-to-right text that are shaped, as indices into arabic_layout::ltr.
+enum : std::size_t { script_latn, script_grek, script_cyrl, script_count };
+
+// The GSUB and GPOS side of one font: parsed once, then shared by every shaping call. Named for the
+// script it was written for; it also holds the plans of the left-to-right scripts (`ltr`), which use
+// the same GDEF and GSUB lookup list.
 struct arabic_layout {
     otl::gdef defs;
     otl::gsub_table gsub;
@@ -42,6 +59,8 @@ struct arabic_layout {
     bool usable = false;       // the font has GSUB lookups for Arabic (or default) script
     bool has_forms = false;    // GSUB defines any of isol, fina, medi, init: then it decides every shape
     bool has_rlig = false;     // required ligatures (lam-alef) come from GSUB
+    std::array<script_layout, script_count> ltr;
+    bool shapes_ltr = false;   // the font has GSUB or GPOS features for any left-to-right script
 
     static arabic_layout build(otl::byte_view file, std::uint32_t font_offset);
 };
@@ -91,6 +110,9 @@ public:
     std::vector<visual_glyph> shape(std::u32string_view text, const shaper_options& options = {}) const;
 
 private:
+    // A line without a right-to-left letter, shaped per script run with `al` (see the header comment).
+    void shape_ltr(std::u32string_view line, std::size_t first, const shaper_options& options,
+                   const arabic_layout& al, std::vector<visual_glyph>& out) const;
     // One line (no '\n') appended to `out`; `first` is the index of its first character in the text.
     void shape_line(std::u32string_view line, std::size_t first, const shaper_options& options,
                     std::vector<visual_glyph>& out) const;

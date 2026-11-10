@@ -248,7 +248,8 @@ canvas shape and reorder it for you: pass the text in the order you type it, no 
 `arabic-reshaper` or `python-bidi`. The line is ordered with the Unicode bidirectional algorithm
 (UAX #9: the paragraph direction is that of the first strong letter, Latin words and numbers inside
 Persian text keep their order, brackets are mirrored), ZWNJ and ZWJ are honoured, each `\n` line is
-shaped on its own, and text with no right-to-left letter is drawn exactly as before.
+shaped on its own. Text with no right-to-left letter is shaped too, per script run (Latin, Greek,
+Cyrillic), see "Left-to-right text" below.
 
 Letter shapes come from the font. If it has a GSUB table for Arabic script (every modern Persian
 and Arabic font does), libstb runs it the way an OpenType shaper does: the `isol`, `init`, `medi`,
@@ -261,9 +262,21 @@ HarfBuzz's on 18,000 random strings (`Font.shape_glyphs` returns them, for diagn
 about 0.2 microseconds per character, and the GSUB table is parsed the first time right-to-left text
 is drawn with a font (about 0.1 ms), not when the font is opened.
 
+**Left-to-right text (Latin, Greek, Cyrillic).** A line with no right-to-left letter is split into runs of
+one script (a space, a digit or a punctuation mark takes the script before it), and each run gets the
+font's features for that script: GSUB `ccmp`, `locl`, `rlig`, `calt`, `liga`, `clig`, `rclt` (so "fi" is the one glyph
+the font draws for it, `ligatures = false` drops `liga` and `clig`) and GPOS `kern`, `dist`, `mark`, `mkmk` (kerning, and
+accents hung on their letters from the font's anchors). A font with none of those features for the script, and
+characters of any other script (CJK, Thai, ...), still give one glyph per character, and the tables are parsed the
+first time text is shaped with a font, not when it is opened. On DejaVu Sans and a synthetic font the glyphs, clusters
+and advances equal HarfBuzz's on random strings of one script. Two differences from a browser: the text is not
+normalised first (HarfBuzz composes `e` + U+0301 into `é` when the font has it; libstb keeps the two characters and
+hangs the accent from GPOS), and a line that also has a right-to-left letter keeps its left-to-right words unshaped
+(kerning only), as before. Text laid out with `draw_text`, `measure` or `render` now uses these ligatures by default.
+
 GPOS: in Arabic-script text the font's features `kern`, `dist`, `mark`, `mkmk`, `abvm` and `blwm` are run for
 the script (lookup types 1 single, 2 pair, 4 mark to base, 5 mark to ligature, 6 mark to mark, 7 and 8
-contextual, also through extension lookups; Latin text uses the pair kerning of the font as before). Marks
+contextual, also through extension lookups). Marks
 are placed from the font's anchors (a mark after a ligature hangs on
 its last component). A mark the font has no anchor pair for falls back to a simple rule: centred on the
 ink of its letter and stacked above it (below for kasra and similar signs, shadda first). Kerning is the
