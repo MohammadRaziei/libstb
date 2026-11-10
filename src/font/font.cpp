@@ -1,13 +1,16 @@
 #include "stb/font.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <set>
 #include <unordered_set>
 #include <utility>
 
@@ -412,6 +415,154 @@ int font::face_count(const std::vector<std::uint8_t>& data) {
 }
 
 int font::face_count(const std::filesystem::path& path) { return face_count(detail::read_file(path)); }
+
+// ---------------------------------------------------------------- names and style
+
+namespace {
+
+truetype::face_info info_of(const font::impl& f) {
+    truetype::face_info info;
+    truetype::read_face_info(otl::byte_view(f.data.ptr, f.data.len), std::uint32_t(f.face.font_start()), info);
+    return info;
+}
+
+// The faces of font data that may still be a WOFF (unpacked first: `owner` keeps the bytes).
+std::vector<font_face_info> scan_view(const std::uint8_t* ptr, std::size_t len) {
+    std::vector<std::uint8_t> sfnt;
+    if (unpack_web_font(ptr, len, sfnt)) {
+        ptr = sfnt.data();
+        len = sfnt.size();
+        return scan_view(ptr, len);  // the unpacked bytes are a plain sfnt: no second unpacking
+    }
+    const otl::byte_view file(ptr, len);
+    const int count = truetype::face::font_count(file);
+    if (count < 1) throw decode_error("not a TrueType/OpenType font or collection");
+    std::vector<font_face_info> faces;
+    for (int i = 0; i < count; ++i) {
+        const int offset = truetype::face::offset_for_index(file, i);
+        truetype::face_info info;
+        if (offset < 0 || !truetype::read_face_info(file, std::uint32_t(offset), info)) continue;
+        faces.push_back({i, std::move(info.family_name), info.bold, info.italic});
+    }
+    return faces;
+}
+
+}  // namespace
+
+std::string font::family_name() const { return info_of(*impl_).family_name; }
+bool font::is_bold() const noexcept { return info_of(*impl_).bold; }
+bool font::is_italic() const noexcept { return info_of(*impl_).italic; }
+
+std::vector<font_face_info> font::scan(const std::vector<std::uint8_t>& data) {
+    return scan_view(data.data(), data.size());
+}
+
+std::vector<font_face_info> font::scan(const std::filesystem::path& path) {
+    font_bytes bytes;
+#ifdef STB_FONT_HAVE_MMAP
+    if (!bytes.map_file(path))
+#endif
+    {
+        bytes.own(detail::read_file(path));  // throws io_error / limit_error
+    }
+    return scan_view(bytes.ptr, bytes.len);
+}
+
+namespace {
+
+bool is_font_file(const std::filesystem::path& p) {
+    std::string ext = p.extension().string();
+    for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return ext == ".ttf" || ext == ".otf" || ext == ".ttc" || ext == ".otc" || ext == ".woff";
+}
+
+void add_dir_if_exists(std::vector<std::filesystem::path>& dirs, const std::filesystem::path& dir) {
+    std::error_code ec;
+    if (!dir.empty() && std::filesystem::is_directory(dir, ec)) dirs.push_back(dir);
+}
+
+}  // namespace
+
+std::vector<std::filesystem::path> font::system_font_dirs() {
+    std::vector<std::filesystem::path> dirs;
+#if defined(_WIN32)
+    const std::string windir = env("WINDIR", env("SystemRoot", "C:\\Windows").c_str());
+    add_dir_if_exists(dirs, std::filesystem::path(windir) / "Fonts");
+    const std::string local = env("LOCALAPPDATA", "");
+    if (!local.empty()) add_dir_if_exists(dirs, std::filesystem::path(local) / "Microsoft" / "Windows" / "Fonts");
+#elif defined(__APPLE__)
+    add_dir_if_exists(dirs, "/System/Library/Fonts");
+    add_dir_if_exists(dirs, "/Library/Fonts");
+    const std::string home = env("HOME", "");
+    if (!home.empty()) add_dir_if_exists(dirs, std::filesystem::path(home) / "Library" / "Fonts");
+#elif defined(__ANDROID__)
+    add_dir_if_exists(dirs, "/system/fonts");
+    add_dir_if_exists(dirs, "/product/fonts");
+#else
+    add_dir_if_exists(dirs, "/usr/share/fonts");
+    add_dir_if_exists(dirs, "/usr/local/share/fonts");
+    // XDG: $XDG_DATA_DIRS (default /usr/local/share:/usr/share) and $XDG_DATA_HOME (default ~/.local/share).
+    const std::string data_dirs = env("XDG_DATA_DIRS", "");
+    for (std::size_t start = 0; start <= data_dirs.size();) {
+        std::size_t end = data_dirs.find(':', start);
+        if (end == std::string::npos) end = data_dirs.size();
+        if (end > start) add_dir_if_exists(dirs, std::filesystem::path(data_dirs.substr(start, end - start)) / "fonts");
+        start = end + 1;
+    }
+    const std::string home = env("HOME", "");
+    std::string data_home = env("XDG_DATA_HOME", "");
+    if (data_home.empty() && !home.empty()) data_home = home + "/.local/share";
+    if (!data_home.empty()) add_dir_if_exists(dirs, std::filesystem::path(data_home) / "fonts");
+    if (!home.empty()) add_dir_if_exists(dirs, std::filesystem::path(home) / ".fonts");
+#endif
+    // The same folder can come from two sources (XDG_DATA_DIRS usually lists /usr/share).
+    std::vector<std::filesystem::path> unique;
+    std::set<std::filesystem::path> seen;
+    for (auto& d : dirs) {
+        std::error_code ec;
+        std::filesystem::path key = std::filesystem::weakly_canonical(d, ec);
+        if (ec) key = d;
+        if (seen.insert(key).second) unique.push_back(std::move(d));
+    }
+    return unique;
+}
+
+std::vector<system_font_info> font::system_fonts() { return system_fonts(system_font_dirs()); }
+
+std::vector<system_font_info> font::system_fonts(const std::vector<std::filesystem::path>& dirs) {
+    namespace fs = std::filesystem;
+    constexpr int max_depth = 8;  // symbolic links to folders are followed: this stops a loop
+    std::set<fs::path> files;     // sorted, and a file found through two folders is read once
+    for (const fs::path& dir : dirs) {
+        std::error_code ec;
+        fs::recursive_directory_iterator it(dir, fs::directory_options::skip_permission_denied | fs::directory_options::follow_directory_symlink, ec);
+        for (; !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+            if (it.depth() >= max_depth) it.disable_recursion_pending();
+            std::error_code type_ec;
+            if (it->is_regular_file(type_ec) && is_font_file(it->path())) {
+                std::error_code canon_ec;
+                fs::path key = fs::weakly_canonical(it->path(), canon_ec);
+                files.insert(canon_ec ? it->path() : key);
+            }
+        }
+    }
+    std::vector<system_font_info> result;
+    std::size_t skipped = 0;
+    for (const fs::path& file : files) {
+        try {
+            for (font_face_info& face : scan(file)) {
+                system_font_info found;
+                static_cast<font_face_info&>(found) = std::move(face);
+                found.path = file;
+                result.push_back(std::move(found));
+            }
+        } catch (const std::exception&) {
+            ++skipped;  // unreadable, or not a font (or a WOFF2)
+        }
+    }
+    detail::loggers::font().debug("system_fonts: %zu face(s) in %zu file(s), %zu file(s) skipped", result.size(), files.size(), skipped);
+    return result;
+}
 
 namespace {
 

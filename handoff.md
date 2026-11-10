@@ -1,6 +1,6 @@
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 
-تاریخ: 2026-11-09 (بعد از 2026-11-06: GPOS برای kerning و mark، `glyph_kind`، `shape` با بازه، ترتیب marks؛ بخش 9 پایین). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
+تاریخ: 2026-11-11 (جدیدترین بخش: «2026-11-11» آخر فایل؛ تاریخ بالا مربوط به متن قدیمی‌تر است) (جدیدترین وضعیت: بخش «وضعیت فعلی» پایین؛ ادامه‌ی متن از 2026-11-09 است) (بعد از 2026-11-06: GPOS برای kerning و mark، `glyph_kind`، `shape` با بازه، ترتیب marks؛ بخش 9 پایین). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).
 این فایل untracked است (قبل از push حذفش کن). **تغییرات بخش «کارهای commit نشده» پایین هنوز commit نشده‌اند**
 (working tree عمداً dirty است: حدود 90 مسیر در `git status`).
 
@@ -13,6 +13,41 @@
 - در API عمومی `std::shared_ptr` / `std::make_shared` نباید دیده شود (مالکیت را داخل شیء پنهان کن).
 - کاربر این‌ها را **نخواست**: `stb::format` ({}-style؛ `sformat` کافی است) و کلاس `stb::file::path` (`std::filesystem::path` کافی است).
 - ویندوز: `<windows.h>` ماکروهای `near`، `far`، `small`، `min`، `max` دارد؛ این‌ها را اسم تابع یا متغیر نگذار.
+
+## وضعیت فعلی (2026-11-10، آخرین دور: این بخش را اول بخوان)
+
+**ریپو و تحویل.** ریپو `mohammadraziei/libstb` برای من private بود (codeload 404، API 403): نتوانستم pull بگیرم، پس همه‌ی کار روی zipهایی است که کاربر داده. zip فاقد `.git` است. اگر روی ریپو چیزی عوض شده، کاربر باید zip تازه بدهد. کارهای این دور commit نشده‌اند (zip کل پروژه در `libstb.zip` تحویل شد).
+
+**وضعیت issueهای novasvg** (`libstb-issues.md` و `libstb-issues (2).md`):
+
+| # | موضوع | وضعیت |
+|---|---|---|
+| 1 | Porter-Duff و `blend_mode::exclusion` | انجام شده |
+| 2 | رنگ CSS در `stb::color` | انجام شده |
+| 3 | `matrix::map_rect` و `map` آرایه‌ای | انجام شده |
+| 4 | `outline::arc_to` | انجام شده؛ `outline::from_svg_path` (اختیاری) ساخته نشده |
+| 5 | `outline::tight_bounds` | انجام شده |
+| 6 | `family_name`/`is_bold`/`is_italic`/`font::scan`/`system_fonts` | انجام شده (2026-11-11، commit نشده) |
+| 7 | گرد کردن hsl روی .5 | قبلاً رفع شده |
+| 8 | شکل‌دهی متن LTR (GSUB/GPOS) | انجام شده این دور |
+| 9 | نوع premultiplied ARGB32 | انجام شده این دور (گزینه ۲: نوع جدا) |
+
+**کارهای این دور** (جزئیات در سه بخش `2026-11-10` آخر همین فایل): (الف) `image::premultiplied()` و `unpremultiplied()`؛ (ب) `premultiplied_image` روی پایه‌ی مشترک `detail::image_base`، با bind پایتونِ `PremultipliedImage`؛ (ج) شکل‌دهی متن LTR در `font::shape` (و درنتیجه `draw_text`، `measure`، `render`).
+
+**نتیجه‌ی تست آخر** (CMake، gcc، لینوکس، `-j2`): C++ 500 تست پاس، صفر warning؛ پایتون 1672 پاس و 4 skip (uharfbuzz نصب بود و مقایسه‌ها با HarfBuzz اجرا شدند). ویندوز (MSVC)، macOS و ARM اجرا نشده‌اند.
+
+**کار بعدی: issue 6.** API جدید است: اول پیشنهاد API را بنویس و منتظر تأیید بمان (قاعده‌ی کاربر). پیشنهاد اولیه از خود issue: `std::string font::family_name() const` (UTF-8، name id 1 و ترجیحاً 16)، `bool is_bold() const`، `bool is_italic() const` (OS/2 `fsSelection`، fallback `head.macStyle`) و `static std::vector<font_face_info> font::scan(path)` با `{index, family_name, bold, italic}` برای هر face بدون parse کامل فایل؛ `font::system_fonts()` اختیاری و تصمیم کاربر. معیار: DejaVu Sans، DejaVu Sans Bold و یک face ایتالیک درست گزارش شوند و `.ttc` به‌ازای هر face یک ورودی بدهد. فونت‌های DejaVu در sandbox در `/usr/share/fonts/truetype/dejavu/` هستند، ولی `data/fonts` فقط Vazirmatn دارد: برای تست commit‌شده یک فونت مصنوعی با fontTools بساز (مثل `tests/data/make_latin_test_font.py`).
+
+**کارهای مانده و سؤال‌های باز برای کاربر**
+- سؤال: اسم پایه‌ی مشترک را `detail::image_base` گذاشتم (کاربر `stb::_image_base` پیشنهاد داده بود). تغییرش یک rename است.
+- سؤال/بررسی: قاعده‌ی «`std::shared_ptr` در API عمومی دیده نشود» بالا هست، ولی `premultiplied_image::wrap(..., std::shared_ptr<void> keep_alive)` هم‌شکل `image::wrap` است و `image_base` عضو protected از نوع `shared_ptr` دارد (قبلاً private در `image` بود). اگر کاربر آن قاعده را سخت می‌خواهد، باید `keep_alive` عوض شود (مثلاً یک deleter یا `std::function<void()>`). از کاربر بپرس.
+- `PremultipliedImage.__array_interface__` را خودم به پایتون اضافه کردم (نمای uint32 بدون کپی)؛ اگر نخواست حذف شود. `wrap` در پایتون bind نشده (به GC و keep-alive نیاز دارد).
+- **تغییر قابل‌مشاهده:** `draw_text`/`measure`/`render` حالا ligatureهای `liga` فونت را نشان می‌دهند (مثلاً "fi"). راهی برای خاموش کردنش در `draw_options` نیست (فقط `shape_options::ligatures`). اگر goldenهای novasvg به‌هم خورد، شاید گزینه‌ی جدید لازم شود (API جدید: اول پیشنهاد).
+- شکل‌دهی لاتین داخل خط RTL و normalize کردن نویسه‌ها (`e` + U+0301 ← `é`) انجام نشده؛ issue 8 فقط متن LTR را خواسته بود.
+- بنچمارک premultiply را قبل و بعد از refactor کرنل کنار هم اجرا نکردم (فقط یک اجرا بعد از تغییر، بدون افت واضح).
+- بعد از merge: انتشار نسخه (CHANGELOG در Unreleased است)، پاسخ در novasvg و حذف کدهای تکراری آن (`blend`، `color_parse`، `matrix` helperها، `bounding_rect`، `surface`/`pixmap`، و بعد از issue 6 خواننده‌ی sfnt).
+
+**محیط build در sandbox** (چیزهایی که زمان تلف می‌کنند): هر دستور حداکثر 300 ثانیه است و فقط یک هسته هست؛ `cmake`، `nanobind`، `numpy`، `pillow`، `pytest`، `scikit-build-core` و `uharfbuzz` را با `pip install --break-system-packages` نصب کن (cmake از PyPI در `/usr/local/bin`). configure: `cmake -S . -B /tmp/b -DCMAKE_BUILD_TYPE=Release`. build کامل حدود 4 دقیقه است: آن را پس‌زمینه بگیر (`setsid nohup sh -c 'cmake --build /tmp/b -j2 > /tmp/build.log 2>&1; echo $? > /tmp/build.done' ... &`) و با `sleep` پیگیری کن، وگرنه با پایان دستور ساخت می‌میرد. تست C++: `/tmp/b/tests/cpp/test_stb_cpp`؛ تست پایتون: `cd /tmp/b/python/install && python3 -m pytest /مسیر/tests/python -p no:cacheprovider -q`. مقایسه با HarfBuzz روی متن تک‌اسکریپتی: `buf.cluster_level = MONOTONE_CHARACTERS` بگذار و متن را با اسکریپت واحد بده (HarfBuzz کل بافر را با اسکریپت اولین حرف می‌سازد).
 
 ## کارهای commit نشده (به ترتیب پیشنهادی commit)
 
@@ -323,3 +358,15 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
 - `font::shape`: `kerning_mode::kern_table` فقط جدول `kern` قدیمی است؛ kerning مربوط به GPOS شکل‌دهنده (`vg.kern` و `kerned`) فقط در حالت `automatic` اضافه می‌شود.
 - اعتبارسنجی: با HarfBuzz (uharfbuzz 0.57) روی رشته‌های تصادفی تک‌اسکریپتی DejaVu Sans (latn، grek، cyrl) و فونت مصنوعی: glyph و cluster (سطح MONOTONE_CHARACTERS) و advance صفر اختلاف؛ جای علامت‌ها (offset) روی فونت مصنوعی یکی است. فرق‌ها: HarfBuzz قبل از شکل‌دهی نویسه‌ها را compose می‌کند (e + U+0301 ← é)، ما نه؛ و کلمه‌ی لاتین داخل خط RTL هنوز شکل‌دهی نمی‌شود.
 - تست: `tests/cpp/test_ltr_shaping.cpp`، `tests/python/test_ltr_shaping.py` (با مقایسه‌ی HarfBuzz اگر نصب باشد)، فونت `tests/data/libstb-latin-test.ttf` از `make_latin_test_font.py`.
+
+## 2026-11-11: issue 6 (نام و سبک فونت) و `system_fonts` (تأیید کاربر)
+
+- ریپو این بار با `git clone https://github.com/mohammadraziei/libstb` کلون شد (HEAD `ebb68b2`؛ `premultiplied_image` و شکل‌دهی LTR در آن commit شده‌اند). این دور commit نشده است.
+- API در `include/stb/font.hpp`: `font::family_name()` (name id 16 و بعد 1؛ ردیف Windows انگلیسی اول، بعد زبان دیگر، Unicode، Mac Roman؛ UTF-8)، `is_bold()`، `is_italic()` (OS/2 `fsSelection` بیت 5 و بیت 0 یا 9؛ بدون OS/2 یا کوتاه‌تر از 64 بایت: `head.macStyle`)،
+  `font::scan(path|bytes)` با `font_face_info {index, family_name, bold, italic}` (face بدون `head` و `OS/2` جا می‌افتد؛ `decode_error` برای چیزی که فونت نیست و WOFF2)، `font::system_font_dirs()`، `font::system_fonts()` و `system_fonts(dirs)` با `system_font_info : font_face_info {path}` (مرتب بر اساس path و index، فایل خراب رد می‌شود، فقط یک debug log).
+  `system_fonts(dirs)` را برای تست‌پذیری اضافه کردم (در پیشنهاد نبود).
+- خواننده: `src/font/truetype/face_info.cpp` (`truetype::read_face_info`)؛ `scan` روی unix فایل را mmap می‌کند (نه خواندن کامل). Python: `Font.family_name/is_bold/is_italic` (property)، `Font.scan`، `Font.system_fonts`، `Font.system_font_dirs`، `FontFaceInfo`، `SystemFont` (NamedTuple).
+- تست: `tests/cpp/test_font_info.cpp` (8 تست)، `tests/python/test_font_info.py` (11 تست)، فونت مصنوعی `tests/data/libstb-info.ttc` (4 face: regular، bold با کاراکتر غیر BMP و id 1 فرانسوی، italic با id 16، bold italic فقط Mac Roman بدون OS/2) و `libstb-info.woff` از `make_info_test_fonts.py`.
+- نتیجه (CMake، gcc، لینوکس، `-j2`): C++ 509 تست پاس، صفر warning؛ پایتون 1683 پاس و 4 skip. ویندوز، macOS، ARM اجرا نشده‌اند (مسیرهای ویندوز و macOS `system_font_dirs` فقط کامپایل شرطی‌اند).
+- docs/guide.md (نمونه‌ی C++ و Python)، CHANGELOG (Unreleased) و checklist.md به‌روز شدند؛ جمله‌ی قدیمی «فقط RTL از GSUB رد می‌شود» در guide درست شد.
+- مانده: سؤال‌های باز بخش بالا (اسم `detail::image_base`، `shared_ptr` در `wrap`، `__array_interface__`، ligature پیش‌فرض)، پاسخ در novasvg و حذف خواننده‌ی sfnt تکراری آن.

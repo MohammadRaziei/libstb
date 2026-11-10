@@ -5,6 +5,7 @@
 //   face.cpp         the file: tables, cmap, metrics, kerning, glyph outlines (glyf and CFF)
 //   glyph_raster.cpp outline -> 8-bit coverage bitmap (curve flattening, scanline area coverage)
 //   atlas.cpp        packing many glyph bitmaps into one image
+//   face_info.cpp    the family name and the bold / italic flags (tables name, OS/2, head)
 //
 // A font is untrusted input, so every read goes through otl::byte_view: out-of-range reads give
 // 0 instead of touching memory outside the file.
@@ -14,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "font/shaper/otl.hpp"
@@ -41,6 +43,20 @@ struct bitmap {
     int x_offset = 0, y_offset = 0;
     std::vector<std::uint8_t> pixels;  // empty when the glyph has no pixels (a space)
 };
+
+// What a font calls itself: the family name (UTF-8) and its style flags. Read from the tables
+// `name`, `OS/2` and `head` only, so it needs no cmap, outlines or metrics and works on any font
+// whose table directory is intact.
+struct face_info {
+    std::string family_name;
+    bool bold = false;
+    bool italic = false;
+};
+
+// False when the font that starts at `font_start` in `file` has neither a `head` nor an `OS/2`
+// table (it is not a font). A missing or unreadable `name` table is not a failure: the family
+// name is then empty.
+bool read_face_info(otl::byte_view file, std::uint32_t font_start, face_info& out);
 
 // One font of a file. A view onto the file's bytes, which must outlive the face.
 class face {

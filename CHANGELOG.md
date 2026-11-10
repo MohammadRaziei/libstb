@@ -20,6 +20,15 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   shaper computed (Arabic text had it already) is no longer added on top of it.
 
 ### Added
+- **Font names and style** (issue 6 of the novasvg list): `font::family_name()` (name id 16, else 1; English first, UTF-8),
+  `font::is_bold()` and `font::is_italic()` (OS/2 `fsSelection`, `head.macStyle` when there is no OS/2 table);
+  `font::scan(path or bytes)` gives a `font_face_info` (`index`, `family_name`, `bold`, `italic`) for every face of a
+  .ttf / .otf / .ttc / .woff by reading only the `name`, `OS/2` and `head` tables (a file on disk is mapped, not read);
+  `font::system_font_dirs()` and `font::system_fonts()` list the faces under the operating system's font folders as
+  `system_font_info` (a `font_face_info` plus `path`), sorted, skipping files that are not fonts; `system_fonts(dirs)`
+  does the same for the folders you give. Python: `Font.family_name`, `Font.is_bold`, `Font.is_italic`, `Font.scan`,
+  `Font.system_font_dirs`, `Font.system_fonts`, `FontFaceInfo`, `SystemFont`. Test fonts `libstb-info.ttc` and
+  `libstb-info.woff` (`make_info_test_fonts.py`).
 - **`image::premultiplied()` and `image::unpremultiplied()`** (Python: `Image.premultiplied()`, `Image.unpremultiplied()`):
   a copy with the colour channels multiplied by alpha (`c * a / 255`) and the inverse (`c * 255 / a`, alpha 0 gives zeros),
   for `rgba` and `gray_alpha`; other formats come back as a copy. The bytes keep the order R, G, B, A and the image does not

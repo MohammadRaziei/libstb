@@ -7,7 +7,7 @@ fonts you trust.
 from __future__ import annotations
 
 import os
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Sequence, Union
 
 from . import libstb_py as _native
 from .image import Image, Source, _read
@@ -23,6 +23,25 @@ class FontMetrics(NamedTuple):
     @property
     def line_height(self) -> float:
         return self.ascent - self.descent + self.line_gap
+
+
+class FontFaceInfo(NamedTuple):
+    """One face of a font file, as `Font.scan` reports it."""
+
+    index: int  # pass to Font.open(..., index=) ; 0 for a .ttf / .otf / .woff
+    family_name: str
+    bold: bool
+    italic: bool
+
+
+class SystemFont(NamedTuple):
+    """A face found by `Font.system_fonts`: open it with `Font.open(path, index=index)`."""
+
+    path: str
+    index: int
+    family_name: str
+    bold: bool
+    italic: bool
 
 
 class Glyph(NamedTuple):
@@ -161,6 +180,46 @@ class Font:
         if isinstance(source, (str, os.PathLike)):
             return _native.Font.face_count(source)
         return _native.Font.face_count_bytes(_read(source))
+
+    @property
+    def family_name(self) -> str:
+        """The font's family ("DejaVu Sans"): the typographic family (name id 16) if it has one, else
+        the family (id 1). Empty if the font has no name."""
+        return self._f.family_name
+
+    @property
+    def is_bold(self) -> bool:
+        """OS/2 fsSelection bold bit (head.macStyle if the font has no OS/2 table)."""
+        return self._f.is_bold
+
+    @property
+    def is_italic(self) -> bool:
+        """OS/2 fsSelection italic or oblique bit (head.macStyle if the font has no OS/2 table)."""
+        return self._f.is_italic
+
+    @staticmethod
+    def scan(source: Source) -> List[FontFaceInfo]:
+        """Name and style of every face of a file (a .ttc gives one entry per face), read from the
+        name, OS/2 and head tables only. `source` is a path or bytes. Raises DecodeError (not a
+        font, or WOFF2), OSError."""
+        if isinstance(source, (str, os.PathLike)):
+            faces = _native.Font.scan(source)
+        else:
+            faces = _native.Font.scan_bytes(_read(source))
+        return [FontFaceInfo(*f) for f in faces]
+
+    @staticmethod
+    def system_font_dirs() -> List[str]:
+        """The folders where the operating system keeps its fonts (the ones that exist)."""
+        return [str(p) for p in _native.Font.system_font_dirs()]
+
+    @staticmethod
+    def system_fonts(dirs: Optional[Sequence[Union[str, "os.PathLike[str]"]]] = None) -> List[SystemFont]:
+        """Every face of every font file under the system font folders (or under `dirs`, which are
+        searched with their subfolders), sorted by path and index. Files that are not fonts or
+        cannot be read are skipped."""
+        found = _native.Font.system_fonts(None if dirs is None else [os.fspath(d) for d in dirs])
+        return [SystemFont(str(p), i, n, b, it) for p, i, n, b, it in found]
 
     def metrics(self, pixel_height: float) -> FontMetrics:
         return FontMetrics(*self._f.metrics(pixel_height))

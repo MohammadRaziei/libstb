@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -158,6 +159,20 @@ struct shaped_glyph {
     glyph_kind kind = glyph_kind::normal;
 };
 
+// What font::scan reports about one font of a file.
+struct font_face_info {
+    int index = 0;            // the face's number in its file: 0 for a .ttf / .otf / .woff, 0..n-1 for a .ttc
+    std::string family_name;  // UTF-8, as font::family_name() gives it; empty if the font has no name
+    bool bold = false;
+    bool italic = false;
+};
+
+// A font face found on the system by font::system_fonts: where it is (open it with
+// font::open(path, index)) and what it calls itself.
+struct system_font_info : font_face_info {
+    std::filesystem::path path;
+};
+
 // A TrueType/OpenType font. Cheap to copy (copies share one immutable
 // parsed font) and safe to use from many threads at once.
 //
@@ -217,6 +232,37 @@ public:
     static int face_count(const std::vector<std::uint8_t>& data);
     static int face_count(const std::filesystem::path& path);
 
+    // ---- names and style: read from the tables name, OS/2 and head, so they cost nothing to open.
+
+    // The family the font belongs to, UTF-8 ("DejaVu Sans"): the typographic family (name id 16) if
+    // the font has one, else the family (id 1). English (Windows platform) is preferred, then any
+    // other language, then the Unicode and Mac platforms. Empty if the font has no name.
+    std::string family_name() const;
+    // OS/2 fsSelection (bold; italic or oblique); a font without an OS/2 table (or with one too
+    // short to have fsSelection) is judged by head.macStyle.
+    bool is_bold() const noexcept;
+    bool is_italic() const noexcept;
+
+    // One entry per font of a file (a .ttc gives one for each of its faces), read from the name,
+    // OS/2 and head tables alone: no cmap, outlines or metrics are parsed, and a file on disk is
+    // mapped, not read. A face that is not a font (no head and no OS/2 table) is left out. Throws
+    // decode_error if the data is none of .ttf / .otf / .ttc / .woff (or is WOFF2), io_error /
+    // limit_error for a path.
+    static std::vector<font_face_info> scan(const std::vector<std::uint8_t>& data);
+    static std::vector<font_face_info> scan(const std::filesystem::path& path);
+
+    // The folders where the operating system keeps its fonts, the ones that exist: on Linux
+    // /usr/share/fonts, /usr/local/share/fonts, the XDG data folders' fonts, ~/.fonts; on macOS
+    // /System/Library/Fonts, /Library/Fonts, ~/Library/Fonts; on Windows %WINDIR%\Fonts and
+    // %LOCALAPPDATA%\Microsoft\Windows\Fonts; on Android /system/fonts.
+    static std::vector<std::filesystem::path> system_font_dirs();
+    // Every face of every font file (.ttf .otf .ttc .otc .woff, any case) under system_font_dirs(),
+    // sorted by path and index. Files that cannot be read or are not fonts are skipped, so one
+    // damaged file does not hide the others. The second form looks in the given folders instead
+    // (subfolders too), for an application's own font folder.
+    static std::vector<system_font_info> system_fonts();
+    static std::vector<system_font_info> system_fonts(const std::vector<std::filesystem::path>& dirs);
+
     // Throws invalid_argument on malformed UTF-8.
     text_size measure(std::string_view utf8, float pixel_height) const;
 
@@ -243,8 +289,7 @@ public:
     //     it and stacked above or below it.
     //   - glyph_kind says what a glyph with glyph 0 is: a line break or a missing character.
     //
-    // Only right-to-left scripts get the GSUB treatment so far: other text is one glyph per
-    // character. Throws invalid_argument on malformed UTF-8, limit_error for text over 4 GiB.
+    // Throws invalid_argument on malformed UTF-8, limit_error for text over 4 GiB.
     std::vector<shaped_glyph> shape(std::string_view utf8, const shape_options& options = {}) const;
 
     // The glyphs of the part [begin, end) of `utf8` (byte offsets), shaped as a part of the whole text:

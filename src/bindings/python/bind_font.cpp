@@ -15,6 +15,15 @@ using namespace nb::literals;
 
 namespace {
 
+using face_tuple = std::tuple<int, std::string, bool, bool>;
+
+std::vector<face_tuple> face_tuples(const std::vector<stb::font_face_info>& faces) {
+    std::vector<face_tuple> out;
+    out.reserve(faces.size());
+    for (const auto& f : faces) out.emplace_back(f.index, f.family_name, f.bold, f.italic);
+    return out;
+}
+
 // Python passes single characters as 1-char str (UTF-8 over the wire).
 char32_t one_char(const std::string& s) {
     const std::u32string cps = stb::utf8_decode(s);
@@ -167,6 +176,32 @@ void bind_font(nb::module_& m) {
                 return font::face_count(std::vector<std::uint8_t>(p, p + data.size()));
             },
             "data"_a)
+        // ---- names and style; the faces come back as plain tuples, libstb/font.py names them ----
+        .def_prop_ro("family_name", [](const font& f) { return f.family_name(); })
+        .def_prop_ro("is_bold", [](const font& f) { return f.is_bold(); })
+        .def_prop_ro("is_italic", [](const font& f) { return f.is_italic(); })
+        .def_static(
+            "scan",
+            [](const std::filesystem::path& path) { return face_tuples(font::scan(path)); }, "path"_a,
+            nb::call_guard<nb::gil_scoped_release>())
+        .def_static(
+            "scan_bytes",
+            [](nb::bytes data) {
+                const auto* p = reinterpret_cast<const std::uint8_t*>(data.c_str());
+                return face_tuples(font::scan(std::vector<std::uint8_t>(p, p + data.size())));
+            },
+            "data"_a)
+        .def_static("system_font_dirs", [] { return font::system_font_dirs(); })
+        .def_static(
+            "system_fonts",
+            [](const std::optional<std::vector<std::filesystem::path>>& dirs) {
+                const auto found = dirs ? font::system_fonts(*dirs) : font::system_fonts();
+                std::vector<std::tuple<std::filesystem::path, int, std::string, bool, bool>> out;
+                out.reserve(found.size());
+                for (const auto& f : found) out.emplace_back(f.path, f.index, f.family_name, f.bold, f.italic);
+                return out;
+            },
+            "dirs"_a = nb::none(), nb::call_guard<nb::gil_scoped_release>())
         .def("glyph_index",
              [](const font& f, const std::string& ch) { return f.glyph_index(one_char(ch)); }, "char"_a)
         .def_prop_ro("glyph_count", [](const font& f) { return f.glyph_count(); })
