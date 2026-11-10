@@ -656,22 +656,20 @@
     #define stbir__simdf_aaa1( out, alp, ones ) (out) = vcopyq_laneq_f32(vdupq_n_f32(vgetq_lane_f32(alp, 3)), 3, ones, 3)
     #define stbir__simdf_1aaa( out, alp, ones ) (out) = vcopyq_laneq_f32(vdupq_n_f32(vgetq_lane_f32(alp, 0)), 0, ones, 0)
 
-    #if defined( _MSC_VER ) && !defined(__clang__)
-      #define stbir_make16(a,b,c,d) vcombine_u8( \
-        vcreate_u8( (4*a+0) | ((4*a+1)<<8) | ((4*a+2)<<16) | ((4*a+3)<<24) | \
-          ((stbir_uint64)(4*b+0)<<32) | ((stbir_uint64)(4*b+1)<<40) | ((stbir_uint64)(4*b+2)<<48) | ((stbir_uint64)(4*b+3)<<56)), \
-        vcreate_u8( (4*c+0) | ((4*c+1)<<8) | ((4*c+2)<<16) | ((4*c+3)<<24) | \
-          ((stbir_uint64)(4*d+0)<<32) | ((stbir_uint64)(4*d+1)<<40) | ((stbir_uint64)(4*d+2)<<48) | ((stbir_uint64)(4*d+3)<<56) ) )
+    // Built with vcreate_u8/vcombine_u8 for every compiler. The other way to write it, a compound literal
+    // such as (uint8x16_t){...}, is C99 and not C++: clang warns about it under -Wpedantic, once for every
+    // expansion of the swizzle macros. The arguments are constants, so this is still one vector constant.
+    #define stbir_make16(a,b,c,d) vcombine_u8( \
+      vcreate_u8( (4*a+0) | ((4*a+1)<<8) | ((4*a+2)<<16) | ((4*a+3)<<24) | \
+        ((stbir_uint64)(4*b+0)<<32) | ((stbir_uint64)(4*b+1)<<40) | ((stbir_uint64)(4*b+2)<<48) | ((stbir_uint64)(4*b+3)<<56)), \
+      vcreate_u8( (4*c+0) | ((4*c+1)<<8) | ((4*c+2)<<16) | ((4*c+3)<<24) | \
+        ((stbir_uint64)(4*d+0)<<32) | ((stbir_uint64)(4*d+1)<<40) | ((stbir_uint64)(4*d+2)<<48) | ((stbir_uint64)(4*d+3)<<56) ) )
 
-      static stbir__inline uint8x16x2_t stbir_make16x2(float32x4_t rega,float32x4_t regb)
-      {
-        uint8x16x2_t r = { vreinterpretq_u8_f32(rega), vreinterpretq_u8_f32(regb) };
-        return r;
-      }
-    #else
-      #define stbir_make16(a,b,c,d) (uint8x16_t){4*a+0,4*a+1,4*a+2,4*a+3,4*b+0,4*b+1,4*b+2,4*b+3,4*c+0,4*c+1,4*c+2,4*c+3,4*d+0,4*d+1,4*d+2,4*d+3}
-      #define stbir_make16x2(a,b) (uint8x16x2_t){{vreinterpretq_u8_f32(a),vreinterpretq_u8_f32(b)}}
-    #endif
+    static stbir__inline uint8x16x2_t stbir_make16x2(float32x4_t rega,float32x4_t regb)
+    {
+      uint8x16x2_t r = { vreinterpretq_u8_f32(rega), vreinterpretq_u8_f32(regb) };
+      return r;
+    }
 
     #define stbir__simdf_swiz( reg, one, two, three, four ) vreinterpretq_f32_u8( vqtbl1q_u8( vreinterpretq_u8_f32(reg), stbir_make16(one, two, three, four) ) )
     #define stbir__simdf_swiz2( rega, regb, one, two, three, four ) vreinterpretq_f32_u8( vqtbl2q_u8( stbir_make16x2(rega,regb), stbir_make16(one, two, three, four) ) )
@@ -690,19 +688,15 @@
     #define stbir__simdf_aaa1( out, alp, ones ) (out) = vsetq_lane_f32(1.0f, vdupq_n_f32(vgetq_lane_f32(alp, 3)), 3)
     #define stbir__simdf_1aaa( out, alp, ones ) (out) = vsetq_lane_f32(1.0f, vdupq_n_f32(vgetq_lane_f32(alp, 0)), 0)
 
-    #if defined( _MSC_VER ) && !defined(__clang__)
-      static stbir__inline uint8x8x2_t stbir_make8x2(float32x4_t reg)
-      {
-        uint8x8x2_t r = { { vget_low_u8(vreinterpretq_u8_f32(reg)), vget_high_u8(vreinterpretq_u8_f32(reg)) } };
-        return r;
-      }
-      #define stbir_make8(a,b) vcreate_u8( \
-        (4*a+0) | ((4*a+1)<<8) | ((4*a+2)<<16) | ((4*a+3)<<24) | \
-        ((stbir_uint64)(4*b+0)<<32) | ((stbir_uint64)(4*b+1)<<40) | ((stbir_uint64)(4*b+2)<<48) | ((stbir_uint64)(4*b+3)<<56) )
-    #else
-      #define stbir_make8x2(reg) (uint8x8x2_t){ { vget_low_u8(vreinterpretq_u8_f32(reg)), vget_high_u8(vreinterpretq_u8_f32(reg)) } }
-      #define stbir_make8(a,b) (uint8x8_t){4*a+0,4*a+1,4*a+2,4*a+3,4*b+0,4*b+1,4*b+2,4*b+3}
-    #endif
+    // Same as the 64-bit branch above: no compound literals, which are C99 and not C++.
+    static stbir__inline uint8x8x2_t stbir_make8x2(float32x4_t reg)
+    {
+      uint8x8x2_t r = { { vget_low_u8(vreinterpretq_u8_f32(reg)), vget_high_u8(vreinterpretq_u8_f32(reg)) } };
+      return r;
+    }
+    #define stbir_make8(a,b) vcreate_u8( \
+      (4*a+0) | ((4*a+1)<<8) | ((4*a+2)<<16) | ((4*a+3)<<24) | \
+      ((stbir_uint64)(4*b+0)<<32) | ((stbir_uint64)(4*b+1)<<40) | ((stbir_uint64)(4*b+2)<<48) | ((stbir_uint64)(4*b+3)<<56) )
 
     #define stbir__simdf_swiz( reg, one, two, three, four ) vreinterpretq_f32_u8( vcombine_u8( \
         vtbl2_u8( stbir_make8x2( reg ), stbir_make8( one, two ) ), \

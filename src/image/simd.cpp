@@ -17,14 +17,12 @@
 namespace stb {
 namespace {
 
-bool cpu_has_avx2() noexcept {
 #ifdef STB_HAVE_AVX2_DISPATCH
+bool cpu_has_avx2() noexcept {
     __builtin_cpu_init();
     return __builtin_cpu_supports("avx2");  // also checks that the OS saves the AVX registers
-#else
-    return false;
-#endif
 }
+#endif
 
 // The instruction set the compiler targets for everything that is not an AVX2 kernel: what
 // the portable loops are vectorised with. x86-64 always has SSE2 and arm64 always has NEON;
