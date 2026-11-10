@@ -1,0 +1,66 @@
+---
+title: Resize
+---
+
+import Lang from '@site/src/components/Lang';
+import Compare from '@site/src/components/Compare';
+import Bench from '@site/src/components/Bench';
+import ApiLink from '@site/src/components/ApiLink';
+
+`resize(width, height)` returns a new image of the requested size. The image you call it on is not changed.
+
+<Lang name="resize" />
+
+The code shrinks `astronaut.png` to 64×64 with the default filter, then enlarges that small picture to
+256×256 once per filter. The small picture is the poorest possible input on purpose, so the differences
+between filters are easy to see.
+
+## What it produces
+
+These pictures are the output of the snippet above, not separate artwork.
+
+<Compare
+  size={192}
+  items={[
+    { src: 'img/generated/resize/tiny.png', label: '64×64, default filter (shown at 3×)', pixelated: true },
+    { src: 'img/generated/resize/nearest.png', label: 'nearest' },
+    { src: 'img/generated/resize/linear.png', label: 'linear' },
+    { src: 'img/generated/resize/cubic.png', label: 'cubic' },
+    { src: 'img/generated/resize/bspline.png', label: 'bspline' },
+    { src: 'img/generated/resize/mitchell.png', label: 'mitchell' },
+  ]}
+/>
+
+## Choosing the filter
+
+The filter is picked by name or by enum. With no filter, libstb uses Catmull-Rom when it enlarges and
+Mitchell when it shrinks. Names are case-insensitive, and `-` or a space counts as `_`.
+
+| Filter | Names |
+| --- | --- |
+| default | `auto`, `default` |
+| nearest | `nearest`, `point` |
+| linear | `linear`, `bilinear`, `triangle` |
+| cubic (Catmull-Rom) | `cubic`, `bicubic`, `catmull_rom` |
+| B-spline | `bspline`, `cubic_bspline` |
+| Mitchell | `mitchell` |
+| box | `box`, `area` |
+
+There is no Lanczos filter. In Python an unknown name raises `ValueError` and lists the valid names.
+
+By default libstb blends pixels in linear light. `Resizer(filter, srgb=False)` turns that off, which is the
+like-for-like setting when comparing with libraries that do not do it.
+
+## How fast is it
+
+The reference in these two charts is OpenCV, the library that was fastest on the most pictures. On average
+libstb, with either setting, takes longer than OpenCV here, and less time than Pillow and scikit-image.
+The note under each chart explains why OpenCV's linear and cubic modes are not a like-for-like comparison
+when shrinking.
+
+<Bench section="resizing" ops={['resize_down_cubic', 'resize_up_cubic']} />
+
+## Reference
+
+- <ApiLink name="image.resize" />
+- <ApiLink name="resizer" />

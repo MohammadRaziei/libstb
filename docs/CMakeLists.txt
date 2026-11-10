@@ -198,3 +198,39 @@ else()
                     "will have no /benchmarks/ page. Generate it as described in "
                     "benchmarks/README.md and commit it.")
 endif()
+
+
+# ── Docusaurus layer (lesson pages on top of the two references) ──────────────
+# Optional, not part of stb_docs. docs/site/ holds the lessons; the C++ and Python
+# references stay Doxygen and Sphinx and are copied into the site as static pages.
+#   stb_docs_figures  run the Python snippets; their output is what the lesson pages show
+#   stb_docs_site     npm install + prepare.py + docusaurus build -> ${LIBSTB_DOCS_OUT}/site
+find_program(LIBSTB_NPM npm)
+find_program(LIBSTB_PYTHON NAMES python3 python)
+if(LIBSTB_NPM AND LIBSTB_PYTHON)
+    set(LIBSTB_SITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/site)
+    set(LIBSTB_SITE_OUT ${LIBSTB_DOCS_OUT}/site)
+
+    add_custom_target(stb_docs_figures
+        COMMAND ${LIBSTB_PYTHON} ${LIBSTB_SITE_DIR}/scripts/prepare.py figures
+                --python-path ${PYTHON_INSTALL_DIR}
+        COMMENT "Running the Python snippets to produce the lesson figures"
+        VERBATIM
+    )
+    if(TARGET build_python)
+        add_dependencies(stb_docs_figures build_python)
+    endif()
+
+    add_custom_target(stb_docs_site
+        COMMAND ${LIBSTB_NPM} install
+        COMMAND ${CMAKE_COMMAND} -E env LIBSTB_DOCS_OUT=${LIBSTB_DOCS_OUT}
+                ${LIBSTB_NPM} run build -- --out-dir ${LIBSTB_SITE_OUT}
+        WORKING_DIRECTORY ${LIBSTB_SITE_DIR}
+        COMMENT "Building the Docusaurus site -> ${LIBSTB_SITE_OUT}"
+        VERBATIM
+    )
+    # The site copies both references and reads the tag file / objects.inv.
+    add_dependencies(stb_docs_site stb_docs_cpp stb_docs_python)
+else()
+    message(STATUS "npm or python not found - the stb_docs_site target is not available")
+endif()

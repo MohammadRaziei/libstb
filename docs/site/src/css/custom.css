@@ -1,0 +1,150 @@
+/*
+ * The libstb tokens (docs/assets/libstb-docs.css) mapped onto Infima.
+ * Flat: no gradients, no resting shadows, 4px corners. Turquoise is a fill and a dark-mode
+ * accent only; on a light page the accent for text and links is ink, because turquoise on
+ * paper fails contrast.
+ */
+:root {
+  --stb-brand: #19cdb4;
+  --stb-ink: #0d0f12;
+  --stb-paper: #f3f4f6;
+
+  --ifm-font-family-base: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --ifm-global-radius: 4px;
+  --ifm-global-shadow-lw: none;
+  --ifm-global-shadow-md: none;
+  --ifm-global-shadow-tl: none;
+
+  --ifm-color-primary: #0d0f12;
+  --ifm-color-primary-dark: #080a0c;
+  --ifm-color-primary-darker: #050607;
+  --ifm-color-primary-darkest: #000000;
+  --ifm-color-primary-light: #1c2026;
+  --ifm-color-primary-lighter: #272c34;
+  --ifm-color-primary-lightest: #3a414c;
+  --ifm-background-color: var(--stb-paper);
+  --ifm-navbar-shadow: none;
+  --ifm-code-font-size: 92%;
+
+  --stb-surface: #ffffff;
+  --stb-line: #d5d9df;
+  --stb-muted: #4b5360;
+  --stb-bar: #9aa3af;
+  --stb-bar-own: #0d0f12;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #19cdb4;
+  --ifm-color-primary-dark: #17b9a2;
+  --ifm-color-primary-darker: #16af99;
+  --ifm-color-primary-darkest: #12907d;
+  --ifm-color-primary-light: #2fd6be;
+  --ifm-color-primary-lighter: #3ad8c1;
+  --ifm-color-primary-lightest: #5ee0cd;
+  --ifm-background-color: #0d0f12;
+  --ifm-background-surface-color: #15181d;
+
+  --stb-surface: #15181d;
+  --stb-line: #2a2f37;
+  --stb-muted: #a3acb8;
+  --stb-bar: #5b6572;
+  --stb-bar-own: #19cdb4;
+}
+
+.navbar {
+  border-bottom: 1px solid var(--stb-line);
+}
+
+a:focus-visible,
+button:focus-visible,
+[role='tab']:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+/* Compare: pictures side by side */
+.stb-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+.stb-compare__item {
+  margin: 0;
+  max-width: 100%;
+}
+.stb-compare__item img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--stb-line);
+  border-radius: var(--ifm-global-radius);
+  background: var(--stb-surface);
+}
+.stb-compare__item figcaption {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--stb-muted);
+}
+
+/* Bench: one row per library, bar on a log scale */
+.stb-bench {
+  margin: 1.25rem 0;
+}
+.stb-bench__op {
+  margin-bottom: 1.5rem;
+}
+.stb-bench__op h4 {
+  margin-bottom: 0.5rem;
+}
+.stb-bench__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.stb-bench__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr minmax(6rem, 9rem);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+}
+.stb-bench__bar {
+  height: 0.75rem;
+  background: var(--stb-line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.stb-bench__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--stb-bar);
+}
+.stb-bench__row--own .stb-bench__bar > span {
+  background: var(--stb-bar-own);
+}
+.stb-bench__value {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  text-align: right;
+}
+.stb-bench__note,
+.stb-bench__foot {
+  font-size: 0.85rem;
+  color: var(--stb-muted);
+}
+@media (max-width: 600px) {
+  .stb-bench__row {
+    grid-template-columns: 1fr auto;
+  }
+  .stb-bench__bar {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ApiLink */
+.stb-api {
+  font-size: 0.9rem;
+  color: var(--stb-muted);
+}

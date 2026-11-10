@@ -1,0 +1,7 @@
+{
+  "_comment": "Name table between the two APIs. prepare.py symbols resolves each side against the Doxygen tag file and the Sphinx objects.inv. A name that does not resolve is shown without a link.",
+  "image.open":   { "cpp": "stb::image::open",   "python": "libstb.Image.open" },
+  "image.resize": { "cpp": "stb::image::resize", "python": "libstb.Image.resize" },
+  "image.write":  { "cpp": "stb::image::write",  "python": "libstb.Image.write" },
+  "resizer":      { "cpp": "stb::resizer",       "python": "libstb.Resizer" }
+}

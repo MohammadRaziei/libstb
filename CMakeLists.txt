@@ -189,6 +189,8 @@ if(STB_BUILD_TESTS)
     enable_testing()
     set(CMAKE_CTEST_ARGUMENTS "--output-on-failure" "-V")
     add_subdirectory(${PROJECT_SOURCE_DIR}/tests)
+    # Docs snippets (docs/site/snippets) are real programs: built and run here.
+    add_subdirectory(${PROJECT_SOURCE_DIR}/docs/site/snippets ${CMAKE_BINARY_DIR}/docs_snippets)
 endif()
 
 # The C++ examples (one executable per examples/cpp/*.cpp), against the same library the users link.

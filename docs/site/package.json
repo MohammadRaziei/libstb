@@ -1,0 +1,29 @@
+{
+  "name": "libstb-docs-site",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "prepare:data": "python3 scripts/prepare.py all",
+    "start": "npm run prepare:data && docusaurus start",
+    "build": "npm run prepare:data && docusaurus build",
+    "serve": "docusaurus serve",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.9.2",
+    "@docusaurus/preset-classic": "3.9.2",
+    "@mdx-js/react": "^3.0.0",
+    "prism-react-renderer": "^2.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "3.9.2",
+    "@docusaurus/tsconfig": "3.9.2",
+    "@docusaurus/types": "3.9.2",
+    "typescript": "~5.6.2"
+  },
+  "engines": {
+    "node": ">=20.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "_comment": "Single source of truth for the language tabs. A new language = one entry here + one folder snippets/<id>/ holding a file per lesson. The first entry is the default tab.",
+  "languages": [
+    { "id": "python", "label": "Python", "prism": "python", "ext": "py" },
+    { "id": "cpp", "label": "C++", "prism": "cpp", "ext": "cpp" }
+  ]
+}
