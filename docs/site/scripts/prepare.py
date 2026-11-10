@@ -129,11 +129,11 @@ def cmd_symbols(a) -> None:
     if tag.exists():
         cpp = read_tagfile(tag)
     else:
-        warn(f"{tag} not found (build stb_docs_cpp); C++ links will be plain text")
+        warn(f"{tag} not found (build stb_docs_doxygen); C++ links will be plain text")
     if inv.exists():
         py = read_objects_inv(inv)
     else:
-        warn(f"{inv} not found (build stb_docs_python); Python links will be plain text")
+        warn(f"{inv} not found (build stb_docs_sphinx); Python links will be plain text")
 
     amap = {k: v for k, v in json.loads((SITE / "api-map.json").read_text(encoding="utf-8")).items()
             if not k.startswith("_")}

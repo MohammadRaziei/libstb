@@ -45,10 +45,10 @@ if(DOXYGEN_FOUND)
         VERBATIM
     )
 
-    add_custom_target(stb_docs_cpp DEPENDS ${LIBSTB_DOCS_CPP_HTML})
+    add_custom_target(stb_docs_doxygen DEPENDS ${LIBSTB_DOCS_CPP_HTML})
 else()
     message(WARNING "Doxygen not found - C++ documentation will not be generated")
-    add_custom_target(stb_docs_cpp
+    add_custom_target(stb_docs_doxygen
         COMMAND ${CMAKE_COMMAND} -E echo "Skipping C++ docs: Doxygen not found"
     )
 endif()
@@ -84,15 +84,15 @@ if(SPHINX_CHECK EQUAL 0)
         VERBATIM
     )
 
-    add_custom_target(stb_docs_python DEPENDS ${LIBSTB_DOCS_PYTHON_HTML})
+    add_custom_target(stb_docs_sphinx DEPENDS ${LIBSTB_DOCS_PYTHON_HTML})
 
     # Must have build_python run first so the module is installed
     if(TARGET build_python)
-        add_dependencies(stb_docs_python build_python)
+        add_dependencies(stb_docs_sphinx build_python)
     endif()
 else()
     message(WARNING "Sphinx not found - Python documentation will not be generated")
-    add_custom_target(stb_docs_python
+    add_custom_target(stb_docs_sphinx
         COMMAND ${CMAKE_COMMAND} -E echo "Skipping Python docs: Sphinx not found"
     )
 endif()
@@ -164,7 +164,7 @@ add_custom_target(stb_docs
     COMMENT "Building all documentation"
 )
 
-add_dependencies(stb_docs stb_docs_cpp stb_docs_python stb_docs_index)
+add_dependencies(stb_docs stb_docs_doxygen stb_docs_sphinx stb_docs_index)
 
 
 # ── Post-process: inject HTML comment into all output HTML files ──
@@ -204,7 +204,7 @@ endif()
 # Optional, not part of stb_docs. docs/site/ holds the lessons; the C++ and Python
 # references stay Doxygen and Sphinx and are copied into the site as static pages.
 #   stb_docs_figures  run the Python snippets; their output is what the lesson pages show
-#   stb_docs_site     npm install + prepare.py + docusaurus build -> ${LIBSTB_DOCS_OUT}/site
+#   stb_docs_docusaurus     npm install + prepare.py + docusaurus build -> ${LIBSTB_DOCS_OUT}/site
 find_program(LIBSTB_NPM npm)
 find_program(LIBSTB_PYTHON NAMES python3 python)
 if(LIBSTB_NPM AND LIBSTB_PYTHON)
@@ -221,7 +221,7 @@ if(LIBSTB_NPM AND LIBSTB_PYTHON)
         add_dependencies(stb_docs_figures build_python)
     endif()
 
-    add_custom_target(stb_docs_site
+    add_custom_target(stb_docs_docusaurus
         COMMAND ${LIBSTB_NPM} install
         COMMAND ${CMAKE_COMMAND} -E env LIBSTB_DOCS_OUT=${LIBSTB_DOCS_OUT}
                 ${LIBSTB_NPM} run build -- --out-dir ${LIBSTB_SITE_OUT}
@@ -230,15 +230,15 @@ if(LIBSTB_NPM AND LIBSTB_PYTHON)
         VERBATIM
     )
     # The site copies both references, reads the tag file / objects.inv, and shows the figures.
-    add_dependencies(stb_docs_site stb_docs_cpp stb_docs_python stb_docs_figures)
+    add_dependencies(stb_docs_docusaurus stb_docs_doxygen stb_docs_sphinx stb_docs_figures)
 
     # stb_docs builds the lesson site too. It needs the Python build (figures and Sphinx import it),
-    # so without it stb_docs stays what it was and stb_docs_site can still be asked for by name.
+    # so without it stb_docs stays what it was and stb_docs_docusaurus can still be asked for by name.
     if(TARGET build_python)
-        add_dependencies(stb_docs stb_docs_site)
+        add_dependencies(stb_docs stb_docs_docusaurus)
     else()
         message(STATUS "Python bindings are off - stb_docs will not build the Docusaurus site")
     endif()
 else()
-    message(STATUS "npm or python not found - the stb_docs_site target is not available")
+    message(STATUS "npm or python not found - the stb_docs_docusaurus target is not available")
 endif()
