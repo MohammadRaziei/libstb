@@ -229,8 +229,16 @@ if(LIBSTB_NPM AND LIBSTB_PYTHON)
         COMMENT "Building the Docusaurus site -> ${LIBSTB_SITE_OUT}"
         VERBATIM
     )
-    # The site copies both references and reads the tag file / objects.inv.
-    add_dependencies(stb_docs_site stb_docs_cpp stb_docs_python)
+    # The site copies both references, reads the tag file / objects.inv, and shows the figures.
+    add_dependencies(stb_docs_site stb_docs_cpp stb_docs_python stb_docs_figures)
+
+    # stb_docs builds the lesson site too. It needs the Python build (figures and Sphinx import it),
+    # so without it stb_docs stays what it was and stb_docs_site can still be asked for by name.
+    if(TARGET build_python)
+        add_dependencies(stb_docs stb_docs_site)
+    else()
+        message(STATUS "Python bindings are off - stb_docs will not build the Docusaurus site")
+    endif()
 else()
     message(STATUS "npm or python not found - the stb_docs_site target is not available")
 endif()

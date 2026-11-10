@@ -25,6 +25,11 @@ cmake --build build --target stb_docs_site       # -> build/docs/out/site
 ctest --test-dir build -R docs_snippet            # snippets compile and run, languages match
 ```
 
+`stb_docs` now depends on `stb_docs_site` when npm and the Python bindings are available, so
+`cmake --build build --target stb_docs` builds everything, and the `build-docs` job of
+`.github/workflows/cmake.yml` (which already runs that target and uploads `build/docs/out`) gets the site in
+the same artifact under `site/`. The job only builds and uploads; nothing publishes the docs anywhere yet.
+
 Or from this folder, while writing: `npm install && npm start`.
 Set `DOCS_URL` and `DOCS_BASE_URL` when publishing; the defaults are `http://localhost` and `/`.
 
@@ -34,7 +39,12 @@ Written without running anything, so none of this has been executed:
 
 - `npm install`, `docusaurus build` and `tsc`. The package versions in `package.json` were chosen from memory
   and never installed.
-- The CMake changes (`stb_docs_figures`, `stb_docs_site`, the snippet tests, `GENERATE_TAGFILE` in the Doxyfile).
+- The CMake changes (`stb_docs_figures`, `stb_docs_site`, `stb_docs` depending on the site, the snippet tests,
+  `GENERATE_TAGFILE` in the Doxyfile) and the new Node step in `cmake.yml`. `actions/setup-node@v6` and Node 22
+  come from a web search, not from running the workflow. The snippet tests also run in the Windows and macOS
+  jobs of `build-and-test`, which was not checked.
+- Whether `InjectComment` (a post-build step of `stb_docs`) still reaches the reference pages, now that they are
+  also copied into the site before that step runs. The copies in `site/` may lack those comments.
 - That the snippets compile and run, and that the names in `api-map.json` exist in the Doxygen tag file
   and Sphinx inventory. An unresolved name is shown without a link and `prepare.py symbols` warns about it.
 - That Prism highlights `cpp` and `python` with the default `prism-react-renderer` set.

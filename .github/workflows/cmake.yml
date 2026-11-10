@@ -61,6 +61,12 @@ jobs:
     - name: Install python deps
       run: pip install -r requirements-dev.txt
 
+    # stb_docs also builds the Docusaurus lesson site (docs/site), which needs Node.
+    - name: Set up Node
+      uses: actions/setup-node@v6
+      with:
+        node-version: 22
+
     # The Sphinx build imports the freshly built extension, so the Python binding is needed.
     - name: Configure CMake
       run: |
