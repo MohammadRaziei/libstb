@@ -241,6 +241,57 @@ class resizer;  // defined after image, which only takes a pointer to one
 inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower
 inline constexpr int default_jpg_quality = 90;     // 1..100
 
+namespace detail {
+
+// What an image and a premultiplied_image have in common: the pixel memory (owned, or viewed with a
+// keep-alive, see image::wrap) and the size, and nothing about what a pixel means. That is why it is a
+// base class of both and the two are not related to each other: a premultiplied_image has no blend(), no
+// encoder and no resize, so it cannot be mistaken for straight-alpha pixels. Not for direct use: the
+// constructors and the destructor are protected, and it is move-only like both of them (a moved-from
+// object is empty).
+class STB_API image_base {
+public:
+    int width() const noexcept { return width_; }
+    int height() const noexcept { return height_; }
+    bool empty() const noexcept { return !data_; }
+
+    std::uint8_t* data() noexcept { return data_.get(); }
+    const std::uint8_t* data() const noexcept { return data_.get(); }
+
+    // The deleter of type D that was given to the shared_ptr passed as `keep_alive` to wrap(), or
+    // nullptr if the pixels are held by something else. It lets a binding reach what the object keeps
+    // alive (for a garbage collector to see it) without knowing about the host language.
+    template <class D>
+    D* owner_deleter() const noexcept {
+        return std::get_deleter<D>(data_);
+    }
+
+protected:
+    image_base() = default;
+    image_base(int width, int height) noexcept : width_(width), height_(height) {}
+    image_base(image_base&& o) noexcept
+        : width_(std::exchange(o.width_, 0)), height_(std::exchange(o.height_, 0)), data_(std::move(o.data_)) {}
+    image_base& operator=(image_base&& o) noexcept {
+        if (this != &o) {
+            width_ = std::exchange(o.width_, 0);
+            height_ = std::exchange(o.height_, 0);
+            data_ = std::move(o.data_);
+        }
+        return *this;
+    }
+    image_base(const image_base&) = delete;
+    image_base& operator=(const image_base&) = delete;
+    ~image_base() = default;
+
+    int width_ = 0;
+    int height_ = 0;
+    // Owner + pointer in one: the deleter (or aliased owner) is what frees, or keeps alive, the
+    // memory. Null when empty.
+    std::shared_ptr<std::uint8_t> data_;
+};
+
+}  // namespace detail
+
 // An 8-bit image: row-major, interleaved channels, no padding, so
 // size_bytes() == width * height * channels. A default-constructed image is
 // empty.
@@ -253,7 +304,7 @@ inline constexpr int default_jpg_quality = 90;     // 1..100
 // Thread-safety: like std::vector - const members are safe to call
 // concurrently, mutation needs external synchronisation. The static
 // factories are safe to call from any number of threads.
-class STB_API image {
+class STB_API image : public detail::image_base {
 public:
     image() = default;
 
@@ -279,14 +330,6 @@ public:
 
     // A deep copy that owns its own pixels (also when this image is a wrap).
     image copy() const;
-
-    // The deleter of type D that was given to the shared_ptr passed as `keep_alive` to wrap(), or
-    // nullptr if the pixels are held by something else. It lets a binding reach what the image keeps
-    // alive (for a garbage collector to see it) without the image knowing about the host language.
-    template <class D>
-    D* owner_deleter() const noexcept {
-        return std::get_deleter<D>(data_);
-    }
 
     // --- decoding (throws invalid_argument, decode_error, limit_error) ---
     static image decode(const void* data, std::size_t size, const load_options& opt = {});
@@ -437,18 +480,13 @@ public:
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const&;
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) &&;
 
-    // --- accessors ---
-    int width() const noexcept { return width_; }
-    int height() const noexcept { return height_; }
+    // --- accessors (width(), height(), empty(), data() and owner_deleter() come from the base) ---
     // An empty image has no format: it reports gray and 0 channels.
     pixel_format format() const noexcept { return channels_ ? static_cast<pixel_format>(channels_) : pixel_format::gray; }
     int channels() const noexcept { return channels_; }  // channel_count(format()), 0 when empty
-    bool empty() const noexcept { return !data_; }
     std::size_t stride() const noexcept { return std::size_t(width_) * std::size_t(channels_); }
     std::size_t size_bytes() const noexcept { return stride() * std::size_t(height_); }
 
-    std::uint8_t* data() noexcept { return data_.get(); }
-    const std::uint8_t* data() const noexcept { return data_.get(); }
     // All bytes, for range-for and <algorithm> (empty range for an empty image).
     std::uint8_t* begin() noexcept { return data(); }
     std::uint8_t* end() noexcept { return data() + size_bytes(); }
@@ -466,12 +504,57 @@ private:
         return std::size_t(y) * stride() + std::size_t(x) * std::size_t(channels_) + std::size_t(c);
     }
 
-    int width_ = 0;
-    int height_ = 0;
     int channels_ = 0;
-    // Owner + pointer in one: the deleter (or aliased owner) is what frees, or
-    // keeps alive, the memory. Null for an empty image.
-    std::shared_ptr<std::uint8_t> data_;
+};
+
+// Pixels that are already multiplied by alpha, in the layout rasterizers draw into: one 32-bit word per
+// pixel, 0xAARRGGBB (native-endian: on a little-endian machine the bytes are B, G, R, A), exactly what
+// rgba_to_premultiplied_argb produces. It is a separate type from image on purpose: image always holds
+// straight alpha, so blend(), the encoders and resize cannot be called on these pixels by mistake. Go
+// between the two with from_image() and to_image() (the SIMD conversions above), or hand data() and
+// stride() to a rasterizer that draws into the buffer.
+//
+// Rows are stride() bytes apart (at least 4 * width, a multiple of 4, so every pixel can be read as a
+// std::uint32_t). Like image it is move-only (copies are explicit: copy()) and a moved-from object is
+// empty. Same thread-safety as std::vector.
+class STB_API premultiplied_image : public detail::image_base {
+public:
+    premultiplied_image() = default;
+
+    // All pixels 0 (transparent), rows packed (stride 4 * width). Throws invalid_argument unless
+    // width, height >= 1, or if the size does not fit.
+    premultiplied_image(int width, int height);
+
+    // Views memory that someone else owns, without copying it (as image::wrap does): `data` must be
+    // aligned to 4 bytes and hold (height - 1) * stride + 4 * width bytes, and stay valid while the
+    // object (or anything moved from it) lives; `keep_alive` is released when it dies. Throws
+    // invalid_argument on a null or misaligned `data`, bad dimensions, or a stride that is smaller than
+    // 4 * width or not a multiple of 4.
+    static premultiplied_image wrap(int width, int height, std::uint8_t* data, std::size_t stride,
+                                    std::shared_ptr<void> keep_alive = {});
+
+    // The straight-alpha pixels of `straight`, premultiplied. Any pixel format: gray, gray_alpha and rgb
+    // are taken as RGBA first (no alpha means opaque). An empty image gives an empty result.
+    static premultiplied_image from_image(const image& straight);
+
+    premultiplied_image(premultiplied_image&& other) noexcept;
+    premultiplied_image& operator=(premultiplied_image&& other) noexcept;
+    ~premultiplied_image() = default;
+
+    // A deep copy that owns its own pixels, packed (also when this one is a wrap or has padding).
+    premultiplied_image copy() const;
+
+    // Back to straight RGBA, as a new image (premultiplied_argb_to_rgba, so colour precision is lost
+    // where alpha is small). An empty object gives an empty image.
+    image to_image() const;
+
+    // Bytes between the starts of two rows; 0 when empty.
+    std::size_t stride() const noexcept { return stride_; }
+    // The bytes the pixels span, padding between rows included.
+    std::size_t size_bytes() const noexcept { return stride_ * std::size_t(height_); }
+
+private:
+    std::size_t stride_ = 0;
 };
 
 // Resizes 8-bit images of 1..4 channels (2 = gray+alpha, 4 = RGBA; alpha is

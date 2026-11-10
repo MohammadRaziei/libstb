@@ -308,3 +308,10 @@ API تأییدشده توسط کاربر (طبق قاعده‌ی «اول API ر
 - کرنل: `premultiply_row<premultiply_kind>` با چهار نوع (`to_argb`، `from_argb`، `to_rgba`، `from_rgba`) در `src/image/kernels.hpp`؛ حساب هر کانال در `premultiply_channel` / `unpremultiply_channel` مشترک است (gray_alpha هم از همین استفاده می‌کند). همان integerهای توابع آزاد، با همان dispatch (avx2 / sse2 یا neon / scalar). gray_alpha بدون SIMD است.
 - تست: `tests/cpp/test_premultiply.cpp` (همه‌ی جفت‌های (c, a) روی هر backend، سازگاری با توابع ARGB، gray_alpha، wrap) و `tests/python/test_premultiply.py`.
 - issueهای جدید `libstb-issues (2).md`: #7 (hsl .5) قبلاً رفع شده؛ #8 (`font::shape` برای LTR از GSUB/GPOS رد می‌شود) و #9 (نوع/فرمت premultiplied در `image`) هنوز بررسی و پیاده نشده‌اند. #9 همان گزینه‌ی «ب» است که کاربر برای متدها رد کرد، پس پیشنهاد API جدید لازم دارد.
+
+## 2026-11-10: `premultiplied_image` (issue 9 de novasvg, گزینه ۲)
+
+- نوع جدا و ایزوله، نه فرمت جدید در `image`: `stb::premultiplied_image` (کلمه‌ی `0xAARRGGBB`، stride بایتی با padding مجاز، `wrap` با pointer هم‌تراز ۴ و stride مضرب ۴، `from_image` از هر فرمت، `to_image`، `copy` صریح، move-only). فقط `include/stb/image.hpp` و `src/image/ops.cpp`.
+- پایه‌ی مشترک `stb::detail::image_base` (width، height، `data_`، `owner_deleter`، ctor/dtor protected) که `image` و `premultiplied_image` از آن ارث می‌برند و با هم ارتباطی ندارند (پس `blend`، `to_png` و `resize` روی premultiplied وجود ندارد). `image` همان رابط public قبلی را دارد؛ فقط `channels_` و `stride()` (محاسبه‌ای) در خودش مانده. اسم `detail::image_base` انتخاب من بود (جایگزین `_image_base`): تغییرش یک rename است.
+- Python: `PremultipliedImage` (`from_image`، `to_image`، `copy`، ویژگی‌های `width`، `height`، `stride`، `empty`، و `__array_interface__` برای نمای uint32 بدون کپی). `wrap` در Python bind نشده (نیاز به GC و keep-alive دارد).
+- `stride()` در پایه نیست: `image` آن را از `width * channels` حساب می‌کند و `premultiplied_image` عضو خودش را دارد.

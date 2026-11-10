@@ -2,7 +2,9 @@
 #include <climits>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -471,6 +473,80 @@ void rgba_to_premultiplied_argb(std::uint8_t* dst, std::size_t dst_stride, const
 void premultiplied_argb_to_rgba(std::uint8_t* dst, std::size_t dst_stride, const std::uint8_t* src,
                                 std::size_t src_stride, int width, int height) noexcept {
     premultiply_rows(detail::premultiply_kind::from_argb, dst, dst_stride, src, src_stride, width, height);
+}
+
+// ------------------------------------------------------- premultiplied_image
+
+namespace {
+
+// The bytes of `height` rows `stride` apart that end with a row of `4 * width` bytes, or throws.
+std::size_t premultiplied_bytes(int width, int height, std::size_t stride) {
+    if (width < 1 || height < 1) throw std::invalid_argument("width and height must be >= 1");
+    const std::uint64_t row = 4 * std::uint64_t(width);
+    if (stride < row || stride % 4 != 0) throw std::invalid_argument("stride must be at least 4 * width and a multiple of 4");
+    const std::uint64_t max = std::numeric_limits<std::size_t>::max();
+    if (std::uint64_t(height) - 1 > (max - row) / stride) throw std::invalid_argument("image too large");
+    return static_cast<std::size_t>((std::uint64_t(height) - 1) * stride + row);
+}
+
+}  // namespace
+
+premultiplied_image::premultiplied_image(int width, int height) : image_base(width, height) {
+    const std::size_t stride = 4 * std::size_t(std::max(width, 0));
+    const std::size_t n = premultiplied_bytes(width, height, stride);
+    stride_ = stride;
+    data_ = std::shared_ptr<std::uint8_t>(new std::uint8_t[n](), std::default_delete<std::uint8_t[]>());
+}
+
+premultiplied_image premultiplied_image::wrap(int width, int height, std::uint8_t* data, std::size_t stride,
+                                              std::shared_ptr<void> keep_alive) {
+    premultiplied_bytes(width, height, stride);  // validates the dimensions and the stride
+    if (!data) throw std::invalid_argument("wrap needs a non-null pointer");
+    if (reinterpret_cast<std::uintptr_t>(data) % 4 != 0) throw std::invalid_argument("wrap needs a pointer aligned to 4 bytes");
+    premultiplied_image img;
+    img.width_ = width;
+    img.height_ = height;
+    img.stride_ = stride;
+    img.data_ = std::shared_ptr<std::uint8_t>(keep_alive, data);  // aliasing: keeps `keep_alive`
+    return img;
+}
+
+premultiplied_image::premultiplied_image(premultiplied_image&& o) noexcept
+    : image_base(std::move(o)), stride_(std::exchange(o.stride_, 0)) {}
+
+premultiplied_image& premultiplied_image::operator=(premultiplied_image&& o) noexcept {
+    if (this != &o) {
+        image_base::operator=(std::move(o));
+        stride_ = std::exchange(o.stride_, 0);
+    }
+    return *this;
+}
+
+premultiplied_image premultiplied_image::from_image(const image& straight) {
+    if (straight.empty()) return premultiplied_image();
+    // Anything but RGBA is taken as RGBA first (no alpha: opaque).
+    std::optional<image> rgba;
+    if (straight.format() != pixel_format::rgba) rgba = straight.convert(pixel_format::rgba);
+    const image& src = rgba ? *rgba : straight;
+    premultiplied_image out(src.width(), src.height());
+    rgba_to_premultiplied_argb(out.data(), out.stride_, src.data(), src.stride(), src.width(), src.height());
+    return out;
+}
+
+premultiplied_image premultiplied_image::copy() const {
+    if (empty()) return premultiplied_image();
+    premultiplied_image out(width_, height_);
+    const std::size_t row = 4 * std::size_t(width_);
+    for (int y = 0; y < height_; ++y)
+        std::memcpy(out.data() + std::size_t(y) * out.stride_, data() + std::size_t(y) * stride_, row);
+    return out;
+}
+
+image premultiplied_image::to_image() const {
+    if (empty()) return image();
+    image out(width_, height_, pixel_format::rgba);
+    premultiplied_argb_to_rgba(out.data(), out.stride(), data(), stride_, width_, height_);
+    return out;
 }
 
 }  // namespace stb

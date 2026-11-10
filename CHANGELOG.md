@@ -13,6 +13,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   for `rgba` and `gray_alpha`; other formats come back as a copy. The bytes keep the order R, G, B, A and the image does not
   track that it is premultiplied (the default storage stays straight RGBA). Same integers as `rgba_to_premultiplied_argb`
   (the channel arithmetic is now shared), run by the SIMD backend in use for RGBA.
+- **`premultiplied_image`** (Python: `PremultipliedImage`): pixels already multiplied by alpha, one 32-bit word `0xAARRGGBB` per pixel
+  (what rasterizers draw into, and what `rgba_to_premultiplied_argb` produces), as a type of its own so that `blend`, the encoders
+  and `resize` cannot be called on it by mistake. `from_image()` (any format) and `to_image()` use the SIMD conversions; `wrap()`
+  views external memory (4-byte aligned, stride a multiple of 4, padding allowed); move-only with an explicit `copy()`. In Python:
+  `from_image`, `to_image`, `copy`, `width`, `height`, `stride`, `empty` and a no-copy `(height, width)` uint32 `__array_interface__`.
+  Issue 9 of the novasvg list (novasvg can drop its `surface` and `pixmap`).
+- `stb::detail::image_base`: the pixel memory and size that `image` and `premultiplied_image` share (protected constructors, so it is
+  not usable on its own). `image` derives from it; its public interface is unchanged.
 
 ### Fixed
 - `color::try_parse` / `from_string`: `hsl()` and `hsla()` are converted in float32, as browsers do, so a value that is a

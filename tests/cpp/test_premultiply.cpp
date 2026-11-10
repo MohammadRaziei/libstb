@@ -1,7 +1,9 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <sstream>
+#include <type_traits>
 #include <string>
 #include <vector>
 
@@ -449,4 +451,138 @@ UTEST(libstb_premultiply_tests, test_image_methods_work_on_wrapped_memory_withou
     EXPECT_TRUE(report(mem == keep, msg() << "the wrapped memory changed"));
     EXPECT_EQ(5, int(pre(0, 0, 0)));
     EXPECT_EQ(40, int(pre(1, 0, 0)));
+}
+
+// ----------------------------------------------------------------- premultiplied_image
+
+static_assert(!std::is_base_of<stb::image, stb::premultiplied_image>::value, "the two pixel types must stay unrelated");
+static_assert(!std::is_base_of<stb::premultiplied_image, stb::image>::value, "the two pixel types must stay unrelated");
+static_assert(!std::is_constructible<stb::premultiplied_image, const stb::premultiplied_image&>::value, "copies are explicit");
+static_assert(!std::is_default_constructible<stb::detail::image_base>::value, "the shared base is not for direct use");
+
+UTEST(libstb_premultiplied_image_tests, test_empty_and_zero_filled) {
+    const stb::premultiplied_image e;
+    EXPECT_TRUE(e.empty());
+    EXPECT_EQ(0, e.width());
+    EXPECT_EQ(0, e.height());
+    EXPECT_EQ(std::size_t(0), e.stride());
+    EXPECT_TRUE(e.to_image().empty());
+    EXPECT_TRUE(e.copy().empty());
+    EXPECT_TRUE(stb::premultiplied_image::from_image(stb::image()).empty());
+
+    const stb::premultiplied_image z(5, 3);
+    ASSERT_FALSE(z.empty());
+    EXPECT_EQ(5, z.width());
+    EXPECT_EQ(3, z.height());
+    EXPECT_EQ(std::size_t(20), z.stride());
+    EXPECT_EQ(std::size_t(60), z.size_bytes());
+    for (std::size_t i = 0; i < z.size_bytes(); ++i) ASSERT_EQ(0, int(z.data()[i]));
+    ASSERT_THROWS(stb::premultiplied_image(0, 3), std::invalid_argument);
+    ASSERT_THROWS(stb::premultiplied_image(3, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::premultiplied_image(-1, 3), std::invalid_argument);
+}
+
+UTEST(libstb_premultiplied_image_tests, test_from_image_and_to_image_equal_the_function_pair_on_every_backend) {
+    const stb::image img = testutil::gradient(37, 11, 4);
+    for_each_backend([&](const std::string& backend) {
+        bytes argb(std::size_t(img.height()) * img.stride());
+        stb::rgba_to_premultiplied_argb(argb.data(), img.stride(), img.data(), img.stride(), img.width(), img.height());
+        const stb::premultiplied_image p = stb::premultiplied_image::from_image(img);
+        ASSERT_EQ(img.width(), p.width());
+        ASSERT_EQ(img.height(), p.height());
+        EXPECT_TRUE(report(std::memcmp(p.data(), argb.data(), argb.size()) == 0, msg() << backend << ": from_image"));
+
+        bytes straight(argb.size());
+        stb::premultiplied_argb_to_rgba(straight.data(), img.stride(), argb.data(), img.stride(), img.width(), img.height());
+        const stb::image back = p.to_image();
+        ASSERT_EQ(4, back.channels());
+        EXPECT_TRUE(report(std::memcmp(back.data(), straight.data(), straight.size()) == 0, msg() << backend << ": to_image"));
+    });
+}
+
+UTEST(libstb_premultiplied_image_tests, test_from_image_takes_other_formats_as_opaque_or_rgba) {
+    for (int c = 1; c <= 3; ++c) {
+        const stb::image img = testutil::gradient(7, 5, c);
+        const stb::premultiplied_image a = stb::premultiplied_image::from_image(img);
+        const stb::premultiplied_image b = stb::premultiplied_image::from_image(img.convert(stb::pixel_format::rgba));
+        ASSERT_EQ(b.size_bytes(), a.size_bytes());
+        EXPECT_TRUE(report(std::memcmp(a.data(), b.data(), a.size_bytes()) == 0, msg() << c << " channels"));
+        if (c != 2) {  // no alpha: opaque, so the round trip is exact
+            const stb::image back = a.to_image();
+            const stb::image want = img.convert(stb::pixel_format::rgba);
+            EXPECT_TRUE(report(std::memcmp(back.data(), want.data(), want.size_bytes()) == 0, msg() << c << " channels, round trip"));
+        }
+    }
+}
+
+UTEST(libstb_premultiplied_image_tests, test_wrap_with_padding_is_a_view_and_copy_is_packed) {
+    constexpr int w = 5, h = 4;
+    constexpr std::size_t stride = 4 * w + 12;
+    auto mem = std::make_shared<std::vector<std::uint32_t>>(stride / 4 * h, 0xABABABABu);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) (*mem)[std::size_t(y) * (stride / 4) + std::size_t(x)] = 0xFF000000u | std::uint32_t(y * 16 + x);
+    const std::vector<std::uint32_t> before = *mem;
+    std::uint8_t* base = reinterpret_cast<std::uint8_t*>(mem->data());
+    {
+        stb::premultiplied_image p = stb::premultiplied_image::wrap(w, h, base, stride, mem);
+        EXPECT_EQ(static_cast<void*>(base), static_cast<void*>(p.data()));  // a view, not a copy
+        EXPECT_EQ(stride, p.stride());
+        const stb::image img = p.to_image();  // opaque pixels: only R and B swap back
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                EXPECT_EQ(int(y * 16 + x), int(img(x, y, 2)));  // blue is the low byte of 0xAARRGGBB
+                EXPECT_EQ(255, int(img(x, y, 3)));
+            }
+        const stb::premultiplied_image c = p.copy();
+        EXPECT_EQ(std::size_t(4 * w), c.stride());
+        EXPECT_TRUE(c.data() != p.data());
+        for (int y = 0; y < h; ++y) EXPECT_TRUE(std::memcmp(c.data() + std::size_t(y) * c.stride(), base + std::size_t(y) * stride, 4 * w) == 0);
+        EXPECT_TRUE(report(*mem == before, msg() << "wrapped memory changed"));
+        EXPECT_TRUE(mem.use_count() >= 2);  // the wrap keeps the owner alive
+    }
+    EXPECT_EQ(1, int(mem.use_count()));  // and lets go of it
+}
+
+UTEST(libstb_premultiplied_image_tests, test_wrap_rejects_bad_arguments) {
+    alignas(4) std::uint8_t mem[64] = {};
+    ASSERT_THROWS(stb::premultiplied_image::wrap(4, 2, nullptr, 16), std::invalid_argument);
+    ASSERT_THROWS(stb::premultiplied_image::wrap(4, 2, mem + 1, 16), std::invalid_argument);  // misaligned
+    ASSERT_THROWS(stb::premultiplied_image::wrap(4, 2, mem, 12), std::invalid_argument);      // stride < 4 * width
+    ASSERT_THROWS(stb::premultiplied_image::wrap(4, 2, mem, 18), std::invalid_argument);      // not a multiple of 4
+    ASSERT_THROWS(stb::premultiplied_image::wrap(0, 2, mem, 16), std::invalid_argument);
+    ASSERT_THROWS(stb::premultiplied_image::wrap(4, 0, mem, 16), std::invalid_argument);
+    if (sizeof(std::size_t) == 8)  // 2^31 rows 2^34 bytes apart: does not fit in 64 bits
+        ASSERT_THROWS(stb::premultiplied_image::wrap(2147483647, 2147483647, mem, std::size_t(1) << 34), std::invalid_argument);
+    const stb::premultiplied_image ok = stb::premultiplied_image::wrap(4, 2, mem, 16);
+    EXPECT_FALSE(ok.empty());
+}
+
+UTEST(libstb_premultiplied_image_tests, test_a_moved_from_object_is_empty) {
+    stb::premultiplied_image a(6, 2);
+    stb::premultiplied_image b(std::move(a));
+    EXPECT_TRUE(a.empty());
+    EXPECT_EQ(0, a.width());
+    EXPECT_EQ(std::size_t(0), a.stride());
+    EXPECT_EQ(6, b.width());
+    EXPECT_EQ(std::size_t(24), b.stride());
+    stb::premultiplied_image c;
+    c = std::move(b);
+    EXPECT_TRUE(b.empty());
+    EXPECT_EQ(std::size_t(0), b.stride());
+    EXPECT_EQ(2, c.height());
+}
+
+UTEST(libstb_premultiplied_image_tests, test_image_still_moves_and_keeps_its_owner_deleter_after_the_refactor) {
+    struct marker {
+        void operator()(void*) const {}
+    };
+    std::uint8_t px[4] = {1, 2, 3, 4};
+    std::shared_ptr<void> keep(static_cast<void*>(px), marker{});
+    stb::image a = stb::image::wrap(1, 1, stb::pixel_format::rgba, px, keep);
+    ASSERT_TRUE(a.owner_deleter<marker>() != nullptr);
+    stb::image b(std::move(a));
+    EXPECT_TRUE(a.empty());
+    EXPECT_EQ(0, a.channels());
+    EXPECT_EQ(4, b.channels());
+    EXPECT_TRUE(b.owner_deleter<marker>() != nullptr);
 }

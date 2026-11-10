@@ -815,4 +815,44 @@ void bind_image(nb::module_& m) {
             const std::string_view format = stb::pixel_format_name(i.format());
             return stb::sformat("Image(width=%d, height=%d, format=%.*s)", i.width(), i.height(), int(format.size()), format.data());
         });
+
+    // premultiplied_image: the pixels a rasterizer draws into (0xAARRGGBB words), a type of its own so that
+    // nothing that expects straight alpha can be called on it. It cannot view a Python object, so it needs
+    // no garbage-collector support.
+    nb::class_<stb::premultiplied_image>(
+        m, "PremultipliedImage",
+        "Pixels multiplied by alpha, one 32-bit word 0xAARRGGBB per pixel (what rasterizers draw into).\n\n"
+        "A separate type from Image, which always holds straight alpha: it has no blend, encoder or resize.\n"
+        "PremultipliedImage.from_image(img) converts in, .to_image() converts back to straight RGBA.\n"
+        "np.asarray(p) is a no-copy (height, width) uint32 view (needs numpy); keep p alive while using it.")
+        .def(nb::init<int, int>(), "width"_a, "height"_a,
+             "A transparent (all zero) image. ValueError unless width and height are >= 1.")
+        .def_static("from_image", &stb::premultiplied_image::from_image, "image"_a, release(),
+                    "Premultiply an Image of any format (GRAY, GRAY_ALPHA and RGB are taken as RGBA, opaque).")
+        .def("to_image", &stb::premultiplied_image::to_image, release(),
+             "A new straight-alpha RGBA Image (colour precision is lost where alpha is small).")
+        .def("copy", &stb::premultiplied_image::copy, release(), "A deep copy that owns its pixels.")
+        .def_prop_ro("width", &stb::premultiplied_image::width)
+        .def_prop_ro("height", &stb::premultiplied_image::height)
+        .def_prop_ro("stride", &stb::premultiplied_image::stride, "Bytes between the starts of two rows (0 when empty).")
+        .def_prop_ro("empty", &stb::premultiplied_image::empty)
+        .def_prop_ro(
+            "__array_interface__",
+            [](const stb::premultiplied_image& p) {
+                if (p.empty()) throw std::invalid_argument("an empty PremultipliedImage has no pixels");
+                const std::uint16_t one = 1;
+                const bool little = *reinterpret_cast<const std::uint8_t*>(&one) == 1;
+                nb::dict d;
+                d["version"] = 3;
+                d["shape"] = nb::make_tuple(p.height(), p.width());
+                d["typestr"] = little ? "<u4" : ">u4";
+                d["data"] = nb::make_tuple(reinterpret_cast<std::uintptr_t>(p.data()), false);
+                d["strides"] = nb::make_tuple(p.stride(), 4);
+                return d;
+            },
+            "NumPy's array interface (version 3): a (height, width) uint32 view of the pixels, rows `stride`\n"
+            "bytes apart. Keep the PremultipliedImage alive while using the address.")
+        .def("__repr__", [](const stb::premultiplied_image& p) {
+            return stb::sformat("PremultipliedImage(width=%d, height=%d)", p.width(), p.height());
+        });
 }

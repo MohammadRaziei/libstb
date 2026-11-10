@@ -85,6 +85,7 @@
 - [x] README، `docs/guide.md`، `docs/cpp/mainpage.md`، `docs/python/source/font.rst` و
       `examples/python/05_font_render.py` آپدیت شدن.
 - [x] **`image::premultiplied()` / `unpremultiplied()`** (کپی جدید، بایت‌ها R,G,B,A، بدون فلگ؛ rgba و gray_alpha؛ Python هم). کرنل مشترک با توابع ARGB.
+- [x] **`premultiplied_image`** (issue 9 novasvg): نوع جدا روی پایه‌ی مشترک `detail::image_base`؛ `from_image`/`to_image`/`wrap`/`copy`؛ Python هم.
 - [x] **تبدیل RGBA مستقیم ↔ ARGB32 premultiplied (issue #1).** دو تابع آزاد `rgba_to_premultiplied_argb` و
       `premultiplied_argb_to_rgba` توی `include/stb/image.hpp`، با همون امضای issue (`dst, dst_stride, src,
       src_stride, width, height`؛ strideها بایتی؛ درجا مجازه). کرنل‌ها توی `kernels.hpp` (`premultiply_row`) و

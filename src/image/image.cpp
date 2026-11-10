@@ -85,13 +85,13 @@ pixel_format pixel_format_from_name(std::string_view name) {
 }
 
 image::image(int width, int height, pixel_format format)
-    : width_(width), height_(height), channels_(channel_count(format)) {
+    : image_base(width, height), channels_(channel_count(format)) {
     const std::size_t n = checked_bytes(width, height, format);
     data_ = std::shared_ptr<std::uint8_t>(new std::uint8_t[n](), std::default_delete<std::uint8_t[]>());
 }
 
 image::image(int width, int height, pixel_format format, std::vector<std::uint8_t> pixels)
-    : width_(width), height_(height), channels_(channel_count(format)) {
+    : image_base(width, height), channels_(channel_count(format)) {
     if (pixels.size() != checked_bytes(width, height, format))
         throw std::invalid_argument("pixel buffer size does not match width * height * channels");
     auto holder = std::make_shared<std::vector<std::uint8_t>>(std::move(pixels));
@@ -110,18 +110,12 @@ image image::wrap(int width, int height, pixel_format format, std::uint8_t* data
 }
 
 // A moved-from image is empty (not just "valid but unspecified").
-image::image(image&& o) noexcept
-    : width_(std::exchange(o.width_, 0)),
-      height_(std::exchange(o.height_, 0)),
-      channels_(std::exchange(o.channels_, 0)),
-      data_(std::move(o.data_)) {}
+image::image(image&& o) noexcept : image_base(std::move(o)), channels_(std::exchange(o.channels_, 0)) {}
 
 image& image::operator=(image&& o) noexcept {
     if (this != &o) {
-        width_ = std::exchange(o.width_, 0);
-        height_ = std::exchange(o.height_, 0);
+        image_base::operator=(std::move(o));
         channels_ = std::exchange(o.channels_, 0);
-        data_ = std::move(o.data_);
     }
     return *this;
 }
