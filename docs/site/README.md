@@ -33,6 +33,12 @@ the same artifact under `site/`. The job only builds and uploads; nothing publis
 Or from this folder, while writing: `npm install && npm start`.
 Set `DOCS_URL` and `DOCS_BASE_URL` when publishing; the defaults are `http://localhost` and `/`.
 
+## Windows
+
+The first CI run hung for hours in `docs_snippet_cpp_resize` on `windows-latest`. Likely cause (not confirmed, the log
+was not read): `stb_core` is a DLL and nothing put `stb.dll` next to `snippet_resize.exe`. The snippet CMake now copies
+it there on Windows and gives every snippet test a 120 s timeout, so a hang fails the test.
+
 ## Not verified
 
 Written without running anything, so none of this has been executed:

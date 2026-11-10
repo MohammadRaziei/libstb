@@ -11,6 +11,16 @@ foreach(source IN LISTS LIBSTB_SNIPPETS_CPP)
     target_link_libraries(snippet_${name} PRIVATE libstb::libstb)
     add_test(NAME docs_snippet_cpp_${name}
         COMMAND snippet_${name} ${PROJECT_SOURCE_DIR}/data ${CMAKE_CURRENT_BINARY_DIR}/out/cpp/${name})
+    if(WIN32)
+        # stb_core is a DLL (stb.dll). Windows looks for it beside the executable, and nothing else
+        # puts it there (test_stb_cpp compiles the core sources in instead of linking the DLL).
+        add_custom_command(TARGET snippet_${name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:stb_core> $<TARGET_FILE_DIR:snippet_${name}>
+            VERBATIM)
+    endif()
+    # A snippet that hangs must fail the test, not hold the CI job for hours.
+    set_tests_properties(docs_snippet_cpp_${name} PROPERTIES TIMEOUT 120)
 endforeach()
 
 if(Python3_FOUND)
@@ -26,6 +36,7 @@ if(Python3_FOUND)
                 COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHON_INSTALL_DIR}
                         ${Python3_EXECUTABLE} ${source}
                         ${PROJECT_SOURCE_DIR}/data ${CMAKE_CURRENT_BINARY_DIR}/out/python/${name})
+            set_tests_properties(docs_snippet_python_${name} PROPERTIES TIMEOUT 120)
         endforeach()
     endif()
 endif()
