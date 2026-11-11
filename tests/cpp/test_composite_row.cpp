@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -36,9 +35,9 @@ double mix_channel(blend_mode m, double b, double s) {
         case blend_mode::multiply: return b * s;
         case blend_mode::screen: return b + s - b * s;
         case blend_mode::overlay: return b <= 0.5 ? 2 * b * s : 1 - 2 * (1 - b) * (1 - s);
-        case blend_mode::darken: return std::min(b, s);
-        case blend_mode::lighten: return std::max(b, s);
-        case blend_mode::add: return std::min(1.0, b + s);
+        case blend_mode::darken: return STB_MIN(b, s);
+        case blend_mode::lighten: return STB_MAX(b, s);
+        case blend_mode::add: return STB_MIN(1.0, b + s);
         case blend_mode::difference: return std::fabs(b - s);
         case blend_mode::exclusion: return b + s - 2 * b * s;
     }
@@ -81,7 +80,7 @@ void reference(composite_op op, blend_mode mode, u32 d, u32 s, int ca, double ou
             const double blended = cs * (1 - ab) + sa * ab * mix_channel(mode, ub, us);
             full = fa * blended + fb * cb;
         }
-        full = std::min(1.0, full);
+        full = STB_MIN(1.0, full);
         out[i] = 255.0 * (cb + c * (full - cb));
     }
 }
@@ -119,7 +118,7 @@ UTEST(libstb_composite_row_tests, test_every_operator_and_mode_matches_the_float
                     reference(op, mode, dst[i], src[i], ca, want);
                     for (int c = 0; c < 4; ++c) {
                         const double err = std::fabs(channel(out[i], 8 * c) - want[c]);
-                        worst = std::max(worst, err);
+                        worst = STB_MAX(worst, err);
                         if (err > 2.0) {
                             UTEST_PRINTF("op %s mode %s ca %d src %08x dst %08x channel %d: got %d want %.2f\n",
                                          std::string(stb::composite_op_name(op)).c_str(),

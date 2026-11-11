@@ -7,8 +7,10 @@
 #include "image/simd.hpp"
 #include "stb/image.hpp"
 
-#if defined(__SSE2__)
+// SSE2 is the baseline of every x86-64 (MSVC does not define __SSE2__ there)
+#if defined(__SSE2__) || defined(_M_X64)
 #include <emmintrin.h>
+#define STB_COMPOSITE_SSE2 1
 #endif
 
 // composite_row / composite_solid_row: Porter-Duff operators and blend modes on rows of premultiplied
@@ -95,7 +97,7 @@ inline u32 apply(u32 d, u32 s, u32 ca) {
     } else {  // plus_lighter: every channel (alpha too) is added and stops at 255; ca is the share of that shown
         u32 r = 0;
         for (int shift = 0; shift < 32; shift += 8)
-            r |= std::min<u32>(255, ((s >> shift) & 255) + ((d >> shift) & 255)) << shift;
+            r |= STB_MIN(u32(255), ((s >> shift) & 255) + ((d >> shift) & 255)) << shift;
         return ca == 255 ? r : mix255(r, ca, d, ia);
     }
 }
@@ -132,15 +134,15 @@ inline int mode_value(int cs, int cb, int as, int ab) {
     } else if constexpr (M == blend_mode::screen) {
         return cs + cb - mul255(cs, cb);
     } else if constexpr (M == blend_mode::darken) {
-        return cs + cb - std::max(mul255(cs, ab), mul255(cb, as));
+        return cs + cb - STB_MAX(mul255(cs, ab), mul255(cb, as));
     } else if constexpr (M == blend_mode::lighten) {
-        return cs + cb - std::min(mul255(cs, ab), mul255(cb, as));
+        return cs + cb - STB_MIN(mul255(cs, ab), mul255(cb, as));
     } else if constexpr (M == blend_mode::difference) {
-        return cs + cb - 2 * std::min(mul255(cs, ab), mul255(cb, as));
+        return cs + cb - 2 * STB_MIN(mul255(cs, ab), mul255(cb, as));
     } else if constexpr (M == blend_mode::exclusion) {
         return cs + cb - 2 * mul255(cs, cb);
     } else if constexpr (M == blend_mode::add) {
-        return mul255(cs, 255 - ab) + mul255(cb, 255 - as) + std::min(mul255(as, ab), mul255(cb, as) + mul255(cs, ab));
+        return mul255(cs, 255 - ab) + mul255(cb, 255 - as) + STB_MIN(mul255(as, ab), mul255(cb, as) + mul255(cs, ab));
     } else {  // overlay: multiply where the backdrop is dark, screen where it is light
         const int base = mul255(cs, 255 - ab) + mul255(cb, 255 - as);
         if (2 * cb <= ab) return base + 2 * mul255(cs, cb);
@@ -201,7 +203,7 @@ inline void loop(u32* dest, const u32* src, u32 color, std::size_t n, F f) {
     for (std::size_t i = 0; i < n; ++i) dest[i] = f(dest[i], Solid ? color : src[i]);
 }
 
-#if defined(__SSE2__)
+#if defined(STB_COMPOSITE_SSE2)
 namespace sse2 {
 using vec = __m128i;
 constexpr std::size_t lanes = 4;
@@ -283,7 +285,7 @@ void loop_op(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
         else std::memmove(dest, src, n * sizeof(u32));
         return;
     }
-#if defined(__SSE2__)
+#if defined(STB_COMPOSITE_SSE2)
     if (n >= 4) {
         const detail::backend be = detail::current_backend();
 #if defined(STB_HAVE_AVX2_DISPATCH)

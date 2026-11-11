@@ -22,7 +22,7 @@ using u32 = std::uint32_t;
 
 double best_ns_per_pixel(const std::string& backend, bool solid, stb::composite_op op, std::size_t len, int coverage) {
     // 64 KiB of rows, so the data stays in cache and the loop itself is measured
-    const std::size_t rows = std::max<std::size_t>(1, 16384 / len);
+    const std::size_t rows = STB_MAX(std::size_t(1), 16384 / len);
     std::vector<u32> dest(rows * len), src(rows * len);
     std::uint32_t state = 7;
     for (std::size_t i = 0; i < dest.size(); ++i) {
@@ -42,7 +42,7 @@ double best_ns_per_pixel(const std::string& backend, bool solid, stb::composite_
                 else stb::composite_row(&dest[r * len], &src[r * len], len, op, stb::blend_mode::normal, std::uint8_t(coverage));
             }
         const double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t0).count();
-        best = std::min(best, ns / (64.0 * double(rows * len)));
+        best = STB_MIN(best, ns / (64.0 * double(rows * len)));
     }
     return best;
 }
