@@ -16,8 +16,8 @@ project(LibstbBenchmarks LANGUAGES NONE)
 #   build/      disposable: the venv, the corpus, scratch files, CMake's own state. Never committed.
 #   outputs/    what is meant to be committed and published:
 #                 results/<step>.json   what each step measured, written by python/bench_*.py
-#                 index.html            report/generate_report.py: the standalone report, built from results/
-#                 benchmark.json        report/gather.py: a small digest of results/ for the docs landing page
+#                 benchmark.json        report/gather.py: a digest of results/ (every number and chart series)
+#               No HTML is written. The docs site (docs/site) draws the benchmarks page from these JSON files.
 #
 # See README.md in this directory for the full rundown, and every
 # individual target below for what it does on its own
@@ -32,7 +32,7 @@ set(LIBSTB_BENCH_GITHUB_URL
     CACHE STRING "Where to install libstb itself from (a fresh git checkout, not the local source tree)")
 
 set(LIBSTB_BENCH_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/outputs"
-    CACHE PATH "Where results/, benchmark.json and index.html land: what is meant to be committed")
+    CACHE PATH "Where results/ and benchmark.json land: what is meant to be committed")
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
@@ -42,6 +42,6 @@ add_subdirectory(python)
 add_subdirectory(report)
 
 add_custom_target(stb_benchmark
-  COMMENT "stb_benchmark: running the full benchmark suite and building the report"
+  COMMENT "stb_benchmark: running the full benchmark suite and gathering its JSON"
 )
 add_dependencies(stb_benchmark stb_bench_report)

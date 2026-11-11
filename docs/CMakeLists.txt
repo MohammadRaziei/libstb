@@ -1,5 +1,11 @@
 # libstb Documentation Build
-# Builds C++ docs (Doxygen) and Python docs (Sphinx) via CreateDocs.cmake scripts
+# C++ reference (Doxygen) and Python reference (Sphinx) via their CreateDocs.cmake scripts, and the
+# front of the site (home page, lessons, benchmarks) with Docusaurus, from docs/site.
+#
+#   stb_docs_doxygen    docs/out/cpp/html       C++ reference
+#   stb_docs_sphinx     docs/out/python/html    Python reference
+#   stb_docs_docusaurus docs/out/                home page, /docs/ lessons, /benchmarks/
+#   stb_docs            all three
 
 cmake_minimum_required(VERSION 3.19)
 
@@ -97,63 +103,49 @@ else()
     )
 endif()
 
+# ── Docusaurus: home page, lessons, benchmarks ───────────────────────────────
+# docs/site is the front of the site. It replaces the generated landing page and the standalone
+# benchmark report: the home page and the lessons are written in docs/site, and /benchmarks/ is drawn
+# from benchmarks/outputs/*.json. The two references keep their addresses (python/html and cpp/html).
+# Docusaurus builds into its own folder and the result is merged into docs/out, so it never wipes the
+# Doxygen and Sphinx output that is already there.
+#
+#   stb_docs_figures  run the Python snippets and the home-page demo; their output is what the pages show
+find_program(LIBSTB_NPM npm)
+find_program(LIBSTB_PYTHON NAMES python3 python)
+set(LIBSTB_SITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/site)
+set(LIBSTB_SITE_BUILD ${CMAKE_CURRENT_BINARY_DIR}/site-build)
 
-# ── Route Index Page ──────────────────────────────────────────
+if(LIBSTB_NPM AND LIBSTB_PYTHON)
+    add_custom_target(stb_docs_figures
+        COMMAND ${LIBSTB_PYTHON} ${LIBSTB_SITE_DIR}/scripts/prepare.py figures
+                --python-path ${PYTHON_INSTALL_DIR}
+        COMMENT "Running the Python snippets and the home-page demo to produce the figures"
+        VERBATIM
+    )
+    if(TARGET build_python)
+        add_dependencies(stb_docs_figures build_python)
+    endif()
 
-set(LIBSTB_INDEX_OUT ${LIBSTB_DOCS_OUT}/index.html)
-set(LIBSTB_ASSETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)
-
-# Per-language tab content for the docs/install/example panels: supported_langs.json
-# lists the languages (see its "_comment" field for the format), and each language
-# folder holds index-docs.json (structured fields) + index-install.txt +
-# index-example.txt (raw HTML). generate_index.py assembles index.html from these.
-# Globbed at configure time so adding or editing a fragment triggers a reconfigure -
-# new fragment files need `cmake` re-run once (e.g. via `touch supported_langs.json`)
-# for the glob itself to pick them up.
-set(LIBSTB_SUPPORTED_LANGS ${CMAKE_CURRENT_SOURCE_DIR}/supported_langs.json)
-set(LIBSTB_GENERATE_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/generate_index.py)
-file(GLOB_RECURSE LIBSTB_LANG_FRAGMENTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/*/index-docs.json
-    ${CMAKE_CURRENT_SOURCE_DIR}/*/index-install.txt
-    ${CMAKE_CURRENT_SOURCE_DIR}/*/index-example.txt
-)
-
-set(LIBSTB_ASSETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)
-set(LIBSTB_SHOWCASE_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/make_showcase.py)
-file(GLOB_RECURSE LIBSTB_ASSET_FILES ${LIBSTB_ASSETS_DIR}/*)
-
-add_custom_command(
-    OUTPUT ${LIBSTB_INDEX_OUT}
-    COMMAND ${CMAKE_COMMAND}
-        -DOUTPUT_DIR=${LIBSTB_DOCS_OUT}
-        -DINDEX_IN=${CMAKE_CURRENT_SOURCE_DIR}/index.html.in
-        -DASSETS_DIR=${LIBSTB_ASSETS_DIR}
-        -DSHOWCASE_SCRIPT=${LIBSTB_SHOWCASE_SCRIPT}
-        -DLIBSTB_PYTHON_INSTALL_DIR=${PYTHON_INSTALL_DIR}
-        -DPROJECT_VERSION=${PROJECT_VERSION}
-        -DLOGO_SQ=${PROJECT_SOURCE_DIR}/docs/images/libstb-sq.svg
-        -DLANGS_FILE=${LIBSTB_SUPPORTED_LANGS}
-        -DLANGS_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-        -DGENERATE_SCRIPT=${LIBSTB_GENERATE_SCRIPT}
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/CreateDocs.cmake
-    DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/CreateDocs.cmake
-        ${LIBSTB_GENERATE_SCRIPT}
-        ${CMAKE_CURRENT_SOURCE_DIR}/index.html.in
-        ${LIBSTB_ASSET_FILES}
-        ${LIBSTB_SHOWCASE_SCRIPT}
-        ${PROJECT_SOURCE_DIR}/docs/images/libstb-sq.svg
-        ${LIBSTB_SUPPORTED_LANGS}
-        ${LIBSTB_LANG_FRAGMENTS}
-    COMMENT "Creating the landing page"
-    VERBATIM
-)
-
-add_custom_target(stb_docs_index DEPENDS ${LIBSTB_INDEX_OUT})
-
-# The demo frames are written by the built module, so it has to exist first.
-if(TARGET build_python)
-    add_dependencies(stb_docs_index build_python)
+    add_custom_target(stb_docs_docusaurus
+        COMMAND ${LIBSTB_NPM} install
+        COMMAND ${CMAKE_COMMAND} -E env
+                LIBSTB_DOCS_OUT=${LIBSTB_DOCS_OUT}
+                LIBSTB_VERSION=${PROJECT_VERSION}
+                ${LIBSTB_NPM} run build -- --out-dir ${LIBSTB_SITE_BUILD}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBSTB_SITE_BUILD} ${LIBSTB_DOCS_OUT}
+        WORKING_DIRECTORY ${LIBSTB_SITE_DIR}
+        COMMENT "Building the Docusaurus site -> ${LIBSTB_DOCS_OUT}"
+        VERBATIM
+    )
+    # The site shows both references' addresses through the tag file and objects.inv.
+    add_dependencies(stb_docs_docusaurus stb_docs_doxygen stb_docs_sphinx stb_docs_figures)
+else()
+    add_custom_target(stb_docs_docusaurus
+        COMMAND ${CMAKE_COMMAND} -E echo "stb_docs_docusaurus needs npm and python3, and one of them was not found"
+        COMMAND ${CMAKE_COMMAND} -E false
+        VERBATIM
+    )
 endif()
 
 
@@ -164,7 +156,7 @@ add_custom_target(stb_docs
     COMMENT "Building all documentation"
 )
 
-add_dependencies(stb_docs stb_docs_doxygen stb_docs_sphinx stb_docs_index)
+add_dependencies(stb_docs stb_docs_doxygen stb_docs_sphinx stb_docs_docusaurus)
 
 
 # ── Post-process: inject HTML comment into all output HTML files ──
@@ -179,66 +171,3 @@ add_custom_command(TARGET stb_docs POST_BUILD
     COMMENT "Injecting HTML comments into documentation pages"
     VERBATIM
 )
-
-# ── Benchmarks page ───────────────────────────────────────────
-# benchmarks/outputs/ is generated on a developer machine (see benchmarks/README.md) and
-# committed; it is only copied here, never rebuilt. It is published as it is, folder and all:
-# index.html (the page), benchmark.json (its data, which the landing page's teaser also reads in
-# the browser) and results/<step>.json (what each step measured). Runs after InjectComment above so the page is published
-# byte-for-byte as committed.
-set(LIBSTB_BENCH_OUTDIR ${PROJECT_SOURCE_DIR}/benchmarks/outputs)
-if(EXISTS ${LIBSTB_BENCH_OUTDIR}/index.html)
-    add_custom_command(TARGET stb_docs POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBSTB_BENCH_OUTDIR} ${LIBSTB_DOCS_OUT}/benchmarks
-        COMMENT "Publishing committed benchmarks/outputs/ -> ${LIBSTB_DOCS_OUT}/benchmarks/"
-        VERBATIM
-    )
-else()
-    message(WARNING "benchmarks/outputs/index.html not found -- the docs site "
-                    "will have no /benchmarks/ page. Generate it as described in "
-                    "benchmarks/README.md and commit it.")
-endif()
-
-
-# ── Docusaurus layer (lesson pages on top of the two references) ──────────────
-# Optional, not part of stb_docs. docs/site/ holds the lessons; the C++ and Python
-# references stay Doxygen and Sphinx and are copied into the site as static pages.
-#   stb_docs_figures  run the Python snippets; their output is what the lesson pages show
-#   stb_docs_docusaurus     npm install + prepare.py + docusaurus build -> ${LIBSTB_DOCS_OUT}/site
-find_program(LIBSTB_NPM npm)
-find_program(LIBSTB_PYTHON NAMES python3 python)
-if(LIBSTB_NPM AND LIBSTB_PYTHON)
-    set(LIBSTB_SITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/site)
-    set(LIBSTB_SITE_OUT ${LIBSTB_DOCS_OUT}/site)
-
-    add_custom_target(stb_docs_figures
-        COMMAND ${LIBSTB_PYTHON} ${LIBSTB_SITE_DIR}/scripts/prepare.py figures
-                --python-path ${PYTHON_INSTALL_DIR}
-        COMMENT "Running the Python snippets to produce the lesson figures"
-        VERBATIM
-    )
-    if(TARGET build_python)
-        add_dependencies(stb_docs_figures build_python)
-    endif()
-
-    add_custom_target(stb_docs_docusaurus
-        COMMAND ${LIBSTB_NPM} install
-        COMMAND ${CMAKE_COMMAND} -E env LIBSTB_DOCS_OUT=${LIBSTB_DOCS_OUT}
-                ${LIBSTB_NPM} run build -- --out-dir ${LIBSTB_SITE_OUT}
-        WORKING_DIRECTORY ${LIBSTB_SITE_DIR}
-        COMMENT "Building the Docusaurus site -> ${LIBSTB_SITE_OUT}"
-        VERBATIM
-    )
-    # The site copies both references, reads the tag file / objects.inv, and shows the figures.
-    add_dependencies(stb_docs_docusaurus stb_docs_doxygen stb_docs_sphinx stb_docs_figures)
-
-    # stb_docs builds the lesson site too. It needs the Python build (figures and Sphinx import it),
-    # so without it stb_docs stays what it was and stb_docs_docusaurus can still be asked for by name.
-    if(TARGET build_python)
-        add_dependencies(stb_docs stb_docs_docusaurus)
-    else()
-        message(STATUS "Python bindings are off - stb_docs will not build the Docusaurus site")
-    endif()
-else()
-    message(STATUS "npm or python not found - the stb_docs_docusaurus target is not available")
-endif()

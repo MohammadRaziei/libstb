@@ -1,7 +1,7 @@
 set(PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(VENV_DIR "${CMAKE_CURRENT_BINARY_DIR}/venv")
 # Every step writes its own JSON here: outputs/results/<step>.json. These are
-# committed together with benchmark.json and index.html (see ../README.md).
+# committed together with benchmark.json (see ../README.md).
 set(RESULTS_DIR "${LIBSTB_BENCH_OUTPUT_DIR}/results")
 set(SCRATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}/scratch")
 
@@ -219,7 +219,7 @@ add_dependencies(stb_bench_scaling stb_bench_verify)
 # ---------------------------------------------------------------- fonts --
 # Needs a real .ttf (LIBSTB_REAL_FONT, from FetchRealCorpus.cmake). If it
 # could not be downloaded the target still exists but does nothing, and
-# the report simply has no font section.
+# the benchmarks page simply has no font section.
 
 set(FONTS_JSON "${RESULTS_DIR}/fonts.json")
 

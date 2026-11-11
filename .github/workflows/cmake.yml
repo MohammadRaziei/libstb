@@ -77,6 +77,11 @@ jobs:
           -DSTB_BUILD_DOCS=ON
 
     - name: Build documentation
+      # docs/site (Docusaurus) is the front of the site: it is published at the root of /libstb/ on GitHub Pages,
+      # with the Doxygen and Sphinx references beside it at cpp/html and python/html.
+      env:
+        DOCS_URL: https://mohammadraziei.github.io
+        DOCS_BASE_URL: /libstb/
       run: cmake --build build --target stb_docs
 
     - name: List docs directory

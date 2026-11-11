@@ -3,12 +3,15 @@
 
   prepare.py snippets   snippets/<lang>/<name>.<ext>  ->  src/generated/snippets.json
   prepare.py check      fail when a lesson snippet exists in some languages but not in all
-  prepare.py bench      benchmarks/outputs/benchmark.json  ->  src/generated/benchmark.json (slim)
+  prepare.py bench      benchmarks/outputs/{benchmark.json,results/*.json}  ->  src/generated/benchmark.json
+                        (drawn by the benchmarks page) and static/benchmarks/ (offered for download)
+  prepare.py meta       version of the library  ->  src/generated/meta.json
   prepare.py symbols    Doxygen tag file + Sphinx objects.inv + api-map.json  ->  src/generated/symbols.json
-  prepare.py assets     sample pictures used by the lessons  ->  static/img
-  prepare.py api        Doxygen and Sphinx HTML  ->  static/api/{cpp,python}/html
-  prepare.py figures    run the Python snippets and write their output to static/img/generated/<name>
-  prepare.py all        snippets, check, bench, assets, symbols, api
+  prepare.py assets     logo (also used by the Doxygen and Sphinx pages) and the sample picture
+  prepare.py figures    run the Python snippets -> static/img/generated/<name>, and make_showcase.py
+                        (the home-page demo) -> static/showcase
+  prepare.py tokens     colour and type tokens of docs/assets/libstb-docs.css  ->  src/generated/tokens.css
+  prepare.py all        snippets, check, bench, meta, tokens, assets, symbols
 
 Missing inputs (docs not built yet, no benchmark file) never stop the site from building:
 the matching file is written empty and a warning is printed.
@@ -68,24 +71,44 @@ def cmd_check(_a) -> None:
     print(f"{len(snippet_files())} snippet(s), all present in: {', '.join(ids)}")
 
 
+EMPTY_BENCH = {"generated": None, "repeats": None, "n_entries": 0, "libraries": {},
+               "headline": {"rows": [], "install": []}, "sections": [],
+               "scaling": {"sides": [], "panels": []}, "fonts": {"font": "", "ops": []},
+               "install": [], "verify": None, "system": None}
+
+
 def cmd_bench(_a) -> None:
-    src = ROOT / "benchmarks" / "outputs" / "benchmark.json"
-    if not src.exists():
-        warn(f"{src} not found; the Bench component will show nothing")
-        write_json("benchmark.json", {"sections": [], "libraries": {}})
+    out = ROOT / "benchmarks" / "outputs"
+    digest = out / "benchmark.json"
+    if not digest.exists():
+        warn(f"{digest} not found; the benchmarks page will say there is no data")
+        write_json("benchmark.json", EMPTY_BENCH)
         return
-    d = json.loads(src.read_text(encoding="utf-8"))
-    keep = ("key", "title", "note", "libs", "reference", "n_compared", "time_ratio")
-    slim = {
-        "generated": d.get("generated"),
-        "repeats": d.get("repeats"),
-        "n_entries": d.get("n_entries"),
-        "libraries": d.get("libraries", {}),
-        "system": {k: d.get("system", {}).get(k) for k in ("cpu_model", "logical_cores", "os")},
-        "sections": [{"id": s["id"], "title": s["title"],
-                      "ops": [{k: o.get(k) for k in keep} for o in s["ops"]]} for s in d["sections"]],
-    }
-    write_json("benchmark.json", slim)
+    GEN.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(digest, GEN / "benchmark.json")
+    print("copied benchmark.json -> src/generated")
+    # The raw files stay downloadable next to the page: /benchmarks/benchmark.json and /benchmarks/results/<step>.json
+    dst = SITE / "static" / "benchmarks"
+    (dst / "results").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(digest, dst / "benchmark.json")
+    for f in sorted((out / "results").glob("*.json")):
+        shutil.copyfile(f, dst / "results" / f.name)
+    print(f"copied benchmark.json and {len(list((dst / 'results').glob('*.json')))} result file(s) -> static/benchmarks")
+
+
+def library_version() -> str:
+    if os.environ.get("LIBSTB_VERSION"):
+        return os.environ["LIBSTB_VERSION"]
+    try:
+        return subprocess.run([sys.executable, str(ROOT / "version.py")], capture_output=True, text=True,
+                              check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        warn("could not read the library version (set LIBSTB_VERSION)")
+        return ""
+
+
+def cmd_meta(_a) -> None:
+    write_json("meta.json", {"version": library_version()})
 
 
 def docs_out(args) -> Path:
@@ -141,11 +164,11 @@ def cmd_symbols(a) -> None:
     for key, names in amap.items():
         entry = {}
         if names.get("cpp") in cpp:
-            entry["cpp"] = f"api/cpp/html/{cpp[names['cpp']]}"
+            entry["cpp"] = f"cpp/html/{cpp[names['cpp']]}"
         elif cpp:
             missing.append(f"{key}: C++ '{names.get('cpp')}'")
         if names.get("python") in py:
-            entry["python"] = f"api/python/html/{py[names['python']]}"
+            entry["python"] = f"python/html/{py[names['python']]}"
         elif py:
             missing.append(f"{key}: Python '{names.get('python')}'")
         result[key] = entry
@@ -154,25 +177,29 @@ def cmd_symbols(a) -> None:
     write_json("symbols.json", result)
 
 
+def cmd_tokens(_a) -> None:
+    """The tokens section of the shared stylesheet (the one the Doxygen and Sphinx pages use), so the site
+    has the same colours without a second copy to keep in step."""
+    css = (ROOT / "docs" / "assets" / "libstb-docs.css").read_text(encoding="utf-8")
+    start, end = css.index("/* == tokens == */"), css.index("/* == chrome == */")
+    GEN.mkdir(parents=True, exist_ok=True)
+    (GEN / "tokens.css").write_text(css[start:end].rstrip() + "\n", encoding="utf-8")
+    print("wrote src/generated/tokens.css")
+
+
 def cmd_assets(_a) -> None:
-    src = ROOT / "data" / "images" / "astronaut.png"
-    dst = SITE / "static" / "img" / "astronaut.png"
-    if src.exists():
-        shutil.copyfile(src, dst)
-        print(f"copied {src.relative_to(ROOT)}")
-    else:
-        warn(f"{src} not found")
-
-
-def cmd_api(a) -> None:
-    base = docs_out(a)
-    for lang in ("cpp", "python"):
-        src, dst = base / lang / "html", SITE / "static" / "api" / lang / "html"
-        if src.is_dir():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-            print(f"copied {lang} reference")
+    pairs = [
+        # The Doxygen and Sphinx pages load the logo from <site>/assets/libstb-sq.svg, so it must be at this address.
+        (ROOT / "docs" / "images" / "libstb-sq.svg", SITE / "static" / "assets" / "libstb-sq.svg"),
+        (ROOT / "data" / "images" / "astronaut.png", SITE / "static" / "img" / "astronaut.png"),
+    ]
+    for src, dst in pairs:
+        if src.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dst)
+            print(f"copied {src.relative_to(ROOT)}")
         else:
-            warn(f"{src} not found; the {lang} reference link in the navbar will 404 until docs are built")
+            warn(f"{src} not found")
 
 
 def cmd_figures(a) -> None:
@@ -185,14 +212,20 @@ def cmd_figures(a) -> None:
         out = SITE / "static" / "img" / "generated" / name
         subprocess.run([sys.executable, str(files["python"]), str(ROOT / "data"), str(out)], env=env, check=True)
         print(f"figures for '{name}' -> {out.relative_to(SITE)}")
+    # The home page's live demo: every frame is a file libstb wrote. It downloads one photograph, so a failure only
+    # hides the demo (the page checks for the files) and does not stop the build.
+    shot = subprocess.run([sys.executable, str(SITE / "scripts" / "make_showcase.py"), "--out",
+                           str(SITE / "static" / "showcase")], env=env)
+    if shot.returncode != 0:
+        warn("make_showcase.py failed: the home page will not show its demo")
 
 
 def cmd_all(a) -> None:
-    cmd_snippets(a); cmd_check(a); cmd_bench(a); cmd_assets(a); cmd_symbols(a); cmd_api(a)
+    cmd_snippets(a); cmd_check(a); cmd_bench(a); cmd_meta(a); cmd_tokens(a); cmd_assets(a); cmd_symbols(a)
 
 
-COMMANDS = {"snippets": cmd_snippets, "check": cmd_check, "bench": cmd_bench, "symbols": cmd_symbols,
-            "assets": cmd_assets, "api": cmd_api, "figures": cmd_figures, "all": cmd_all}
+COMMANDS = {"snippets": cmd_snippets, "check": cmd_check, "bench": cmd_bench, "meta": cmd_meta,
+            "tokens": cmd_tokens, "symbols": cmd_symbols, "assets": cmd_assets, "figures": cmd_figures, "all": cmd_all}
 
 
 def main() -> None:

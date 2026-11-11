@@ -1,20 +1,17 @@
 /*
- * The libstb tokens (docs/assets/libstb-docs.css) mapped onto Infima.
- * Flat: no gradients, no resting shadows, 4px corners. Turquoise is a fill and a dark-mode
- * accent only; on a light page the accent for text and links is ink, because turquoise on
- * paper fails contrast.
+ * The libstb tokens (src/generated/tokens.css, copied from docs/assets/libstb-docs.css by scripts/prepare.py)
+ * mapped onto Infima, so the guide pages, the navbar and the footer look like the home page and the references.
+ * Flat: no gradients, no resting shadows, 4px corners. Turquoise is a fill and a dark-mode accent only; on a
+ * light page the accent for text and links is ink, because turquoise on paper fails contrast.
  */
 :root {
-  --stb-brand: #19cdb4;
-  --stb-ink: #0d0f12;
-  --stb-paper: #f3f4f6;
-
-  --ifm-font-family-base: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --ifm-font-family-base: var(--font);
+  --ifm-font-family-monospace: var(--font-mono);
   --ifm-global-radius: 4px;
   --ifm-global-shadow-lw: none;
   --ifm-global-shadow-md: none;
   --ifm-global-shadow-tl: none;
+  --ifm-code-font-size: 92%;
 
   --ifm-color-primary: #0d0f12;
   --ifm-color-primary-dark: #080a0c;
@@ -23,15 +20,23 @@
   --ifm-color-primary-light: #1c2026;
   --ifm-color-primary-lighter: #272c34;
   --ifm-color-primary-lightest: #3a414c;
-  --ifm-background-color: var(--stb-paper);
-  --ifm-navbar-shadow: none;
-  --ifm-code-font-size: 92%;
+  --ifm-background-color: var(--bg);
+  --ifm-background-surface-color: var(--card);
 
-  --stb-surface: #ffffff;
-  --stb-line: #d5d9df;
-  --stb-muted: #4b5360;
-  --stb-bar: #9aa3af;
-  --stb-bar-own: #0d0f12;
+  /* the top bar and the footer are ink in both themes, as on the Doxygen and Sphinx pages */
+  --ifm-navbar-height: 60px;
+  --ifm-navbar-background-color: var(--bar-bg);
+  --ifm-navbar-shadow: none;
+  --ifm-navbar-link-color: var(--bar-fg2);
+  --ifm-navbar-link-hover-color: var(--bar-fg);
+  --ifm-footer-background-color: var(--bar-bg);
+  --ifm-footer-color: var(--bar-fg2);
+  --ifm-footer-link-color: var(--bar-fg);
+  --ifm-footer-title-color: var(--bar-fg);
+
+  --stb-line: var(--border);
+  --stb-muted: var(--fg3);
+  --stb-surface: var(--card);
 }
 
 [data-theme='dark'] {
@@ -42,38 +47,32 @@
   --ifm-color-primary-light: #2fd6be;
   --ifm-color-primary-lighter: #3ad8c1;
   --ifm-color-primary-lightest: #5ee0cd;
-  --ifm-background-color: #0d0f12;
-  --ifm-background-surface-color: #15181d;
-
-  --stb-surface: #15181d;
-  --stb-line: #2a2f37;
-  --stb-muted: #a3acb8;
-  --stb-bar: #5b6572;
-  --stb-bar-own: #19cdb4;
+  --ifm-background-surface-color: var(--card);
 }
 
-.navbar {
-  border-bottom: 1px solid var(--stb-line);
+.navbar { border-bottom: 1px solid #25282e; }
+.navbar__logo { height: 30px; }
+.navbar__title { font-weight: 800; font-stretch: 125%; font-size: 1.28rem; letter-spacing: -.03em; color: var(--bar-fg); }
+.navbar__link { font-weight: 600; font-size: .92rem; }
+.navbar__link--active { color: var(--bar-fg); box-shadow: inset 0 -3px 0 var(--brand); }
+.navbar .navbar__toggle, .navbar [class*='colorModeToggle'] button { color: var(--bar-fg); }
+.footer__title { font-weight: 800; }
+.footer a { text-decoration-color: var(--brand); }
+
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .theme-doc-markdown h1 {
+  font-weight: 800;
+  font-stretch: 112%;
+  letter-spacing: -.02em;
 }
 
-a:focus-visible,
-button:focus-visible,
-[role='tab']:focus-visible {
-  outline: 2px solid var(--ifm-color-primary);
-  outline-offset: 2px;
+a:focus-visible, button:focus-visible, [role='tab']:focus-visible {
+  outline: 3px solid var(--ifm-color-primary);
+  outline-offset: 3px;
 }
 
-/* Compare: pictures side by side */
-.stb-compare {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin: 1.25rem 0;
-}
-.stb-compare__item {
-  margin: 0;
-  max-width: 100%;
-}
+/* Lesson components: Compare, Bench, ApiLink */
+.stb-compare { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.25rem 0; }
+.stb-compare__item { margin: 0; max-width: 100%; }
 .stb-compare__item img {
   display: block;
   max-width: 100%;
@@ -82,69 +81,27 @@ button:focus-visible,
   border-radius: var(--ifm-global-radius);
   background: var(--stb-surface);
 }
-.stb-compare__item figcaption {
-  margin-top: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--stb-muted);
-}
+.stb-compare__item figcaption { margin-top: .35rem; font-size: .85rem; color: var(--stb-muted); }
 
-/* Bench: one row per library, bar on a log scale */
-.stb-bench {
-  margin: 1.25rem 0;
-}
-.stb-bench__op {
-  margin-bottom: 1.5rem;
-}
-.stb-bench__op h4 {
-  margin-bottom: 0.5rem;
-}
-.stb-bench__rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
+.stb-bench { margin: 1.25rem 0; }
+.stb-bench__op { margin-bottom: 1.5rem; }
+.stb-bench__op h4 { margin-bottom: .5rem; }
+.stb-bench__rows { list-style: none; margin: 0; padding: 0; }
 .stb-bench__row {
   display: grid;
   grid-template-columns: minmax(8rem, 12rem) 1fr minmax(6rem, 9rem);
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.25rem 0;
+  gap: .75rem;
+  padding: .25rem 0;
 }
-.stb-bench__bar {
-  height: 0.75rem;
-  background: var(--stb-line);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.stb-bench__bar > span {
-  display: block;
-  height: 100%;
-  background: var(--stb-bar);
-}
-.stb-bench__row--own .stb-bench__bar > span {
-  background: var(--stb-bar-own);
-}
-.stb-bench__value {
-  font-family: var(--ifm-font-family-monospace);
-  font-size: 0.85rem;
-  text-align: right;
-}
-.stb-bench__note,
-.stb-bench__foot {
-  font-size: 0.85rem;
-  color: var(--stb-muted);
-}
+.stb-bench__bar { height: .75rem; background: var(--track); border-radius: 2px; overflow: hidden; }
+.stb-bench__bar > span { display: block; height: 100%; background: var(--fg3); }
+.stb-bench__row--own .stb-bench__name { font-weight: 800; }
+.stb-bench__value { font-family: var(--font-mono); font-size: .85rem; text-align: right; }
+.stb-bench__note, .stb-bench__foot { font-size: .85rem; color: var(--stb-muted); }
 @media (max-width: 600px) {
-  .stb-bench__row {
-    grid-template-columns: 1fr auto;
-  }
-  .stb-bench__bar {
-    grid-column: 1 / -1;
-  }
+  .stb-bench__row { grid-template-columns: 1fr auto; }
+  .stb-bench__bar { grid-column: 1 / -1; }
 }
 
-/* ApiLink */
-.stb-api {
-  font-size: 0.9rem;
-  color: var(--stb-muted);
-}
+.stb-api { font-size: .9rem; color: var(--stb-muted); }

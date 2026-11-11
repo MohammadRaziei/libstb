@@ -3,14 +3,13 @@
 
     outputs/
       results/<step>.json   <- python/bench_*.py, verify.py, system_info.py: one file per step
-      benchmark.json        <- this script
-      index.html            <- generate_report.py, drawn from benchmark.json alone
+      benchmark.json        <- this script; the docs site draws the benchmarks page from it
 
 This script measures nothing. It reads results/*.json and computes the numbers the page
 shows: which library won the most corpus entries (the reference), the mean per-entry ratio
 against it, the trend lines over image size, the output-size ratios of the encoders, the font
-and install-footprint tables. generate_report.py then only has to draw them, and the docs
-landing page reads the same file in the browser (docs/bench-teaser.js).
+and install-footprint tables. the docs site (docs/site) then only has to draw them: the benchmarks
+page and the home page's teaser read this one file.
 
 Ratios are E[target/ref]: the ratio on EACH corpus entry individually, averaged across
 entries (ratio first, then average), against whichever library wins the most comparisons.

@@ -1,2 +1,0 @@
-<pre data-lang="bash" data-label="bash">pip install libstb</pre>
-<p class="install-note">Python 3.9+ and nothing else: libstb has no runtime dependencies. It shares memory with numpy and with DLPack consumers such as torch, and converts to and from Pillow, so there is nothing to translate by hand.</p>

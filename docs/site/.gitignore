@@ -4,6 +4,8 @@ build/
 .cache-loader/
 # Everything below is produced by scripts/prepare.py or by the stb_docs_figures target.
 src/generated/
-static/api/
+static/assets/
+static/benchmarks/
+static/showcase/
 static/img/astronaut.png
 static/img/generated/

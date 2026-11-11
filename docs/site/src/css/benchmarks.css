@@ -1,0 +1,82 @@
+/*
+ * The benchmarks page (src/pages/benchmarks.tsx), ported from the standalone report's stylesheet and scoped to
+ * .stb-bench-page. Tokens come from src/generated/tokens.css. Series colours are --s-<lib>; the charts read them
+ * at draw time, so the two themes recolour them.
+ */
+.stb-bench-page { --bg-panel: var(--card); --bg-panel-2: var(--bg3); --text: var(--fg); --text-dim: var(--fg3);
+  font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.55; }
+.stb-bench-page *, .stb-bench-page *::before, .stb-bench-page *::after { box-sizing: border-box; }
+.stb-bench-page .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
+.stb-bench-page h1, .stb-bench-page h2, .stb-bench-page h3, .stb-bench-page h4, .stb-bench-page p, .stb-bench-page ul { margin: 0; padding: 0; }
+.stb-bench-page h1, .stb-bench-page h2, .stb-bench-page h3, .stb-bench-page h4 { font-weight: 800; font-stretch: 112%; letter-spacing: -.02em; color: inherit; }
+
+/* hero: the brand field in both themes */
+.stb-bench-page .hero { --hero-bg: var(--brand); --hero-fg: var(--on-brand); --hero-fg2: #2b2810; background: var(--hero-bg); color: var(--hero-fg); }
+.stb-bench-page .hero-inner { max-width: 1080px; margin: 0 auto; padding: 4.5rem 24px 4rem; }
+.stb-bench-page .hero .eyebrow { font-size: .9rem; color: var(--hero-fg2); margin-bottom: 1rem; }
+.stb-bench-page .hero h1 { font-size: clamp(2rem, 4vw, 3.3rem); line-height: 1.04; margin: 0 0 1.2rem; max-width: 22ch; letter-spacing: -.035em; }
+.stb-bench-page .hero p.sub { color: var(--hero-fg); font-size: 1.125rem; max-width: 40rem; }
+.stb-bench-page .hero .meta { margin-top: 1.6rem; font-size: .9rem; color: var(--hero-fg2); }
+
+/* sections: no rules, tone and space do the separating */
+.stb-bench-page section.major { padding-top: 6rem; }
+.stb-bench-page .kicker { font-size: .95rem; color: var(--text-dim); font-weight: 600; margin-bottom: .5rem; }
+.stb-bench-page h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); margin: 0 0 .9rem; letter-spacing: -.03em; line-height: 1.1; }
+.stb-bench-page h3.op-title { font-size: 1.3rem; font-stretch: 108%; margin: 0 0 .4rem; }
+.stb-bench-page .lede { color: var(--fg2); font-size: 1.0625rem; max-width: 44rem; margin: 0 0 2rem; }
+.stb-bench-page .lede strong { color: var(--text); font-weight: 650; }
+.stb-bench-page .lede a, .stb-bench-page .method a { color: var(--accent); }
+.stb-bench-page .method { color: var(--fg2); font-size: 1rem; max-width: 46rem; padding-left: 1.25rem; }
+.stb-bench-page .method li { margin: .7rem 0; }
+.stb-bench-page .method strong { color: var(--text); font-weight: 650; }
+.stb-bench-page .op-note { color: var(--text-dim); font-size: .9rem; max-width: 46rem; margin: 0 0 .8rem; }
+.stb-bench-page .op-winner { font-size: 1rem; margin: 0 0 1.2rem; color: var(--text); max-width: 46rem; }
+.stb-bench-page .op-winner strong { color: var(--text); font-weight: 750; }
+.stb-bench-page .subsection { margin-top: 3.5rem; }
+.stb-bench-page .subsection:first-of-type { margin-top: 2rem; }
+
+.stb-bench-page .mini-details { margin-bottom: 8px; }
+.stb-bench-page .mini-details summary { cursor: pointer; user-select: none; font-size: .9rem; font-weight: 700; color: var(--text); padding: .6rem 0; list-style: none; }
+.stb-bench-page .mini-details summary::-webkit-details-marker { display: none; }
+.stb-bench-page .mini-details summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform 150ms ease; }
+.stb-bench-page .mini-details[open] summary::before { transform: rotate(90deg); }
+
+/* panels: a tone step off the ground, the charts sit on them */
+.stb-bench-page .panel { background: var(--bg-panel); border-radius: var(--r); padding: 26px; margin-bottom: 12px; }
+.stb-bench-page .panel h4 { margin: 0 0 .6rem; font-size: .95rem; color: var(--text); }
+.stb-bench-page .chart-box { position: relative; height: 320px; }
+.stb-bench-page .chart-box.tall { height: 420px; }
+.stb-bench-page .dir { font-weight: 400; color: var(--text-dim); font-size: .85em; }
+.stb-bench-page .chart-pair { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.stb-bench-page .chart-pair .panel { margin-bottom: 0; }
+@media (min-width: 900px) { .stb-bench-page .chart-pair { grid-template-columns: 1fr 1fr; } }
+
+/* tables (rules between rows are the one place they stay) */
+.stb-bench-page table { width: 100%; border-collapse: collapse; font-size: .9rem; display: table; background: none; }
+.stb-bench-page th, .stb-bench-page td { text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); background: none; }
+.stb-bench-page th { color: var(--text-dim); font-weight: 600; font-size: .85rem; }
+.stb-bench-page td.num, .stb-bench-page th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stb-bench-page tr:last-child td { border-bottom: none; }
+.stb-bench-page tbody tr:nth-child(even) { background: none; }
+.stb-bench-page code { font-family: var(--font-mono); background: var(--bg-panel-2); padding: 1px 6px; border-radius: 3px; font-size: .92em; }
+.stb-bench-page .katex { font-size: 1.04em; }
+
+.stb-bench-page .dl-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1.4rem; }
+.stb-bench-page .dl-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-panel-2); color: var(--text); padding: 9px 14px; border-radius: var(--r);
+  font-size: .85rem; font-family: var(--font-mono); text-decoration: none; }
+.stb-bench-page .dl-btn:hover { background: var(--border); color: var(--text); }
+.stb-bench-page .dl-btn svg { width: 14px; height: 14px; flex: none; }
+
+.stb-bench-page .env-table { max-width: 480px; margin: 0 auto; }
+.stb-bench-page .env-table td:first-child { color: var(--text-dim); width: 40%; }
+.stb-bench-page .env-table td:last-child { color: var(--text); text-align: right; }
+.stb-bench-page .size-table { margin-top: 1.4rem; }
+.stb-bench-page .size-table tr.self-row td { color: var(--text); font-weight: 650; }
+.stb-bench-page .size-table tr.self-row { background: var(--bg-panel-2); }
+.stb-bench-page .size-table td.cap { color: var(--text-dim); font-size: .85rem; font-weight: 400; }
+.stb-bench-page .size-rows { width: auto; margin: 0 0 1.2rem; font-size: .9rem; }
+.stb-bench-page .size-rows th, .stb-bench-page .size-rows td { padding: 6px 16px 6px 0; }
+.stb-bench-page .verify-note { font-size: .9rem; color: var(--fg2); margin-top: 1.2rem; max-width: 46rem; }
+.stb-bench-page .page-foot { padding: 5rem 0 2.5rem; color: var(--text-dim); font-size: .85rem; text-align: center; }
+.stb-bench-page .page-foot a { color: var(--accent); }
+.stb-bench-page .empty { padding: 6rem 24px; max-width: 46rem; margin: 0 auto; color: var(--fg2); }

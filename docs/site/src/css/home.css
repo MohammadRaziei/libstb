@@ -1,0 +1,137 @@
+/*
+ * The home page (src/pages/index.tsx). Ported from the old generated landing page's stylesheet, with every
+ * selector scoped to .stb-home so it cannot touch the docs pages or the navbar. The tokens (--bg, --fg,
+ * --brand, --s-<lib> ...) come from src/generated/tokens.css, i.e. from docs/assets/libstb-docs.css.
+ * The entrance classes (.js, .ready, .in) are set on .stb-home by the page itself.
+ */
+.stb-home { padding-bottom: 6rem; font-family: var(--font); font-size: 1rem; line-height: 1.62; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.stb-home h1, .stb-home h2, .stb-home h3, .stb-home h4, .stb-home p, .stb-home ul, .stb-home figure, .stb-home pre { margin: 0; padding: 0; }
+.stb-home h1, .stb-home h2, .stb-home h3, .stb-home h4 { font-family: var(--font); font-weight: 800; font-stretch: 112%; letter-spacing: -.02em; line-height: 1.08; color: inherit; }
+.stb-home *, .stb-home *::before, .stb-home *::after { box-sizing: border-box; }
+.stb-home a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--brand); text-decoration-thickness: .16em; text-underline-offset: .18em; }
+.stb-home a:hover { text-decoration-color: var(--fg); color: var(--fg); }
+.stb-home code { font-family: var(--font-mono); font-size: .88em; background: var(--bg3); padding: .08em .36em; border-radius: 3px; }
+.stb-home a:focus-visible, .stb-home button:focus-visible, .stb-home input:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
+.stb-home .hero .btn, .stb-home .ref .btn { text-decoration: none; }
+/* Docusaurus' own code block, inside the home page's steps and tiles */
+.stb-home [class*='codeBlockContainer'] { margin: 0; border-radius: var(--r); }
+.stb-home .step-body > * + *, .stb-home .step-body [class*='codeBlockContainer'] + [class*='codeBlockContainer'] { margin-top: var(--gap); }
+
+.stb-home .btn {display: inline-flex; align-items: center; gap: .5rem; font: 700 1rem var(--font); text-decoration: none; cursor: pointer;
+  padding: .8rem 1.4rem; border: 3px solid var(--fg); border-radius: 4px; background: var(--fg); color: var(--bg);}
+.stb-home .btn:hover {background: transparent; color: var(--fg);}
+.stb-home .btn.ghost {background: transparent; color: var(--fg);}
+.stb-home .btn.ghost:hover {background: var(--fg); color: var(--bg);}
+.stb-home .bars {list-style: none; display: grid; gap: .55rem;}
+.stb-home .bar-row {display: grid; grid-template-columns: 9.4rem minmax(0, 1fr) 4.8rem; gap: .8rem; align-items: center; font-size: .9rem;}
+.stb-home .bar-label {color: var(--fg2); font-weight: 600; line-height: 1.2;}
+.stb-home .bar-track {height: 1.05rem; background: var(--track); border-radius: 2px; overflow: hidden;}
+.stb-home .bar {display: block; height: 100%; width: var(--w); background: var(--c, var(--fg3)); border-radius: 2px;}
+.stb-home .bar.clipped {clip-path: polygon(0 0, 100% 0, 97% 25%, 100% 50%, 97% 75%, 100% 100%, 0 100%);}
+.stb-home .bar-value {text-align: right; font-weight: 700; font-variant-numeric: tabular-nums;}
+.stb-home .bar-value small {font-weight: 500; color: var(--fg3); margin-left: .15em;}
+.stb-home .bar-row.is-self .bar-label {color: var(--fg); font-weight: 800;}
+.stb-home .s-libstb {--c: var(--s-libstb);}
+.stb-home .s-libstb_srgb {--c: var(--s-libstb_srgb);}
+.stb-home .s-pillow {--c: var(--s-pillow);}
+.stb-home .s-opencv {--c: var(--s-opencv);}
+.stb-home .s-imageio {--c: var(--s-imageio);}
+.stb-home .s-skimage {--c: var(--s-skimage);}
+.stb-home .s-numpy {--c: var(--s-numpy);}
+@media (prefers-reduced-motion: no-preference) {
+  .stb-home .bars.anim .bar {transform-origin: left; transform: scaleX(0); transition: transform .7s cubic-bezier(.2, .7, .2, 1); transition-delay: calc(var(--i, 0) * 50ms);}
+  .stb-home .bars.anim.in .bar {transform: scaleX(1);}
+}
+
+.stb-home .wrap {max-width: 1120px; margin: 0 auto; padding: 0 1.5rem;}
+.stb-home .section {padding-top: 7rem;}
+.stb-home .section h2 {font-size: clamp(1.9rem, 3.4vw, 2.7rem); font-stretch: 112%; letter-spacing: -.03em; max-width: 22ch;}
+.stb-home .section h3 {font-size: 1.45rem; font-stretch: 108%; letter-spacing: -.02em;}
+.stb-home .section p {color: var(--fg2);}
+.stb-home .code {border-radius: var(--r); margin: 0;}
+.stb-home .code-head {padding: .35rem .4rem .35rem 1rem; font-size: .8125rem;}
+.stb-home .copy-btn {padding: .25rem .65rem; font-size: .8125rem;}
+.stb-home .code pre {font-size: .84rem; padding: 1rem 1.2rem 1.1rem;}
+.stb-home .tok-k {font-weight: 600;}
+.stb-home .tok-f {font-weight: 600;}
+.stb-home .hero {background: var(--hero-bg); color: var(--hero-fg);}
+.stb-home .hero-grid {max-width: 1120px; margin: 0 auto; padding: 4.5rem 1.5rem 5.5rem; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr); gap: 3.5rem; align-items: center;}
+.stb-home .hero h1 {font-size: clamp(2.1rem, 3.4vw, 3.2rem); letter-spacing: -.035em; line-height: 1.04; overflow-wrap: break-word;}
+.stb-home .hero .lede {margin-top: 1.5rem; max-width: 32rem; font-size: 1.125rem; color: var(--hero-fg);}
+.stb-home .hero .lede a {color: inherit;}
+.stb-home .hero-actions {margin-top: 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: .7rem 1.6rem;}
+.stb-home .hero .btn {border: 0; background: var(--hero-fg); color: var(--hero-bg); padding: .85rem 1.5rem; border-radius: var(--r);}
+.stb-home .hero .btn:hover {background: #3f454d; color: var(--hero-bg);}
+.stb-home .hero-link {font-weight: 700; color: var(--hero-fg); text-decoration-color: currentColor; text-decoration-thickness: .1em;}
+.stb-home .hero-note {margin-top: 1.4rem; font-size: .875rem; color: var(--hero-fg2);}
+.stb-home .demo {margin: 0;}
+.stb-home .demo-frame {background: rgba(13, 15, 18, .13); padding: 14px; border-radius: var(--r);}
+.stb-home .demo-frame img {display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; image-rendering: pixelated; background: var(--ink); border-radius: 2px;}
+.stb-home .demo-cap {margin-top: 1rem; font-size: .9rem; color: var(--hero-fg2); min-height: 2.9em;}
+.stb-home .demo-cap code {background: rgba(13, 15, 18, .12); color: inherit;}
+.stb-home .demo-controls {margin-top: .6rem; display: grid; gap: .9rem;}
+.stb-home .demo-row {display: flex; align-items: center; gap: 1rem; font-weight: 700; font-size: .92rem;}
+.stb-home .demo-row output {min-width: 5.5rem; text-align: right; font-variant-numeric: tabular-nums;}
+.stb-home .seg {display: inline-flex; background: rgba(13, 15, 18, .13); border-radius: var(--r); padding: 3px; gap: 2px;}
+.stb-home .seg button {font: 700 .9rem var(--font); padding: .32rem .9rem; background: transparent; color: var(--hero-fg); border: 0; border-radius: 3px; cursor: pointer;}
+.stb-home .seg button[aria-pressed="true"] {background: var(--hero-fg); color: var(--hero-bg);}
+.stb-home input[type="range"] {flex: 1; accent-color: var(--hero-fg); height: 1.6rem;}
+.stb-home .section-head {display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.2rem 2rem; margin-bottom: 2.5rem;}
+.stb-home .tab-bar {display: inline-flex; gap: 2px; padding: 3px; background: var(--bg2); border-radius: var(--r);}
+.stb-home .tab-btn {font: 700 .95rem var(--font); padding: .45rem 1.2rem; color: var(--fg2); background: transparent; border: 0; border-radius: 3px; cursor: pointer;}
+.stb-home .tab-btn:hover {color: var(--fg);}
+.stb-home .tab-btn.active {background: var(--fg); color: var(--bg);}
+.stb-home .tab-content {display: none;}
+.stb-home .tab-content.active {display: block;}
+.stb-home .step {display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1.5rem 2rem; align-items: start;}
+.stb-home .step + .step {margin-top: 3rem;}
+.stb-home .step h3 {padding-top: .3rem;}
+.stb-home .step-body {min-width: 0; max-width: 54rem;}
+.stb-home .step-body .code + .code {margin-top: var(--gap);}
+.stb-home .install-note {margin: 1rem 0 0; font-size: .95rem; max-width: 46rem;}
+.stb-home .install-note code {white-space: nowrap;}
+.stb-home .jobs, .stb-home .proofs {margin-top: 2.5rem; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap);}
+.stb-home .job, .stb-home .tile, .stb-home .ref {background: var(--tile); border-radius: var(--r); padding: 2rem; min-width: 0;}
+.stb-home .job p, .stb-home .tile p {margin-top: .7rem; max-width: 34rem;}
+.stb-home .job .code, .stb-home .tile > .code {margin-top: 1.4rem;}
+.stb-home .job-images {grid-column: 1 / -1; background: var(--brand); color: var(--on-brand); display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 2.5rem; align-items: end;}
+.stb-home .job-images p {color: var(--on-brand);}
+.stb-home .job-images code {background: rgba(13, 15, 18, .12);}
+.stb-home .job-fonts, .stb-home .job-zlib {grid-column: span 6;}
+.stb-home .tour {list-style: none; display: flex; align-items: flex-end; gap: var(--gap); margin: 0; padding: 0;}
+.stb-home .tour[hidden] {display: none;}
+.stb-home .tour li {flex: var(--s, 1) 1 0; min-width: 0; max-width: calc(160px * var(--s, 1)); display: grid; gap: .55rem;}
+.stb-home .tour img {display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: 2px; background: rgba(13, 15, 18, .15);}
+.stb-home .tour span {font-size: .8125rem; line-height: 1.2; overflow-wrap: anywhere;}
+.stb-home .tile-speed {grid-column: 1 / span 7;}
+.stb-home .proof-col {grid-column: 8 / span 5; display: flex; flex-direction: column; gap: var(--gap); min-width: 0;}
+.stb-home .proof-col .tile-copy {flex: 1;}
+.stb-home .proof {margin-top: 1.4rem; min-width: 0;}
+.stb-home .proof .big {font-size: clamp(2.6rem, 5vw, 3.8rem); font-weight: 800; font-stretch: 120%; letter-spacing: -.04em; line-height: 1; color: var(--fg);}
+.stb-home .proof .big small {display: block; margin: .5rem 0 0; font-size: .95rem; font-weight: 600; font-stretch: 100%; letter-spacing: 0; color: var(--fg3);}
+.stb-home .proof .cap {margin-top: .6rem; color: var(--fg2); font-size: .92rem;}
+.stb-home .proof .cap a, .stb-home .proof-note a {font-weight: 700;}
+.stb-home .proof-note {margin-top: 1rem !important; color: var(--fg3); font-size: .875rem;}
+.stb-home .tile .bar-row {grid-template-columns: 7.2rem minmax(0, 1fr) 4.2rem; font-size: .85rem; gap: .6rem;}
+.stb-home .tile .bar-track {height: .9rem;}
+.stb-home .refs {margin-top: 2.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--gap);}
+.stb-home .ref {display: flex; flex-direction: column; align-items: flex-start;}
+.stb-home .ref h3 {font-size: 1.7rem;}
+.stb-home .ref-badge {margin-top: .25rem; font-size: .9rem; font-weight: 600; color: var(--fg3) !important;}
+.stb-home .ref-desc {margin-top: 1rem; max-width: 40rem;}
+.stb-home .ref-meta {margin: .9rem 0 1.6rem; font-size: .875rem; color: var(--fg3) !important;}
+.stb-home .ref .btn {margin-top: auto; border: 0; border-radius: var(--r); padding: .8rem 1.4rem;}
+@media (prefers-reduced-motion: no-preference) {
+  .stb-home.js .reveal {opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .7s cubic-bezier(.16, 1, .3, 1);}
+  .stb-home.js .reveal.in {opacity: 1; transform: none;}
+  .stb-home .btn, .stb-home .hero-link, .stb-home .tab-btn, .stb-home .copy-btn, .stb-home .seg button {transition: background-color .15s ease, color .15s ease;}
+}
+@media (max-width: 900px) {
+  .stb-home .hero-grid {grid-template-columns: 1fr; padding-top: 3rem; gap: 2.5rem;}
+  .stb-home .step {grid-template-columns: 1fr; gap: .8rem;}
+  .stb-home .job-images {grid-template-columns: 1fr; gap: 1.6rem;}
+  .stb-home .job-fonts, .stb-home .job-zlib, .stb-home .tile-speed, .stb-home .proof-col {grid-column: 1 / -1;}
+  .stb-home .job, .stb-home .tile, .stb-home .ref {padding: 1.4rem;}
+  .stb-home .section {padding-top: 5rem;}
+  .stb-home .install-note code {white-space: normal; overflow-wrap: anywhere;}
+}

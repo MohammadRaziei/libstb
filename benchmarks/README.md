@@ -20,10 +20,10 @@ cmake --build build --target stb_benchmark
 
 That's the one target you need: it pulls in every benchmark, in the
 right dependency order, and finishes by writing
-**`outputs/index.html`**: a single HTML file (every raw JSON result
-is embedded in it) with a "download JSON" button per dataset. Chart.js
-and KaTeX load from cdnjs at fixed versions, so open it in a browser
-with network access; no server and no sibling files are needed.
+**`outputs/benchmark.json`**: a digest of every step's JSON, holding each number and each
+chart series the benchmarks page needs. There is no HTML report. The docs site
+(`docs/site`, Docusaurus) draws the page from the JSON, with a download link for each raw
+`results/<step>.json`.
 
 Two folders, nothing else is ever written (the same layout as
 [novasvg's benchmarks](https://github.com/MohammadRaziei/novasvg/tree/master/benchmarks)):
@@ -31,10 +31,10 @@ Two folders, nothing else is ever written (the same layout as
 | Folder | What it is |
 |---|---|
 | `build/` | Disposable and git-ignored: the venv, the corpus (synthetic and the downloaded photographs), scratch files, CMake's own state. |
-| `outputs/` | What is meant to be **committed** and published: `index.html` (the report), `results/<step>.json` (what each step measured), and `benchmark.json` (a small digest of those, which the docs landing page reads to draw its teaser). |
+| `outputs/` | What is meant to be **committed** and published: `results/<step>.json` (what each step measured) and `benchmark.json` (a digest of those, which the docs site draws the benchmarks page and the home page's teaser from). |
 
-The docs build (`docs/CMakeLists.txt`) copies `outputs/` to the site's
-`/benchmarks/` as it is, so committing it is what puts the page online.
+The docs build (`docs/site/scripts/prepare.py`) copies `outputs/` into the site and Docusaurus draws
+`/benchmarks/` from it, so committing these JSON files is what puts the page online.
 
 The first configure creates a venv and builds libstb from source into
 it (scikit-build-core + nanobind), so it needs a C++17 compiler and
@@ -47,7 +47,7 @@ Every operation is its own target, independently runnable
 
 | Target | What it does |
 |---|---|
-| `stb_bench_venv` | Create the venv; install numpy/Pillow/OpenCV/imageio/scikit-image/pip-size/jinja2 + libstb itself (from git) |
+| `stb_bench_venv` | Create the venv; install numpy/Pillow/OpenCV/imageio/scikit-image/pip-size + libstb itself (from git) |
 | `stb_bench_corpus` | Generate the synthetic multi-genre corpus |
 | `stb_bench_real_corpus` | Convert the real-world photographs (downloaded at configure time) into every format, same manifest shape |
 | `stb_bench_verify` | Check that every (operation, library) pair produces correct output, before anything is timed |
@@ -57,7 +57,7 @@ Every operation is its own target, independently runnable
 | `stb_bench_scaling` | Throughput vs. image size, 0.016 to 16.8 megapixels |
 | `stb_bench_fonts` | `Font` (stb_truetype) vs. Pillow's FreeType binding |
 | `stb_bench_system_info` | Record CPU / RAM / OS / Python |
-| `stb_bench_report` | Render `outputs/index.html` from `outputs/results/*.json`, and write `outputs/benchmark.json` |
+| `stb_bench_report` | Gather `outputs/results/*.json` into `outputs/benchmark.json` (the docs site draws the page from it) |
 
 The scripts also run by hand, from `python/`, on any machine that has
 the requirements installed:
@@ -76,7 +76,7 @@ python bench_fonts.py DejaVuSans.ttf fonts.json
 # of the default main-branch GitHub install
 cmake -S benchmarks -B benchmarks/build -DLIBSTB_BENCH_GITHUB_URL=/path/to/local/checkout
 
-# where results/, benchmark.json and index.html end up (default: benchmarks/outputs)
+# where results/ and benchmark.json end up (default: benchmarks/outputs)
 cmake -S benchmarks -B benchmarks/build -DLIBSTB_BENCH_OUTPUT_DIR=/some/dir
 
 # a noisier machine wants more repeats
@@ -261,10 +261,8 @@ them: it picks whichever library wins the most comparisons as the
 averaged across entries, ratio-then-average and not
 average-then-ratio.
 
-The report writes these definitions as LaTeX formulas (inline, between `\(` and `\)`) and renders
-them in the browser with KaTeX. KaTeX and Chart.js are linked from cdnjs (the versions are
-`CHARTJS_URL` and `KATEX_BASE` in `report/generate_report.py`), so `index.html` stays small. Offline,
-the charts do not draw and the formulas show as their LaTeX source.
+The benchmarks page writes these definitions as LaTeX formulas and renders them with KaTeX, and draws
+the charts with Chart.js (both are npm packages of the docs site, so nothing is loaded from a CDN).
 
 ```
 E[time_x / time_ref] = mean( time_x_i / time_ref_i  for each corpus entry i )
@@ -274,8 +272,8 @@ not `median(time_x) / median(time_ref)` and not
 `mean(time_x) / mean(time_ref)`. Corpus entries here span three orders
 of magnitude in pixel count, and averaging the raw numbers first lets
 the 2048x2048 images dominate; ratio-then-average weighs every entry's
-*relative* performance equally. See `_e_ratio()` in
-`report/generate_report.py`.
+*relative* performance equally. See `e_ratio()` in
+`report/gather.py`.
 
 That the reference is "whoever wins most often" means the report can
 end up with a reference other than libstb, and the summary line will
@@ -298,16 +296,16 @@ say so; nothing in it is hard-coded.
   and NumPy's threaded paths would change the resize story on a
   many-core machine.
 - **One machine.** Numbers are from the specific machine recorded in
-  the report's Environment section. Ratios travel better than
+  the page's Environment section. Ratios travel better than
   absolute times, but re-run it on yours.
 
 ## What the report doesn't say (on purpose)
 
-`outputs/index.html` is the results, not the write-up: it doesn't
+The benchmarks page is the results, not the write-up: it doesn't
 explain how the corpus was built, why timing uses best-of-N, or what
 went wrong along the way: that's this file. The exceptions are the
 machine it ran on (CPU model, core count, RAM, OS, Python version),
-which appears in the report's Environment section via
+which appears in the page's Environment section via
 `system_info.py`, and the count of correctness checks that passed
 before timing began, since both are facts about those specific numbers
 rather than about the methodology in general.

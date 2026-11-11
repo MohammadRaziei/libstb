@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the landing page's live demo with libstb itself.
+"""Render the home page's live demo with libstb itself.
 
 The hero of the docs site lets a visitor drag an output size and pick a filter. Every frame it
 shows is a file this script wrote with libstb (Image.resize with a filter by name, then
@@ -8,11 +8,11 @@ PNGs, shown enlarged with image-rendering: pixelated.
 
 The same run also writes the "tour": one 160 px copy of the photograph and the result of four edit
 calls on it (crop, rotate90, convert, flip_horizontal), shown at their true size in the "Images"
-panel of the landing page.
+panel of the home page.
 
-    python docs/make_showcase.py --out <site dir>/showcase [<source photo>]
+    python docs/site/scripts/make_showcase.py --out docs/site/static/showcase [<source photo>]
 
-Run by docs/CreateDocs.cmake while the site is built, so the frames are never committed. With no
+Run by `prepare.py figures` (the stb_docs_figures target) while the site is built, so the frames are never committed. With no
 source photo it downloads fruits.jpg from OpenCV's sample data (Apache-2.0) into the temp folder.
 The source is cropped to its central square first. Needs `pip install libstb`.
 """

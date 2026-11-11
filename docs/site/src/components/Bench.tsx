@@ -53,7 +53,7 @@ function Block({ op }: { op: Op }): React.ReactElement {
           <li key={r.id} className={r.id.startsWith('libstb') ? 'stb-bench__row stb-bench__row--own' : 'stb-bench__row'}>
             <span className="stb-bench__name">{r.label}</span>
             <span className="stb-bench__bar" aria-hidden="true">
-              <span style={{ width: `${width(r.ratio)}%` }} />
+              <span style={{ width: `${width(r.ratio)}%`, background: `var(--s-${r.id}, var(--fg3))` }} />
             </span>
             <span className="stb-bench__value">
               {fmt(r.ratio)}×{r.id === op.reference ? ' (reference)' : ''}
