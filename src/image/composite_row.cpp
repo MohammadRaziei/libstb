@@ -4,7 +4,12 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "image/simd.hpp"
 #include "stb/image.hpp"
+
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
 
 // composite_row / composite_solid_row: Porter-Duff operators and blend modes on rows of premultiplied
 // 0xAARRGGBB pixels, 8 bits per channel, all four channels at once in two 32-bit lanes. Premultiplied
@@ -48,13 +53,16 @@ constexpr int mul255(int x, int y) { return (x * y + 127) / 255; }
 // operators that are linear in the source (over, over, atop, xor) get the same number by scaling the source
 // by ca first, which is cheaper; the others take ca as the share of the result that replaces d. With
 // ca == 255 every line reduces to the plain operator.
-template <composite_op Op>
+template <composite_op Op, bool Solid = false>
 inline u32 apply(u32 d, u32 s, u32 ca) {
     [[maybe_unused]] const u32 ia = 255 - ca;
     if constexpr (Op == composite_op::clear) {
         return byte_mul(d, ia);
     } else if constexpr (Op == composite_op::source) {
-        return mix255(s, ca, d, ia);
+        // one colour (Solid): scaled once and the destination apart from it, as rasterizers always did; a row
+        // takes the single rounding of mix255. The two can differ by one level.
+        if constexpr (Solid) return ca == 255 ? s : byte_mul(s, ca) + byte_mul(d, ia);
+        else return mix255(s, ca, d, ia);
     } else if constexpr (Op == composite_op::destination) {
         return d;
     } else if constexpr (Op == composite_op::source_over) {
@@ -193,6 +201,79 @@ inline void loop(u32* dest, const u32* src, u32 color, std::size_t n, F f) {
     for (std::size_t i = 0; i < n; ++i) dest[i] = f(dest[i], Solid ? color : src[i]);
 }
 
+#if defined(__SSE2__)
+namespace sse2 {
+using vec = __m128i;
+constexpr std::size_t lanes = 4;
+#define STB_K_ATTR inline
+STB_K_ATTR vec vzero() { return _mm_setzero_si128(); }
+STB_K_ATTR vec vset16(int x) { return _mm_set1_epi16(std::int16_t(x)); }
+STB_K_ATTR vec vadd(vec a, vec b) { return _mm_add_epi16(a, b); }
+STB_K_ATTR vec vsub(vec a, vec b) { return _mm_sub_epi16(a, b); }
+STB_K_ATTR vec vmullo(vec a, vec b) { return _mm_mullo_epi16(a, b); }
+STB_K_ATTR vec vsrl8(vec a) { return _mm_srli_epi16(a, 8); }
+STB_K_ATTR vec vmin(vec a, vec b) { return _mm_min_epi16(a, b); }
+STB_K_ATTR vec vunpacklo(vec a, vec z) { return _mm_unpacklo_epi8(a, z); }
+STB_K_ATTR vec vunpackhi(vec a, vec z) { return _mm_unpackhi_epi8(a, z); }
+STB_K_ATTR vec vpack(vec lo, vec hi) { return _mm_packus_epi16(lo, hi); }
+STB_K_ATTR vec valpha(vec x) { return _mm_shufflehi_epi16(_mm_shufflelo_epi16(x, 0xFF), 0xFF); }  // lane 3 of each pixel
+#include "image/composite_kernels.inl"
+#undef STB_K_ATTR
+
+template <bool Solid, composite_op Op, bool Full>
+void run(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
+    const vec CA = vset16(int(ca)), IA = vset16(int(255 - ca)), one = _mm_set1_epi32(int(color));
+    std::size_t i = 0;
+    for (; i + lanes <= n; i += lanes) {
+        const vec d = _mm_loadu_si128(reinterpret_cast<const vec*>(dest + i));
+        const vec s = Solid ? one : _mm_loadu_si128(reinterpret_cast<const vec*>(src + i));
+        _mm_storeu_si128(reinterpret_cast<vec*>(dest + i), compute<Op, Full, Solid>(d, s, CA, IA));
+    }
+    for (; i < n; ++i) dest[i] = apply<Op, Solid>(dest[i], Solid ? color : src[i], ca);
+}
+}  // namespace sse2
+#endif
+
+#if defined(STB_HAVE_AVX2_DISPATCH)
+#include <immintrin.h>
+namespace avx2 {
+using vec = __m256i;
+constexpr std::size_t lanes = 8;
+#define STB_K_ATTR STB_TARGET_AVX2 inline
+STB_K_ATTR vec vzero() { return _mm256_setzero_si256(); }
+STB_K_ATTR vec vset16(int x) { return _mm256_set1_epi16(std::int16_t(x)); }
+STB_K_ATTR vec vadd(vec a, vec b) { return _mm256_add_epi16(a, b); }
+STB_K_ATTR vec vsub(vec a, vec b) { return _mm256_sub_epi16(a, b); }
+STB_K_ATTR vec vmullo(vec a, vec b) { return _mm256_mullo_epi16(a, b); }
+STB_K_ATTR vec vsrl8(vec a) { return _mm256_srli_epi16(a, 8); }
+STB_K_ATTR vec vmin(vec a, vec b) { return _mm256_min_epi16(a, b); }
+STB_K_ATTR vec vunpacklo(vec a, vec z) { return _mm256_unpacklo_epi8(a, z); }  // within each 128-bit half, undone by vpack
+STB_K_ATTR vec vunpackhi(vec a, vec z) { return _mm256_unpackhi_epi8(a, z); }
+STB_K_ATTR vec vpack(vec lo, vec hi) { return _mm256_packus_epi16(lo, hi); }
+STB_K_ATTR vec valpha(vec x) { return _mm256_shufflehi_epi16(_mm256_shufflelo_epi16(x, 0xFF), 0xFF); }
+#include "image/composite_kernels.inl"
+#undef STB_K_ATTR
+
+// Eight pixels at a time; the last 1..7 go through one masked load and store, so no scalar tail.
+template <bool Solid, composite_op Op, bool Full>
+STB_TARGET_AVX2 void run(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
+    const vec CA = vset16(int(ca)), IA = vset16(int(255 - ca)), one = _mm256_set1_epi32(int(color));
+    std::size_t i = 0;
+    for (; i + lanes <= n; i += lanes) {
+        const vec d = _mm256_loadu_si256(reinterpret_cast<const vec*>(dest + i));
+        const vec s = Solid ? one : _mm256_loadu_si256(reinterpret_cast<const vec*>(src + i));
+        _mm256_storeu_si256(reinterpret_cast<vec*>(dest + i), compute<Op, Full, Solid>(d, s, CA, IA));
+    }
+    if (i < n) {
+        const vec mask = _mm256_cmpgt_epi32(_mm256_set1_epi32(int(n - i)), _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7));
+        const vec d = _mm256_maskload_epi32(reinterpret_cast<const int*>(dest + i), mask);
+        const vec s = Solid ? one : _mm256_maskload_epi32(reinterpret_cast<const int*>(src + i), mask);
+        _mm256_maskstore_epi32(reinterpret_cast<int*>(dest + i), mask, compute<Op, Full, Solid>(d, s, CA, IA));
+    }
+}
+}  // namespace avx2
+#endif
+
 template <bool Solid, composite_op Op>
 void loop_op(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
     if (ca == 255 && (Op == composite_op::source || Op == composite_op::clear)) {
@@ -202,14 +283,24 @@ void loop_op(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
         else std::memmove(dest, src, n * sizeof(u32));
         return;
     }
-    if (Solid && Op == composite_op::source && ca != 255) {
-        // one colour: scale it once, and the destination apart from it (what rasterizers have always done;
-        // a row takes the single rounding of mix255, which can differ from this by one level)
-        const u32 scaled = byte_mul(color, ca), keep = 255 - ca;
-        for (std::size_t i = 0; i < n; ++i) dest[i] = scaled + byte_mul(dest[i], keep);
-        return;
+#if defined(__SSE2__)
+    if (n >= 4) {
+        const detail::backend be = detail::current_backend();
+#if defined(STB_HAVE_AVX2_DISPATCH)
+        if (be == detail::backend::avx2 && n >= 8) {
+            if (ca == 255) avx2::run<Solid, Op, true>(dest, src, color, n, ca);
+            else avx2::run<Solid, Op, false>(dest, src, color, n, ca);
+            return;
+        }
+#endif
+        if (be != detail::backend::scalar) {
+            if (ca == 255) sse2::run<Solid, Op, true>(dest, src, color, n, ca);
+            else sse2::run<Solid, Op, false>(dest, src, color, n, ca);
+            return;
+        }
     }
-    loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) { return apply<Op>(d, s, ca); });
+#endif
+    loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) { return apply<Op, Solid>(d, s, ca); });
 }
 
 template <bool Solid, blend_mode M>
@@ -263,12 +354,13 @@ void run(u32* dest, const u32* src, u32 color, std::size_t n, composite_op op, b
     });
 }
 
-void check(const void* dest, std::size_t count, composite_op op, blend_mode mode) {
-    if (static_cast<unsigned>(op) > static_cast<unsigned>(composite_op::plus_lighter))
-        throw std::invalid_argument("composite_row: unknown composite_op");
-    if (static_cast<unsigned>(mode) > static_cast<unsigned>(blend_mode::exclusion))
-        throw std::invalid_argument("composite_row: unknown blend_mode");
-    if (count > 0 && !dest) throw std::invalid_argument("composite_row: null destination");
+[[noreturn]] void fail(const char* what) { throw std::invalid_argument(what); }
+
+// Cheap enough for a span of one pixel: three compares, the throwing code out of line.
+inline void check(const void* dest, std::size_t count, composite_op op, blend_mode mode) {
+    if (static_cast<unsigned>(op) > static_cast<unsigned>(composite_op::plus_lighter)) fail("composite_row: unknown composite_op");
+    if (static_cast<unsigned>(mode) > static_cast<unsigned>(blend_mode::exclusion)) fail("composite_row: unknown blend_mode");
+    if (count > 0 && !dest) fail("composite_row: null destination");
 }
 
 }  // namespace
@@ -276,8 +368,11 @@ void check(const void* dest, std::size_t count, composite_op op, blend_mode mode
 void composite_row(std::uint32_t* dest, const std::uint32_t* src, std::size_t count, composite_op op,
                    blend_mode mode, std::uint8_t const_alpha) {
     check(dest, count, op, mode);
-    if (count > 0 && !src) throw std::invalid_argument("composite_row: null source");
+    if (count > 0 && !src) fail("composite_row: null source");
     if (count == 0) return;
+    // plain source_over is nearly every fill: straight to its loop, two calls and a switch less (a span is often 1 or 2 pixels)
+    if (op == composite_op::source_over && mode == blend_mode::normal)
+        return loop_op<false, composite_op::source_over>(dest, src, 0, count, const_alpha);
     run<false>(dest, src, 0, count, op, mode, const_alpha);
 }
 
@@ -285,6 +380,8 @@ void composite_solid_row(std::uint32_t* dest, std::uint32_t color, std::size_t c
                          blend_mode mode, std::uint8_t const_alpha) {
     check(dest, count, op, mode);
     if (count == 0) return;
+    if (op == composite_op::source_over && mode == blend_mode::normal)
+        return loop_op<true, composite_op::source_over>(dest, nullptr, color, count, const_alpha);
     run<true>(dest, nullptr, color, count, op, mode, const_alpha);
 }
 

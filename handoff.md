@@ -1,3 +1,7 @@
+# STATUS: composite_row on SIMD (working tree after 2be4b9a, not committed)
+
+Issues 10 and 11 of the novasvg list were already committed (weight/width/legacy_family_name, composite_row). Added on top: the operators of `composite_row` / `composite_solid_row` run on the SIMD backend in use (`src/image/composite_kernels.inl`, included once for SSE2 and once for AVX2 with a masked tail; bit-identical to scalar, tested for every backend), `tests/cpp/bench_composite_row.cpp` (target `stb_bench_composite_row`), the matching tests in `tests/cpp/test_composite_row.cpp`, CHANGELOG. Blend modes stay one pixel at a time (scalar); only the 13 operators are vectorised.
+
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 
 تاریخ: 2026-11-11 (جدیدترین بخش: «2026-11-11» آخر فایل؛ تاریخ بالا مربوط به متن قدیمی‌تر است) (جدیدترین وضعیت: بخش «وضعیت فعلی» پایین؛ ادامه‌ی متن از 2026-11-09 است) (بعد از 2026-11-06: GPOS برای kerning و mark، `glyph_kind`، `shape` با بازه، ترتیب marks؛ بخش 9 پایین). ریپو: mohammadraziei/libstb، شاخه‌ی `master`، آخرین commit محلی `0e84241` (`v0.9.0-8`، هشت commit بعد از 0.9.0).

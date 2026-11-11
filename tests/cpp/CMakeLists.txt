@@ -50,6 +50,15 @@ add_custom_target(stb_bench_premultiply
     USES_TERMINAL
 )
 
+# ── Benchmark of composite_row ───────────────────────────────────────────────
+add_executable(bench_stb_composite_row EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/bench_composite_row.cpp)
+target_link_libraries(bench_stb_composite_row PRIVATE stb_core)
+add_custom_target(stb_bench_composite_row
+    COMMAND $<TARGET_FILE:bench_stb_composite_row>
+    DEPENDS bench_stb_composite_row
+    USES_TERMINAL
+)
+
 # ── Coverage (lcov + genhtml) ─────────────────────────────────────────────────
 # The test executable above is also the coverage one: with lcov and genhtml available it is
 # built with coverage instrumentation (-O0 so lines map 1:1), and stb_coverage_cpp runs it.

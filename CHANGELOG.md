@@ -26,7 +26,10 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   row or one colour. The integers are those of novasvg's own compositing code (rounding included), so a rasterizer that moves to
   these functions draws the same pixels; the result is within two levels of the floating-point W3C formulas for every operator x
   mode, and within one level for the plain operators. Operators other than source_over combined with a blend mode take the
-  source with the backdrop's colours mixed in, then run at full strength (coverage decides the share). Tests:
+  source with the backdrop's colours mixed in, then run at full strength (coverage decides the share). The Porter-Duff
+  operators run on the SIMD backend in use (`simd_backends()`: AVX2 eight pixels at a time with a masked tail, SSE2 four,
+  `scalar`), bit-identical on all of them: a row of 2048 pixels takes 0.36 ns per pixel for source_over on AVX2, 0.75 on
+  SSE2 and 1.1 scalar (`stb_bench_composite_row`); blend modes are one pixel at a time. Tests:
   `test_composite_row.cpp` (13 x 9 x 3 coverages against a float reference, and against `image::blend`). No Python binding
   (it works on raw rows).
 - **Font weight and width** (issue 10 of the novasvg list): `font::weight()` and `font::width()` (OS/2 `usWeightClass` 1..1000 and

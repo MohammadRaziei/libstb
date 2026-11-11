@@ -567,6 +567,7 @@ private:
 // the nearest 8-bit value (never more than one level from the exact result of one operator; several
 // operators in a row do not accumulate beyond what premultiplied 8-bit storage forces).
 //
+// The operators run on the SIMD backend in use (see simd_backends()) and give the same pixels on every one.
 // `src` and `dest` may be the same row (pixel by pixel) but must not overlap otherwise. Throws
 // invalid_argument for a null pointer when count > 0, or an `op` or `mode` that is not an enumerator.
 // composite_solid_row is the same with one colour (premultiplied too) as the source of every pixel (for `source`

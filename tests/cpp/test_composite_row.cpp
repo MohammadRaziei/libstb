@@ -281,3 +281,52 @@ UTEST(libstb_composite_row_tests, test_agrees_with_the_straight_alpha_path) {
         }
     }
 }
+
+namespace {
+
+// a random premultiplied pixel: often transparent or opaque, else any alpha with colours up to it
+u32 random_pixel(std::uint32_t& state) {
+    state = state * 1664525u + 1013904223u;
+    const u32 r = state >> 8;
+    const int kind = int(r % 6u);
+    const int a = kind == 0 ? 0 : kind == 1 ? 255 : int((r >> 4) % 256u);
+    const u32 c0 = a ? (r >> 3) % u32(a + 1) : 0, c1 = a ? (r >> 11) % u32(a + 1) : 0, c2 = a ? (r >> 17) % u32(a + 1) : 0;
+    return u32(a) << 24 | c0 << 16 | c1 << 8 | c2;
+}
+
+}  // namespace
+
+UTEST(libstb_composite_row_tests, test_every_simd_backend_gives_the_same_integers_as_the_scalar_one) {
+    std::uint32_t state = 12345;
+    for (const composite_op op : all_ops) {
+        for (const int ca : {255, 200, 77, 1, 0}) {
+            for (std::size_t n = 0; n <= 41; ++n) {
+                std::vector<u32> dst(n), src(n);
+                for (std::size_t i = 0; i < n; ++i) {
+                    dst[i] = random_pixel(state);
+                    src[i] = random_pixel(state);
+                }
+                const u32 color = random_pixel(state);
+                for (const std::string& name : stb::simd_backends()) {
+                    std::vector<u32> row_ref = dst, solid_ref = dst, row_got = dst, solid_got = dst;
+                    {
+                        stb::simd_scope scope("scalar");
+                        stb::composite_row(row_ref.data(), src.data(), n, op, blend_mode::normal, std::uint8_t(ca));
+                        stb::composite_solid_row(solid_ref.data(), color, n, op, blend_mode::normal, std::uint8_t(ca));
+                    }
+                    {
+                        stb::simd_scope scope(name);
+                        stb::composite_row(row_got.data(), src.data(), n, op, blend_mode::normal, std::uint8_t(ca));
+                        stb::composite_solid_row(solid_got.data(), color, n, op, blend_mode::normal, std::uint8_t(ca));
+                    }
+                    if (row_ref != row_got || solid_ref != solid_got) {
+                        UTEST_PRINTF("backend %s op %s ca %d n %d differs from scalar\n", name.c_str(),
+                                     std::string(stb::composite_op_name(op)).c_str(), ca, int(n));
+                    }
+                    ASSERT_TRUE(row_ref == row_got);
+                    ASSERT_TRUE(solid_ref == solid_got);
+                }
+            }
+        }
+    }
+}
