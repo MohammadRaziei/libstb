@@ -20,6 +20,23 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   shaper computed (Arabic text had it already) is no longer added on top of it.
 
 ### Added
+- **`composite_row` and `composite_solid_row`** (issue 11 of the novasvg list): the Porter-Duff operators (`composite_op`, all 13)
+  and the blend modes (`blend_mode`, all 9) on one row of premultiplied 0xAARRGGBB pixels, in place, with a coverage
+  `const_alpha` 0..255. They are the inner loop of a rasterizer: raw `std::uint32_t` rows, no clipping, no geometry. The source is a
+  row or one colour. The integers are those of novasvg's own compositing code (rounding included), so a rasterizer that moves to
+  these functions draws the same pixels; the result is within two levels of the floating-point W3C formulas for every operator x
+  mode, and within one level for the plain operators. Operators other than source_over combined with a blend mode take the
+  source with the backdrop's colours mixed in, then run at full strength (coverage decides the share). Tests:
+  `test_composite_row.cpp` (13 x 9 x 3 coverages against a float reference, and against `image::blend`). No Python binding
+  (it works on raw rows).
+- **Font weight and width** (issue 10 of the novasvg list): `font::weight()` and `font::width()` (OS/2 `usWeightClass` 1..1000 and
+  `usWidthClass` 1..9; a font without an OS/2 table, or with a value outside the range, gives 700 or 400 by `is_bold()` and 5), and
+  the same two fields (`weight`, `width`) in `font_face_info` / `system_font_info`, so `font::scan` and `font::system_fonts` tell
+  "DejaVu Sans", "DejaVu Sans ExtraLight" and "DejaVu Sans Condensed Bold" apart although `family_name()` (name id 16) is the same
+  for all three. `font::legacy_family_name()` (and `legacy_family_name` in `font_face_info`) is name id 1 ("DejaVu Sans Light"),
+  the name a program that knows only regular / bold / italic lists the face under, and what `font-family: Inter Light` means.
+  Python: `Font.weight`, `Font.width`, `Font.legacy_family_name`, and `weight`, `width`, `legacy_family_name` (last, with defaults)
+  in `FontFaceInfo` and `SystemFont`. The test fonts of `make_info_test_fonts.py` carry them (300 / 700 / width 4).
 - **Font names and style** (issue 6 of the novasvg list): `font::family_name()` (name id 16, else 1; English first, UTF-8),
   `font::is_bold()` and `font::is_italic()` (OS/2 `fsSelection`, `head.macStyle` when there is no OS/2 table);
   `font::scan(path or bytes)` gives a `font_face_info` (`index`, `family_name`, `bold`, `italic`) for every face of a

@@ -165,6 +165,9 @@ struct font_face_info {
     std::string family_name;  // UTF-8, as font::family_name() gives it; empty if the font has no name
     bool bold = false;
     bool italic = false;
+    int weight = 400;         // OS/2 usWeightClass: 100 thin ... 400 regular ... 700 bold ... 900 black (400 or 700 if the font has none)
+    int width = 5;            // OS/2 usWidthClass: 1 ultra-condensed ... 5 normal ... 9 ultra-expanded (5 if the font has none)
+    std::string legacy_family_name;  // as font::legacy_family_name() gives it
 };
 
 // A font face found on the system by font::system_fonts: where it is (open it with
@@ -238,10 +241,21 @@ public:
     // the font has one, else the family (id 1). English (Windows platform) is preferred, then any
     // other language, then the Unicode and Mac platforms. Empty if the font has no name.
     std::string family_name() const;
+    // The family as a program that knows only four styles (regular, bold, italic, bold italic) lists it: name id 1
+    // ("DejaVu Sans Light", "Inter Light"), where family_name() gives the typographic family ("DejaVu Sans",
+    // "Inter"). The same as family_name() when the font has no id 16 (or no id 1). A CSS font-family that names
+    // a weight or width ("font-family: Inter Light") means this one. Empty if the font has no name.
+    std::string legacy_family_name() const;
     // OS/2 fsSelection (bold; italic or oblique); a font without an OS/2 table (or with one too
     // short to have fsSelection) is judged by head.macStyle.
     bool is_bold() const noexcept;
     bool is_italic() const noexcept;
+    // OS/2 usWeightClass (1..1000, 400 regular, 700 bold) and usWidthClass (1..9, 5 normal, 4 semi-condensed):
+    // what tells "DejaVu Sans", "DejaVu Sans ExtraLight" and "DejaVu Sans Condensed Bold" apart when they share the
+    // family name. A font without an OS/2 table (or with a value outside the range) gives 700 or 400 by is_bold()
+    // and 5.
+    int weight() const noexcept;
+    int width() const noexcept;
 
     // One entry per font of a file (a .ttc gives one for each of its faces), read from the name,
     // OS/2 and head tables alone: no cmap, outlines or metrics are parsed, and a file on disk is

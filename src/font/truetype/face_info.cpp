@@ -119,8 +119,10 @@ bool read_face_info(byte_view file, std::uint32_t font_start, face_info& out) {
 
     const byte_view name = table('n', 'a', 'm', 'e');
     if (!name.empty()) {
+        out.legacy_family_name = find_name(name, name_family);
         out.family_name = find_name(name, name_typographic_family);
-        if (out.family_name.empty()) out.family_name = find_name(name, name_family);
+        if (out.family_name.empty()) out.family_name = out.legacy_family_name;
+        if (out.legacy_family_name.empty()) out.legacy_family_name = out.family_name;
     }
 
     // OS/2 fsSelection (offset 62): bit 0 italic, bit 5 bold, bit 9 oblique. A version 0 table
@@ -133,6 +135,15 @@ bool read_face_info(byte_view file, std::uint32_t font_start, face_info& out) {
         const unsigned mac_style = head.u16(44);
         out.bold = (mac_style & 0x01u) != 0;
         out.italic = (mac_style & 0x02u) != 0;
+    }
+
+    // OS/2 usWeightClass (offset 4) and usWidthClass (offset 6); a value outside the defined range
+    // (or no table) is as if the font had said nothing.
+    out.weight = out.bold ? 700 : 400;
+    if (os2.size() >= 8) {
+        const unsigned weight = os2.u16(4), width = os2.u16(6);
+        if (weight >= 1 && weight <= 1000) out.weight = int(weight);
+        if (width >= 1 && width <= 9) out.width = int(width);
     }
     return true;
 }

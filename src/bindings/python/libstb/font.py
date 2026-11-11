@@ -32,6 +32,9 @@ class FontFaceInfo(NamedTuple):
     family_name: str
     bold: bool
     italic: bool
+    weight: int = 400  # OS/2 usWeightClass
+    width: int = 5  # OS/2 usWidthClass (5 is normal)
+    legacy_family_name: str = ""  # name id 1 ("DejaVu Sans Light"); family_name is the typographic family
 
 
 class SystemFont(NamedTuple):
@@ -42,6 +45,9 @@ class SystemFont(NamedTuple):
     family_name: str
     bold: bool
     italic: bool
+    weight: int = 400
+    width: int = 5
+    legacy_family_name: str = ""
 
 
 class Glyph(NamedTuple):
@@ -197,6 +203,22 @@ class Font:
         """OS/2 fsSelection italic or oblique bit (head.macStyle if the font has no OS/2 table)."""
         return self._f.is_italic
 
+    @property
+    def legacy_family_name(self) -> str:
+        """The family as name id 1 lists it ("DejaVu Sans Light"); `family_name` is the typographic family
+        ("DejaVu Sans"). The same when the font has no id 16."""
+        return self._f.legacy_family_name
+
+    @property
+    def weight(self) -> int:
+        """OS/2 usWeightClass (400 regular, 700 bold); 700 or 400 by `is_bold` if the font has no OS/2 table."""
+        return self._f.weight
+
+    @property
+    def width(self) -> int:
+        """OS/2 usWidthClass (5 normal, 1 ultra-condensed, 9 ultra-expanded); 5 if the font has no OS/2 table."""
+        return self._f.width
+
     @staticmethod
     def scan(source: Source) -> List[FontFaceInfo]:
         """Name and style of every face of a file (a .ttc gives one entry per face), read from the
@@ -219,7 +241,7 @@ class Font:
         searched with their subfolders), sorted by path and index. Files that are not fonts or
         cannot be read are skipped."""
         found = _native.Font.system_fonts(None if dirs is None else [os.fspath(d) for d in dirs])
-        return [SystemFont(str(p), i, n, b, it) for p, i, n, b, it in found]
+        return [SystemFont(str(f[0]), *f[1:]) for f in found]
 
     def metrics(self, pixel_height: float) -> FontMetrics:
         return FontMetrics(*self._f.metrics(pixel_height))

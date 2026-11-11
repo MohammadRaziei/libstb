@@ -15,12 +15,12 @@ using namespace nb::literals;
 
 namespace {
 
-using face_tuple = std::tuple<int, std::string, bool, bool>;
+using face_tuple = std::tuple<int, std::string, bool, bool, int, int, std::string>;
 
 std::vector<face_tuple> face_tuples(const std::vector<stb::font_face_info>& faces) {
     std::vector<face_tuple> out;
     out.reserve(faces.size());
-    for (const auto& f : faces) out.emplace_back(f.index, f.family_name, f.bold, f.italic);
+    for (const auto& f : faces) out.emplace_back(f.index, f.family_name, f.bold, f.italic, f.weight, f.width, f.legacy_family_name);
     return out;
 }
 
@@ -178,8 +178,11 @@ void bind_font(nb::module_& m) {
             "data"_a)
         // ---- names and style; the faces come back as plain tuples, libstb/font.py names them ----
         .def_prop_ro("family_name", [](const font& f) { return f.family_name(); })
+        .def_prop_ro("legacy_family_name", [](const font& f) { return f.legacy_family_name(); })
         .def_prop_ro("is_bold", [](const font& f) { return f.is_bold(); })
         .def_prop_ro("is_italic", [](const font& f) { return f.is_italic(); })
+        .def_prop_ro("weight", [](const font& f) { return f.weight(); })
+        .def_prop_ro("width", [](const font& f) { return f.width(); })
         .def_static(
             "scan",
             [](const std::filesystem::path& path) { return face_tuples(font::scan(path)); }, "path"_a,
@@ -196,9 +199,9 @@ void bind_font(nb::module_& m) {
             "system_fonts",
             [](const std::optional<std::vector<std::filesystem::path>>& dirs) {
                 const auto found = dirs ? font::system_fonts(*dirs) : font::system_fonts();
-                std::vector<std::tuple<std::filesystem::path, int, std::string, bool, bool>> out;
+                std::vector<std::tuple<std::filesystem::path, int, std::string, bool, bool, int, int, std::string>> out;
                 out.reserve(found.size());
-                for (const auto& f : found) out.emplace_back(f.path, f.index, f.family_name, f.bold, f.italic);
+                for (const auto& f : found) out.emplace_back(f.path, f.index, f.family_name, f.bold, f.italic, f.weight, f.width, f.legacy_family_name);
                 return out;
             },
             "dirs"_a = nb::none(), nb::call_guard<nb::gil_scoped_release>())

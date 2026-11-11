@@ -557,6 +557,24 @@ private:
     std::size_t stride_ = 0;
 };
 
+// Composites one row of premultiplied pixels (0xAARRGGBB, the layout of premultiplied_image, every colour
+// channel <= alpha) into another, in place: dest[i] becomes `op` of src[i] over dest[i], with `mode` mixing
+// the colours as in image::blend (see blend_mode and composite_op for the exact meaning). It is the inner
+// loop of a rasterizer, so it takes raw rows: the caller owns the geometry, clipping, and the source (a
+// gradient or texture row it has just sampled). `const_alpha` (0..255) is the coverage: the part of the
+// change the operator would make that is applied, so 255 is the operator at full strength and 0 leaves the
+// destination alone (for source_over it is the same as scaling the source by it). Results are rounded to
+// the nearest 8-bit value (never more than one level from the exact result of one operator; several
+// operators in a row do not accumulate beyond what premultiplied 8-bit storage forces).
+//
+// `src` and `dest` may be the same row (pixel by pixel) but must not overlap otherwise. Throws
+// invalid_argument for a null pointer when count > 0, or an `op` or `mode` that is not an enumerator.
+// composite_solid_row is the same with one colour (premultiplied too) as the source of every pixel.
+STB_API void composite_row(std::uint32_t* dest, const std::uint32_t* src, std::size_t count, composite_op op,
+                           blend_mode mode, std::uint8_t const_alpha);
+STB_API void composite_solid_row(std::uint32_t* dest, std::uint32_t color, std::size_t count, composite_op op,
+                                 blend_mode mode, std::uint8_t const_alpha);
+
 // Resizes 8-bit images of 1..4 channels (2 = gray+alpha, 4 = RGBA; alpha is
 // weighted correctly, so transparent pixels do not bleed colour).
 // Immutable after construction, hence shareable between threads.

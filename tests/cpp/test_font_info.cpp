@@ -42,6 +42,28 @@ UTEST(libstb_font_info_tests, test_every_face_of_a_collection_reports_its_own_na
     ASSERT_TRUE(faces[3].italic);
 }
 
+UTEST(libstb_font_info_tests, test_every_face_reports_its_weight_and_width) {
+    // OS/2 usWeightClass / usWidthClass; face 3 has no OS/2 table, so bold gives 700 and the width is normal.
+    const auto faces = stb::font::scan(std::filesystem::path(data("libstb-info.ttc")));
+    ASSERT_EQ(4u, faces.size());
+    const int weight[4] = {400, 700, 300, 700};
+    const int width[4] = {5, 4, 5, 5};
+    for (std::size_t i = 0; i < 4; ++i) {
+        ASSERT_EQ(weight[i], faces[i].weight);
+        ASSERT_EQ(width[i], faces[i].width);
+    }
+}
+
+UTEST(libstb_font_info_tests, test_the_legacy_family_is_name_id_1_and_falls_back_to_the_family) {
+    const auto faces = stb::font::scan(std::filesystem::path(data("libstb-info.ttc")));
+    ASSERT_EQ(4u, faces.size());
+    ASSERT_STREQ("Info Sans", faces[0].legacy_family_name.c_str());
+    ASSERT_STREQ((std::string("Info Sans ") + grin).c_str(), faces[1].legacy_family_name.c_str());
+    ASSERT_STREQ("Info Sans Light", faces[2].legacy_family_name.c_str());  // id 16 says "Info Sans"
+    ASSERT_STREQ("Info Sans", faces[2].family_name.c_str());
+    ASSERT_STREQ((std::string("Caf") + e_acute + " Sans").c_str(), faces[3].legacy_family_name.c_str());
+}
+
 UTEST(libstb_font_info_tests, test_an_opened_face_agrees_with_scan) {
     const auto faces = stb::font::scan(std::filesystem::path(data("libstb-info.ttc")));
     for (const stb::font_face_info& info : faces) {
@@ -49,6 +71,9 @@ UTEST(libstb_font_info_tests, test_an_opened_face_agrees_with_scan) {
         ASSERT_STREQ(info.family_name.c_str(), f.family_name().c_str());
         ASSERT_EQ(info.bold, f.is_bold());
         ASSERT_EQ(info.italic, f.is_italic());
+        ASSERT_STREQ(info.legacy_family_name.c_str(), f.legacy_family_name().c_str());
+        ASSERT_EQ(info.weight, f.weight());
+        ASSERT_EQ(info.width, f.width());
     }
 }
 
@@ -72,6 +97,8 @@ UTEST(libstb_font_info_tests, test_a_plain_font_gives_one_entry_and_scan_rejects
     ASSERT_STREQ("LibstbTest", one[0].family_name.c_str());
     ASSERT_FALSE(one[0].bold);
     ASSERT_FALSE(one[0].italic);
+    ASSERT_TRUE(one[0].weight >= 1 && one[0].weight <= 1000);
+    ASSERT_TRUE(one[0].width >= 1 && one[0].width <= 9);
 
     ASSERT_THROWS(stb::font::scan(std::vector<std::uint8_t>{}), stb::decode_error);
     ASSERT_THROWS(stb::font::scan(std::vector<std::uint8_t>(64, 0x41)), stb::decode_error);
@@ -103,6 +130,10 @@ UTEST(libstb_font_info_tests, test_the_sample_fonts_report_their_weight) {
     ASSERT_TRUE(bold[0].bold);
     ASSERT_FALSE(regular[0].italic);
     ASSERT_FALSE(bold[0].italic);
+    ASSERT_EQ(400, regular[0].weight);
+    ASSERT_EQ(700, bold[0].weight);
+    ASSERT_EQ(5, regular[0].width);
+    ASSERT_EQ(5, bold[0].width);
 }
 
 UTEST(libstb_font_info_tests, test_dejavu_when_the_machine_has_it) {
@@ -120,6 +151,25 @@ UTEST(libstb_font_info_tests, test_dejavu_when_the_machine_has_it) {
     ASSERT_FALSE(bold.is_italic());
     ASSERT_FALSE(oblique.is_bold());
     ASSERT_TRUE(oblique.is_italic());
+}
+
+UTEST(libstb_font_info_tests, test_dejavu_styles_that_share_a_family_differ_in_weight_and_width) {
+    const std::filesystem::path dir = "/usr/share/fonts/truetype/dejavu";
+    if (!std::filesystem::exists(dir / "DejaVuSansCondensed-Bold.ttf")) return;  // not every machine has it
+    const auto regular = stb::font::open(dir / "DejaVuSans.ttf");
+    const auto light = stb::font::open(dir / "DejaVuSans-ExtraLight.ttf");
+    const auto condensed_bold = stb::font::open(dir / "DejaVuSansCondensed-Bold.ttf");
+    // all three answer to "DejaVu Sans" (name id 16); the weight and the width tell them apart
+    ASSERT_STREQ("DejaVu Sans", light.family_name().c_str());
+    ASSERT_STREQ("DejaVu Sans Light", light.legacy_family_name().c_str());
+    ASSERT_STREQ("DejaVu Sans Condensed", condensed_bold.legacy_family_name().c_str());
+    ASSERT_STREQ("DejaVu Sans", condensed_bold.family_name().c_str());
+    ASSERT_EQ(400, regular.weight());
+    ASSERT_EQ(5, regular.width());
+    ASSERT_EQ(200, light.weight());
+    ASSERT_EQ(5, light.width());
+    ASSERT_EQ(700, condensed_bold.weight());
+    ASSERT_TRUE(condensed_bold.width() < 5);
 }
 
 UTEST(libstb_font_info_tests, test_system_fonts_of_given_folders_lists_every_face_sorted) {

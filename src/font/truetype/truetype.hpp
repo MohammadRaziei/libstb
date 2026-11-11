@@ -44,13 +44,16 @@ struct bitmap {
     std::vector<std::uint8_t> pixels;  // empty when the glyph has no pixels (a space)
 };
 
-// What a font calls itself: the family name (UTF-8) and its style flags. Read from the tables
+// What a font calls itself: the family name (UTF-8), its style flags, weight and width. Read from the tables
 // `name`, `OS/2` and `head` only, so it needs no cmap, outlines or metrics and works on any font
 // whose table directory is intact.
 struct face_info {
     std::string family_name;
+    std::string legacy_family_name;  // name id 1 (the one a non-typographic application lists); family_name if none
     bool bold = false;
     bool italic = false;
+    int weight = 400;  // OS/2 usWeightClass (1..1000); 700 or 400 by the bold flag if there is none
+    int width = 5;     // OS/2 usWidthClass (1..9, 5 is normal); 5 if there is none
 };
 
 // False when the font that starts at `font_start` in `file` has neither a `head` nor an `OS/2`

@@ -442,7 +442,7 @@ std::vector<font_face_info> scan_view(const std::uint8_t* ptr, std::size_t len) 
         const int offset = truetype::face::offset_for_index(file, i);
         truetype::face_info info;
         if (offset < 0 || !truetype::read_face_info(file, std::uint32_t(offset), info)) continue;
-        faces.push_back({i, std::move(info.family_name), info.bold, info.italic});
+        faces.push_back({i, std::move(info.family_name), info.bold, info.italic, info.weight, info.width, std::move(info.legacy_family_name)});
     }
     return faces;
 }
@@ -450,8 +450,11 @@ std::vector<font_face_info> scan_view(const std::uint8_t* ptr, std::size_t len) 
 }  // namespace
 
 std::string font::family_name() const { return info_of(*impl_).family_name; }
+std::string font::legacy_family_name() const { return info_of(*impl_).legacy_family_name; }
 bool font::is_bold() const noexcept { return info_of(*impl_).bold; }
 bool font::is_italic() const noexcept { return info_of(*impl_).italic; }
+int font::weight() const noexcept { return info_of(*impl_).weight; }
+int font::width() const noexcept { return info_of(*impl_).width; }
 
 std::vector<font_face_info> font::scan(const std::vector<std::uint8_t>& data) {
     return scan_view(data.data(), data.size());

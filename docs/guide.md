@@ -501,6 +501,7 @@ const int faces = stb::font::face_count("fonts.ttc");        // 1 for a .ttf or 
 stb::font f = stb::font::open("DejaVuSans-Bold.ttf");
 f.family_name();                                              // "DejaVu Sans"
 f.is_bold(); f.is_italic();                                   // true, false
+f.weight(); f.width();                                         // 400, 5 (OS/2 usWeightClass, usWidthClass)
 for (const stb::font_face_info& i : stb::font::scan("fonts.ttc"))   // one entry per face, without opening them
     std::printf("%d %s%s%s\n", i.index, i.family_name.c_str(), i.bold ? " bold" : "", i.italic ? " italic" : "");
 for (const stb::system_font_info& s : stb::font::system_fonts())      // every face the OS has installed
@@ -549,8 +550,9 @@ zero metrics), and a negative index or one above 2**32 - 1 is a `ValueError`.
 ```python
 font = stb.Font.open("fonts.ttc", index=0)       # stb.Font.face_count("fonts.ttc") -> how many faces
 font.family_name, font.is_bold, font.is_italic   # names and style: no parsing beyond three tables
-stb.Font.scan("fonts.ttc")                       # [FontFaceInfo(index=0, family_name=..., bold=..., italic=...), ...]
-stb.Font.system_fonts()                          # [SystemFont(path, index, family_name, bold, italic), ...]
+font.weight, font.width                         # OS/2 usWeightClass (400 regular) and usWidthClass (5 normal)
+stb.Font.scan("fonts.ttc")                       # [FontFaceInfo(index=0, family_name=..., bold=..., italic=..., weight=..., width=...), ...]
+stb.Font.system_fonts()                          # [SystemFont(path, index, family_name, bold, italic, weight, width), ...]
 font.glyph_index("A")                            # the font's glyph, 0 (.notdef) if it has none; font.glyph_count
 font.glyph_info(g)                               # GlyphMetrics(advance, lsb, x_min, y_min, x_max, y_max, has_outline)
 font.design_metrics                              # DesignMetrics(units_per_em, ascent, descent, line_gap, x_min, ...)

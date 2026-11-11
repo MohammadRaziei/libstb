@@ -21,10 +21,10 @@ GRIN = "\U0001F600"
 def test_scan_gives_one_entry_per_face_of_a_collection():
     faces = Font.scan(INFO)
     assert faces == [
-        stb.FontFaceInfo(0, "Info Sans", False, False),
-        stb.FontFaceInfo(1, "Info Sans " + GRIN, True, False),
-        stb.FontFaceInfo(2, "Info Sans", False, True),
-        stb.FontFaceInfo(3, "Caf\u00e9 Sans", True, True),
+        stb.FontFaceInfo(0, "Info Sans", False, False, 400, 5, "Info Sans"),
+        stb.FontFaceInfo(1, "Info Sans " + GRIN, True, False, 700, 4, "Info Sans " + GRIN),
+        stb.FontFaceInfo(2, "Info Sans", False, True, 300, 5, "Info Sans Light"),
+        stb.FontFaceInfo(3, "Caf\u00e9 Sans", True, True, 700, 5, "Caf\u00e9 Sans"),
     ]
 
 
@@ -36,12 +36,13 @@ def test_scan_takes_a_path_or_bytes(make):
 def test_an_opened_face_agrees_with_scan():
     for info in Font.scan(INFO):
         font = Font.open(INFO, index=info.index)
-        assert (font.family_name, font.is_bold, font.is_italic) == (info.family_name, info.bold, info.italic)
+        assert (font.family_name, font.legacy_family_name, font.is_bold, font.is_italic, font.weight, font.width) == (
+            info.family_name, info.legacy_family_name, info.bold, info.italic, info.weight, info.width)
 
 
 def test_a_woff_file_is_read_like_the_font_it_holds():
     (info,) = Font.scan(DATA / "libstb-info.woff")
-    assert info == stb.FontFaceInfo(0, "Info Sans " + GRIN, True, False)
+    assert info == stb.FontFaceInfo(0, "Info Sans " + GRIN, True, False, 700, 4, "Info Sans " + GRIN)
     font = Font.open(DATA / "libstb-info.woff")
     assert font.family_name == info.family_name and font.is_bold and not font.is_italic
 
