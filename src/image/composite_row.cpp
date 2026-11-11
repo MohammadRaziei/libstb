@@ -202,6 +202,13 @@ void loop_op(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
         else std::memmove(dest, src, n * sizeof(u32));
         return;
     }
+    if (Solid && Op == composite_op::source && ca != 255) {
+        // one colour: scale it once, and the destination apart from it (what rasterizers have always done;
+        // a row takes the single rounding of mix255, which can differ from this by one level)
+        const u32 scaled = byte_mul(color, ca), keep = 255 - ca;
+        for (std::size_t i = 0; i < n; ++i) dest[i] = scaled + byte_mul(dest[i], keep);
+        return;
+    }
     loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) { return apply<Op>(d, s, ca); });
 }
 

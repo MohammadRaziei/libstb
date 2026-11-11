@@ -569,7 +569,8 @@ private:
 //
 // `src` and `dest` may be the same row (pixel by pixel) but must not overlap otherwise. Throws
 // invalid_argument for a null pointer when count > 0, or an `op` or `mode` that is not an enumerator.
-// composite_solid_row is the same with one colour (premultiplied too) as the source of every pixel.
+// composite_solid_row is the same with one colour (premultiplied too) as the source of every pixel (for `source`
+// with a partial coverage it rounds in two steps, so it can differ from a row of that colour by one level).
 STB_API void composite_row(std::uint32_t* dest, const std::uint32_t* src, std::size_t count, composite_op op,
                            blend_mode mode, std::uint8_t const_alpha);
 STB_API void composite_solid_row(std::uint32_t* dest, std::uint32_t color, std::size_t count, composite_op op,
