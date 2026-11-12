@@ -41,8 +41,9 @@ ctest --test-dir build -R docs_snippet            # snippets compile and run, la
 and `npm run build`. The demo downloads one photograph (see `make_showcase.py`); if that fails, the home page leaves the
 demo out and the build goes on.
 
-Set `DOCS_URL` and `DOCS_BASE_URL` for a published build (CI uses `https://mohammadraziei.github.io` and `/libstb/`);
-the defaults are `http://localhost` and `/`. While writing: `npm install && npm start` (it runs `prepare.py all` first;
+Set `DOCS_URL` and `DOCS_BASE_URL` for a published build. CI derives them from the repository (`https://<owner>.github.io` and
+`/<repo>/`, step "Work out the Pages address" in `cmake.yml`); the defaults are `http://localhost` and `/`. Docusaurus does
+not find its own address: without them the page loads no scripts and says `baseUrl = /`. While writing: `npm install && npm start` (it runs `prepare.py all` first;
 the references and figures have to have been built once for links and pictures to appear).
 
 A new language is one entry in `languages.json`, one `snippets/<id>/` folder with a file per lesson, and (for the home
