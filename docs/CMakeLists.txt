@@ -1,6 +1,6 @@
 # libstb Documentation Build
 # C++ reference (Doxygen) and Python reference (Sphinx) via their CreateDocs.cmake scripts, and the
-# front of the site (home page, lessons, benchmarks) with Docusaurus, from docs/site.
+# front of the site (home page, lessons, benchmarks) with Docusaurus (docs/ is the Docusaurus project).
 #
 #   stb_docs_doxygen    docs/out/cpp/html       C++ reference
 #   stb_docs_sphinx     docs/out/python/html    Python reference
@@ -104,8 +104,8 @@ else()
 endif()
 
 # ── Docusaurus: home page, lessons, benchmarks ───────────────────────────────
-# docs/site is the front of the site. It replaces the generated landing page and the standalone
-# benchmark report: the home page and the lessons are written in docs/site, and /benchmarks/ is drawn
+# This folder is a Docusaurus project: it is the front of the site. It replaces the generated landing page and the
+# standalone benchmark report: the home page and the lessons are written here (src/, docs/), and /benchmarks/ is drawn
 # from benchmarks/outputs/*.json. The two references keep their addresses (python/html and cpp/html).
 # Docusaurus builds into its own folder and the result is merged into docs/out, so it never wipes the
 # Doxygen and Sphinx output that is already there.
@@ -113,7 +113,7 @@ endif()
 #   stb_docs_figures  run the Python snippets and the home-page demo; their output is what the pages show
 find_program(LIBSTB_NPM npm)
 find_program(LIBSTB_PYTHON NAMES python3 python)
-set(LIBSTB_SITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/site)
+set(LIBSTB_SITE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(LIBSTB_SITE_BUILD ${CMAKE_CURRENT_BINARY_DIR}/site-build)
 
 if(LIBSTB_NPM AND LIBSTB_PYTHON)

@@ -17,7 +17,7 @@ project(LibstbBenchmarks LANGUAGES NONE)
 #   outputs/    what is meant to be committed and published:
 #                 results/<step>.json   what each step measured, written by python/bench_*.py
 #                 benchmark.json        report/gather.py: a digest of results/ (every number and chart series)
-#               No HTML is written. The docs site (docs/site) draws the benchmarks page from these JSON files.
+#               No HTML is written. The docs site (docs) draws the benchmarks page from these JSON files.
 #
 # See README.md in this directory for the full rundown, and every
 # individual target below for what it does on its own

@@ -22,7 +22,7 @@ That's the one target you need: it pulls in every benchmark, in the
 right dependency order, and finishes by writing
 **`outputs/benchmark.json`**: a digest of every step's JSON, holding each number and each
 chart series the benchmarks page needs. There is no HTML report. The docs site
-(`docs/site`, Docusaurus) draws the page from the JSON, with a download link for each raw
+(`docs`, Docusaurus) draws the page from the JSON, with a download link for each raw
 `results/<step>.json`.
 
 Two folders, nothing else is ever written (the same layout as
@@ -33,7 +33,7 @@ Two folders, nothing else is ever written (the same layout as
 | `build/` | Disposable and git-ignored: the venv, the corpus (synthetic and the downloaded photographs), scratch files, CMake's own state. |
 | `outputs/` | What is meant to be **committed** and published: `results/<step>.json` (what each step measured) and `benchmark.json` (a digest of those, which the docs site draws the benchmarks page and the home page's teaser from). |
 
-The docs build (`docs/site/scripts/prepare.py`) copies `outputs/` into the site and Docusaurus draws
+The docs build (`docs/scripts/prepare.py`) copies `outputs/` into the site and Docusaurus draws
 `/benchmarks/` from it, so committing these JSON files is what puts the page online.
 
 The first configure creates a venv and builds libstb from source into

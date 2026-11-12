@@ -8,7 +8,7 @@
 This script measures nothing. It reads results/*.json and computes the numbers the page
 shows: which library won the most corpus entries (the reference), the mean per-entry ratio
 against it, the trend lines over image size, the output-size ratios of the encoders, the font
-and install-footprint tables. the docs site (docs/site) then only has to draw them: the benchmarks
+and install-footprint tables. the docs site (docs) then only has to draw them: the benchmarks
 page and the home page's teaser read this one file.
 
 Ratios are E[target/ref]: the ratio on EACH corpus entry individually, averaged across

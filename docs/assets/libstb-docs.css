@@ -5,8 +5,8 @@
  *   section "chrome"    the top bar and the footer
  *   section "base"      reset, buttons, code, tables, bar charts
  *
- * The site itself (the home page, lessons and benchmarks, built by docs/site) takes the "tokens" section
- * from here: docs/site/scripts/prepare.py copies it to src/generated/tokens.css, so the names (--bg --fg
+ * The site itself (the home page, lessons and benchmarks, built by the Docusaurus project in docs/) takes the "tokens" section
+ * from here: docs/scripts/prepare.py copies it to src/generated/tokens.css, so the names (--bg --fg
  * --accent --s-<lib> ...) stay stable on purpose. The Sphinx theme takes the tokens and its own small
  * override files; the Doxygen pages take the tokens and the chrome.
  *

@@ -46,6 +46,9 @@ const Downloads = ({ names }: { names: string[] }) => (
 
 const MX = 'Image size (megapixels, log scale)';
 
+// The original report asked once, for the whole page, whether the memory results exist (not per section).
+const hasMemory = bench.sections.some((s) => s.ops.some((o) => o.n_mem_compared > 0 || o.trend.memory_mb.length > 0));
+
 function OpBody({ op }: { op: Op }): React.ReactElement {
   const timeRest = ratioList(op.time_ratio);
   const memRest = ratioList(op.mem_ratio);
@@ -131,7 +134,6 @@ function OpBody({ op }: { op: Op }): React.ReactElement {
 }
 
 function OpSection({ sec }: { sec: Section }): React.ReactElement {
-  const hasMemory = sec.ops.some((o) => o.n_mem_compared > 0);
   return (
     <section className="major" id={sec.id}>
       <div className="kicker">{KICKERS[sec.id] ?? sec.id}</div>

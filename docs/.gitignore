@@ -2,6 +2,11 @@ node_modules/
 build/
 .docusaurus/
 .cache-loader/
+# Copied from the repository by scripts/prepare.py (the sources stay where they are):
+# docs/guide.md, docs/adr/*.md and CHANGELOG.md.
+/docs/guide.md
+/docs/changelog.md
+/docs/adr/
 # Everything below is produced by scripts/prepare.py or by the stb_docs_figures target.
 src/generated/
 static/assets/

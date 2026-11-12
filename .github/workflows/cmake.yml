@@ -61,7 +61,7 @@ jobs:
     - name: Install python deps
       run: pip install -r requirements-dev.txt
 
-    # stb_docs also builds the Docusaurus lesson site (docs/site), which needs Node.
+    # stb_docs also builds the Docusaurus lesson site (docs), which needs Node.
     - name: Set up Node
       uses: actions/setup-node@v6
       with:
@@ -76,7 +76,7 @@ jobs:
           -DSTB_BUILD_PYTHON=ON \
           -DSTB_BUILD_DOCS=ON
 
-    # docs/site (Docusaurus) is the front of the site, published at the root of the project's Pages address, with the
+    # docs (Docusaurus) is the front of the site, published at the root of the project's Pages address, with the
     # Doxygen and Sphinx references beside it at cpp/html and python/html. Docusaurus does not discover that address
     # itself (built without it, the page says "baseUrl = /" and loads no scripts), so it is derived from the repository
     # here instead of being written down: https://<owner>.github.io + /<repo>/.

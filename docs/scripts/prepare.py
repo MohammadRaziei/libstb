@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generated inputs of the docs site. Standard library only.
 
+  prepare.py sync       docs/guide.md, docs/adr/*.md and CHANGELOG.md  ->  docs/docs (generated copies; the sources stay where they are)
   prepare.py snippets   snippets/<lang>/<name>.<ext>  ->  src/generated/snippets.json
   prepare.py check      fail when a lesson snippet exists in some languages but not in all
   prepare.py bench      benchmarks/outputs/{benchmark.json,results/*.json}  ->  src/generated/benchmark.json
@@ -11,7 +12,7 @@
   prepare.py figures    run the Python snippets -> static/img/generated/<name>, and make_showcase.py
                         (the home-page demo) -> static/showcase
   prepare.py tokens     colour and type tokens of docs/assets/libstb-docs.css  ->  src/generated/tokens.css
-  prepare.py all        snippets, check, bench, meta, tokens, assets, symbols
+  prepare.py all        sync, snippets, check, bench, meta, tokens, assets, symbols
 
 Missing inputs (docs not built yet, no benchmark file) never stop the site from building:
 the matching file is written empty and a warning is printed.
@@ -30,8 +31,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 SITE = Path(__file__).resolve().parent.parent
-ROOT = SITE.parents[1]
+ROOT = SITE.parent
 GEN = SITE / "src" / "generated"
+CONTENT = SITE / "docs"  # the Docusaurus docs folder (docs/docs)
+REPO_URL = "https://github.com/MohammadRaziei/libstb"
 LANGS = json.loads((SITE / "languages.json").read_text(encoding="utf-8"))["languages"]
 
 
@@ -43,6 +46,69 @@ def write_json(name: str, data) -> None:
     GEN.mkdir(parents=True, exist_ok=True)
     (GEN / name).write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote src/generated/{name}")
+
+
+# Pages that already exist elsewhere in the repository are copied into the site, never moved: README.md,
+# CHANGELOG.md, handoff.md and the checklist link to them where they are. The copies are generated and git-ignored.
+SYNC = [
+    {"src": "docs/guide.md", "dst": "guide.md", "strip_h1": True,
+     "front": {"title": "Reference guide", "sidebar_position": 3,
+               "description": "Every Python and C++ call of libstb, with its rules."}},
+    {"src": "CHANGELOG.md", "dst": "changelog.md", "strip_h1": True,
+     "front": {"title": "Changelog", "sidebar_position": 9, "description": "Release notes for every libstb version."}},
+]
+
+
+def sync_plan() -> dict:
+    """source (posix path from the repository root) -> page path under docs/docs"""
+    plan = {item["src"]: item["dst"] for item in SYNC}
+    for f in sorted((ROOT / "docs" / "adr").glob("*.md")):
+        plan[f"docs/adr/{f.name}"] = f"adr/{f.name}"
+    return plan
+
+
+def rewrite_links(text: str, src: str, plan: dict) -> str:
+    """Relative links keep working in the copy: a link to another synced page is re-aimed at that page's copy,
+    and a link to anything else in the repository (README.md, NOTICE.md, benchmarks/README.md ...) becomes a GitHub URL."""
+    src_dir = (ROOT / src).parent
+    dst_dir = (CONTENT / plan[src]).parent
+
+    def fix(m: re.Match) -> str:
+        label, target, anchor = m.group(1), m.group(2), m.group(3) or ""
+        if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target):
+            return m.group(0)
+        resolved = (src_dir / target).resolve()
+        try:
+            rel = resolved.relative_to(ROOT.resolve()).as_posix()
+        except ValueError:
+            return m.group(0)
+        if rel in plan:
+            new = os.path.relpath(CONTENT / plan[rel], dst_dir).replace(os.sep, "/")
+        else:
+            new = f"{REPO_URL}/{'tree' if resolved.is_dir() else 'blob'}/master/{rel}"
+        return f"[{label}]({new}{anchor})"
+
+    return re.sub(r"\[([^\]]*)\]\(([^)#\s]+)(#[^)\s]*)?\)", fix, text)
+
+
+def cmd_sync(_a) -> None:
+    plan = sync_plan()
+    front = {item["src"]: item for item in SYNC}
+    for src, dst in plan.items():
+        text = (ROOT / src).read_text(encoding="utf-8")
+        text = rewrite_links(text, src, plan)
+        item = front.get(src)
+        if item:
+            if item.get("strip_h1"):
+                text = re.sub(r"^# .*\n+", "", text, count=1)  # the page title comes from the front matter
+            fm = "\n".join(f"{k}: {json.dumps(v) if isinstance(v, str) else v}" for k, v in item["front"].items())
+            text = f"---\n{fm}\n---\n\n{text}"
+        out = CONTENT / dst
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+    (CONTENT / "adr" / "_category_.json").write_text(
+        json.dumps({"label": "Design records", "position": 8}) + "\n", encoding="utf-8")
+    print(f"synced {len(plan)} page(s) into docs/docs: " + ", ".join(sorted(plan.values())))
 
 
 def snippet_files() -> dict[str, dict[str, Path]]:
@@ -221,10 +287,10 @@ def cmd_figures(a) -> None:
 
 
 def cmd_all(a) -> None:
-    cmd_snippets(a); cmd_check(a); cmd_bench(a); cmd_meta(a); cmd_tokens(a); cmd_assets(a); cmd_symbols(a)
+    cmd_sync(a); cmd_snippets(a); cmd_check(a); cmd_bench(a); cmd_meta(a); cmd_tokens(a); cmd_assets(a); cmd_symbols(a)
 
 
-COMMANDS = {"snippets": cmd_snippets, "check": cmd_check, "bench": cmd_bench, "meta": cmd_meta,
+COMMANDS = {"sync": cmd_sync, "snippets": cmd_snippets, "check": cmd_check, "bench": cmd_bench, "meta": cmd_meta,
             "tokens": cmd_tokens, "symbols": cmd_symbols, "assets": cmd_assets, "figures": cmd_figures, "all": cmd_all}
 
 

@@ -15,7 +15,8 @@ const config: Config = {
   baseUrl,
   favicon: 'img/favicon.svg',
   onBrokenLinks: 'warn',
-  markdown: { hooks: { onBrokenMarkdownLinks: 'warn' } },
+  // .md files (the synced guide, ADRs and changelog) are CommonMark and shown as they are; only .mdx files use MDX.
+  markdown: { format: 'detect', hooks: { onBrokenMarkdownLinks: 'warn' } },
 
   headTags: [
     { tagName: 'link', attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
@@ -33,7 +34,11 @@ const config: Config = {
     [
       'classic',
       {
-        docs: { routeBasePath: 'docs', sidebarPath: './sidebars.ts' },
+        docs: {
+          routeBasePath: 'docs',
+          sidebarPath: './sidebars.ts',
+          editUrl: 'https://github.com/MohammadRaziei/libstb/edit/master/docs/',
+        },
         blog: false,
         theme: {
           // tokens.css is generated from docs/assets/libstb-docs.css by scripts/prepare.py, so the colours

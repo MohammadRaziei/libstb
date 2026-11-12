@@ -10,7 +10,7 @@ The same run also writes the "tour": one 160 px copy of the photograph and the r
 calls on it (crop, rotate90, convert, flip_horizontal), shown at their true size in the "Images"
 panel of the home page.
 
-    python docs/site/scripts/make_showcase.py --out docs/site/static/showcase [<source photo>]
+    python docs/scripts/make_showcase.py --out docs/static/showcase [<source photo>]
 
 Run by `prepare.py figures` (the stb_docs_figures target) while the site is built, so the frames are never committed. With no
 source photo it downloads fruits.jpg from OpenCV's sample data (Apache-2.0) into the temp folder.

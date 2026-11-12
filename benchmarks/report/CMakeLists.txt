@@ -2,7 +2,7 @@
 # There is no HTML report any more. This step only gathers outputs/results/*.json into
 # outputs/benchmark.json, a digest with every number and every chart series the docs site
 # needs (gather.py, standard library only). The page itself is drawn by the docs site
-# (docs/site, Docusaurus) from benchmark.json, and the raw results/*.json are offered there
+# (docs, Docusaurus) from benchmark.json, and the raw results/*.json are offered there
 # for download.
 set(REPORT_JSON "${LIBSTB_BENCH_OUTPUT_DIR}/benchmark.json")
 

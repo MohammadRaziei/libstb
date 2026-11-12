@@ -11,7 +11,7 @@ export type Start = {
 
 /**
  * "Install and use", per language id of languages.json. A language that has no entry here gets no tab on the home page.
- * (The lessons take their code from docs/site/snippets; this is the short tour of the home page.)
+ * (The lessons take their code from docs/snippets; this is the short tour of the home page.)
  */
 export const START: Record<string, Start> = {
   python: {
