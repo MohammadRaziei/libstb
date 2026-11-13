@@ -24,6 +24,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <type_traits>
 #include <vector>
 
@@ -105,6 +106,45 @@ private:
 // it is, and nothing is computed for parts of the outline that fall outside it.
 struct clip_rect {
     int x = 0, y = 0, w = 0, h = 0;
+};
+
+// A set of spans kept for later: the coverage of a shape on the pixels, which is what a clip path or a mask is.
+// It collects what rasterize_fill / rasterize_stroke report (it is a span_sink) and combines two such sets.
+// The spans are in order, top to bottom and left to right within a row, each with a len >= 1 and a coverage
+// of 1..255, and no pixel twice: the order a rasterizer reports them in, and what every function below relies on.
+//
+//     stb::span_set clip;
+//     stb::rasterize_fill(circle, stb::fill_rule::non_zero, {}, area, stb::span_sink(clip));
+//     stb::span_set both = stb::span_set::intersect(clip, stb::span_set::from_rect(0, 0, 64, 64));
+class STB_API span_set {
+public:
+    span_set() = default;
+
+    // Full coverage on x in [x, x + w) and y in [y, y + h), one span per row. Empty when w or h is not positive.
+    static span_set from_rect(int x, int y, int w, int h);
+
+    // The sink: appends the spans of a report. Throws invalid_argument for a span with len < 1 or coverage 0,
+    // one that overlaps or comes before what the set holds, or one whose end does not fit an int.
+    void operator()(span_view v);
+
+    void clear() noexcept;
+    bool empty() const noexcept { return spans_.empty(); }
+    span_view spans() const noexcept { return {spans_.data(), spans_.size()}; }
+
+    // The smallest box that holds every span; nullopt when the set is empty.
+    std::optional<clip_rect> extents() const noexcept;
+
+    // Whether the pixel (x, y) is covered (by any coverage). O(log n).
+    bool contains(int x, int y) const noexcept;
+
+    // The pixels both sets cover, with the coverages multiplied: (a * b) / 255, rounded down; a pixel that
+    // this makes 0 is left out. O(a + b).
+    static span_set intersect(const span_set& a, const span_set& b);
+
+private:
+    void append(const span& s) noexcept;  // updates the box; the caller has checked the order
+    std::vector<span> spans_;
+    int x1_ = 0, x2_ = 0;  // the box: first and one past the last column; the rows are the first and last span's
 };
 
 // --- coverage spans -------------------------------------------------------------------------------

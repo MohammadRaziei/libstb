@@ -1,13 +1,16 @@
 #pragma once
 
-// Small helpers with no better home: environment variables, string formatting and UTF-8.
+// Small helpers with no better home: environment variables, string formatting, UTF-8 and base64.
 
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "stb/export.hpp"
 
@@ -114,5 +117,20 @@ inline void sformat_to(std::string& out, STB_FORMAT_STRING const char* fmt, ...)
 // input: truncated or stray continuation bytes, overlong encodings,
 // surrogates (U+D800..DFFF) and values above U+10FFFF.
 STB_API std::u32string utf8_decode(std::string_view text);
+
+// Base64 with the standard alphabet (RFC 4648: A-Z a-z 0-9 + /), the encoding of data: URLs.
+//
+// Decoding follows the "forgiving-base64 decode" of the WHATWG Infra standard, which is what browsers do for
+// atob() and data: URLs: ASCII white space (space, tab, LF, FF, CR) is ignored anywhere; the padding is optional,
+// but when it is there it must complete the last group of four (one or two '=', and only at the very end); a
+// character outside the alphabet, data after the padding, or a single leftover character (the text without
+// padding is 1 more than a multiple of 4 long) is an error. The unused bits of the last character are ignored.
+// Empty text, or text of white space only, is zero bytes.
+// try_base64_decode gives nullopt on an error; base64_decode throws std::invalid_argument.
+STB_API std::optional<std::vector<std::uint8_t>> try_base64_decode(std::string_view text);
+STB_API std::vector<std::uint8_t> base64_decode(std::string_view text);
+
+// The text of `size` bytes in base64, with padding, on one line.
+STB_API std::string base64_encode(const std::uint8_t* data, std::size_t size);
 
 }  // namespace stb

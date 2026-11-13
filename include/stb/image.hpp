@@ -464,6 +464,17 @@ public:
     // where alpha is small). An empty object gives an empty image.
     image to_image() const;
 
+    // Back to straight RGBA like to_image(), but without a copy when this object owns its pixels (it was made by
+    // the constructor or from_image(), not wrap()ped, and nothing else shares them): the pixels are converted in
+    // place and the same memory becomes the image, which frees it. That is how a finished render leaves a
+    // rasterizer (a 8192 x 8192 picture is 256 MB). A wrapped buffer is somebody else's and is left alone: the
+    // result is a copy then. This object is empty afterwards in both cases.
+    image into_image() &&;
+
+    // Sets every pixel to `c` (straight alpha, as everywhere in the API; converted once to its premultiplied
+    // form). Padding between rows is left alone. An empty object stays empty.
+    void fill(const color& c);
+
     // Bytes between the starts of two rows; 0 when empty.
     std::size_t stride() const noexcept { return stride_; }
     // The bytes the pixels span, padding between rows included.

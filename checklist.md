@@ -129,6 +129,20 @@
 - [x] کارهای بالا (به‌جز `align` و مستندات اخیر) توی `053fe98` روی `origin/master` هستن؛ بقیه کامیت‌های محلی با
       اسم placeholder `Claude` هستن (اگه خواستی `git commit --amend --reset-author`).
 
+- [x] **issue 10 novasvg: وزن و عرض فونت.** `font::weight()`/`width()` (OS/2 `usWeightClass` ۱..۱۰۰۰ و `usWidthClass` ۱..۹؛ بدون
+      OS/2: ۷۰۰ یا ۴۰۰ از روی bold، و ۵) و `font::legacy_family_name()` (name id 1: «DejaVu Sans Light»)؛ همین فیلدها در
+      `font_face_info`/`system_font_info` و بایندینگ Python. تست روی فونت‌های ساختگی `make_info_test_fonts.py` و DejaVu واقعی.
+- [x] **issue 11 novasvg: `composite_row` / `composite_solid_row`** روی ردیف پیکسل premultiplied `0xAARRGGBB`. ۱۳ عملگر و ۹ حالت
+      blend، coverage ۰..۲۵۵. عملگرها روی SIMD (AVX2 هشت پیکسل با tail ماسک‌دار، SSE2 چهارتا، scalar) و بیت‌به‌بیت برابر
+      (`composite_kernels.inl` دو بار include می‌شه). حالت‌های blend تک‌پیکسلی. بنچمارک: `stb_bench_composite_row`.
+      `STB_MIN`/`STB_MAX` به‌جای `std::min`/`std::max` (ماکروهای `windows.h`).
+- [x] **`premultiplied_image::fill(color)` و `into_image() &&`**: تبدیل درجا و تحویل بدون کپی وقتی خود شیء مالک پیکسل‌هاست
+      (`wrap` شده کپی می‌شه و دست‌نخورده می‌مونه). رندر ۸۱۹۲×۸۱۹۲ دیگه ۲۵۶ مگ اضافه نمی‌خواد.
+- [x] **`stb::span_set`** (`raster.hpp`): مجموعه‌ی span برای clip/mask؛ sink، `from_rect`، `extents()` (جعبه‌ی واقعی)،
+      `contains()` (جستجوی دودویی)، `intersect()` (ضرب coverage، `(a*b)/255`، صفر حذف می‌شه). span نامرتب/خالی `invalid_argument`.
+- [x] **base64**: `base64_encode`، `base64_decode` (throw)، `try_base64_decode` در `util.hpp`؛ دیکد مثل «forgiving-base64»
+      مرورگرها (فاصله‌ی ASCII نادیده، padding اختیاری ولی کامل). بردارهای RFC 4648 و ۱ مگابایت round trip.
+
 ## قبل از هر چیز دیگه
 
 - [ ] **push و چک CI.** `git push origin master`؛ اگه چیزی push شده بود قبلش `git pull --rebase`.

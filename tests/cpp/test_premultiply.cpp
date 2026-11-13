@@ -586,3 +586,78 @@ UTEST(libstb_premultiplied_image_tests, test_image_still_moves_and_keeps_its_own
     EXPECT_EQ(4, b.channels());
     EXPECT_TRUE(b.owner_deleter<marker>() != nullptr);
 }
+
+// ----------------------------------------------------------------- fill and into_image
+
+UTEST(libstb_premultiplied_image_tests, test_fill_sets_every_pixel_to_the_premultiplied_colour) {
+    stb::premultiplied_image img(7, 3);
+    img.fill(stb::color::rgba(200, 100, 50, 128));
+    // the same pixel as the straight image premultiplied
+    stb::image straight(1, 1, stb::pixel_format::rgba);
+    straight.fill(stb::color::rgba(200, 100, 50, 128));
+    const stb::premultiplied_image want = stb::premultiplied_image::from_image(straight);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 7; ++x) ASSERT_EQ(0, std::memcmp(img.data() + std::size_t(y) * img.stride() + 4 * std::size_t(x), want.data(), 4));
+    // transparent and opaque
+    img.fill(stb::color::rgba(10, 20, 30, 0));
+    for (std::size_t i = 0; i < 4 * 7 * 3; ++i) ASSERT_EQ(0, int(img.data()[i]));
+    img.fill(stb::color::rgba(10, 20, 30, 255));
+    for (std::size_t i = 0; i < 4 * 7 * 3; i += 4) ASSERT_EQ(255, int(img.data()[i + 3]));  // opaque: A is the top byte of the 0xAARRGGBB word (byte 3 on little-endian)
+    stb::premultiplied_image empty;
+    empty.fill(stb::color::rgba(1, 2, 3, 4));  // nothing to fill, no failure
+    ASSERT_TRUE(empty.empty());
+}
+
+UTEST(libstb_premultiplied_image_tests, test_fill_leaves_the_padding_between_rows_alone) {
+    std::vector<std::uint8_t> memory(16 * 3, 0xAB);  // 3 rows of 16 bytes, 2 pixels used
+    stb::premultiplied_image img = stb::premultiplied_image::wrap(2, 3, memory.data(), 16);
+    img.fill(stb::color::rgba(255, 255, 255, 255));
+    for (int y = 0; y < 3; ++y) {
+        for (int i = 0; i < 8; ++i) ASSERT_EQ(255, int(memory[std::size_t(y) * 16 + std::size_t(i)]));
+        for (int i = 8; i < 16; ++i) ASSERT_EQ(0xAB, int(memory[std::size_t(y) * 16 + std::size_t(i)]));
+    }
+}
+
+UTEST(libstb_premultiplied_image_tests, test_into_image_converts_in_place_without_a_copy) {
+    stb::premultiplied_image img(5, 4);
+    img.fill(stb::color::rgba(200, 100, 50, 128));
+    img.data()[0] = 0;  // make the first pixel differ
+    const stb::image expected = img.to_image();
+    const std::uint8_t* pixels = img.data();
+    const stb::image out = std::move(img).into_image();
+    ASSERT_TRUE(img.empty());  // NOLINT: moved-from objects of this class are defined to be empty
+    ASSERT_TRUE(out.data() == pixels);  // the same memory
+    ASSERT_EQ(5, out.width());
+    ASSERT_EQ(4, out.height());
+    ASSERT_EQ(4, out.channels());
+    ASSERT_EQ(0, std::memcmp(out.data(), expected.data(), 5 * 4 * 4));
+}
+
+UTEST(libstb_premultiplied_image_tests, test_into_image_keeps_the_pixels_alive_with_the_image) {
+    stb::image out;
+    {
+        stb::premultiplied_image img(2, 2);
+        img.fill(stb::color::rgba(255, 0, 0, 255));
+        out = std::move(img).into_image();
+    }
+    ASSERT_EQ(255, int(out.data()[0]));  // R of the first pixel, straight RGBA
+    ASSERT_EQ(0, int(out.data()[1]));
+    ASSERT_EQ(255, int(out.data()[3]));
+}
+
+UTEST(libstb_premultiplied_image_tests, test_into_image_copies_a_wrapped_buffer_and_leaves_it_alone) {
+    std::vector<std::uint8_t> memory(8 * 2, 0);
+    stb::premultiplied_image img = stb::premultiplied_image::wrap(2, 2, memory.data(), 8);
+    img.fill(stb::color::rgba(200, 100, 50, 128));
+    const std::vector<std::uint8_t> before = memory;
+    const stb::image out = std::move(img).into_image();
+    ASSERT_TRUE(memory == before);       // somebody else's memory is not converted
+    ASSERT_TRUE(out.data() != memory.data());
+    ASSERT_EQ(2, out.width());
+    ASSERT_TRUE(img.empty());  // NOLINT
+}
+
+UTEST(libstb_premultiplied_image_tests, test_into_image_of_an_empty_object_is_an_empty_image) {
+    stb::premultiplied_image img;
+    ASSERT_TRUE(std::move(img).into_image().empty());
+}

@@ -7,6 +7,19 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Added
+- **`stb::span_set`** (`stb/raster.hpp`): a set of coverage spans kept for later, a clip path or a mask. It is a `span_sink`
+  (collects what `rasterize_fill` / `rasterize_stroke` report), `from_rect`, `extents()` (the true box), `contains(x, y)`
+  (binary search) and `intersect(a, b)` (coverages multiplied, `(a * b) / 255`, zero results left out). Spans that are out of
+  order, empty or overlapping are refused with `invalid_argument`. Tests: `test_span_set.cpp` (a shape clipped by a rectangle
+  equals the shape rasterized inside it, and a random pixelwise product check).
+- **`premultiplied_image::fill(color)` and `into_image() &&`**: the first sets every pixel to a straight colour (converted once);
+  the second turns the finished picture into a straight RGBA `image` converting in place, without a copy, when the object owns its
+  pixels (a `wrap()`ped buffer is copied and left alone). A render of 8192 x 8192 no longer costs a second 256 MB.
+- **`stb::base64_encode`, `base64_decode`, `try_base64_decode`** (`stb/util.hpp`): RFC 4648 with the standard alphabet; decoding is
+  the WHATWG "forgiving-base64 decode" browsers use for `data:` URLs (white space ignored anywhere, padding optional but complete
+  when present). Tests: the RFC 4648 vectors, every length and byte value, 1 MiB.
+
 ### Changed
 - **Left-to-right text is shaped** (`font::shape`, and with it `draw_text`, `measure`, `render` and the canvas): a line without a
   right-to-left letter used to be one glyph per character; it now runs the font's GSUB (`ccmp`, `locl`, `rlig`, `calt`, `liga`,

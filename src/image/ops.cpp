@@ -549,4 +549,24 @@ image premultiplied_image::to_image() const {
     return out;
 }
 
+void premultiplied_image::fill(const color& c) {
+    if (empty()) return;
+    const std::uint8_t rgba[4] = {c.r(), c.g(), c.b(), c.a()};
+    std::uint32_t pixel = 0;
+    rgba_to_premultiplied_argb(reinterpret_cast<std::uint8_t*>(&pixel), sizeof pixel, rgba, sizeof rgba, 1, 1);
+    for (int y = 0; y < height_; ++y)
+        std::fill_n(reinterpret_cast<std::uint32_t*>(data() + std::size_t(y) * stride_), std::size_t(width_), pixel);
+}
+
+image premultiplied_image::into_image() && {
+    premultiplied_image self(std::move(*this));  // *this is empty from here on, whatever happens
+    if (self.empty()) return image();
+    // Ours to convert in place: allocated by the constructor (its deleter is the one that frees an array of bytes), not shared,
+    // and packed. A wrap()ped buffer may be read through its owner's other handles, so that one is copied.
+    const bool owned = self.data_.use_count() == 1 && std::get_deleter<std::default_delete<std::uint8_t[]>>(self.data_) != nullptr;
+    if (!owned || self.stride_ != 4 * std::size_t(self.width_)) return self.to_image();
+    premultiplied_argb_to_rgba(self.data(), self.stride_, self.data(), self.stride_, self.width_, self.height_);
+    return image::wrap(self.width_, self.height_, pixel_format::rgba, self.data(), std::shared_ptr<void>(self.data_));
+}
+
 }  // namespace stb

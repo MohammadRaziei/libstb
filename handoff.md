@@ -1,6 +1,10 @@
-# STATUS: composite_row on SIMD (working tree after 2be4b9a, not committed)
+# وضعیت: issue های ۱۰ و ۱۱ novasvg و سه قابلیت بعدی (کار روی `af2c386`، commit نشده)
 
-Issues 10 and 11 of the novasvg list were already committed (weight/width/legacy_family_name, composite_row). Added on top: the operators of `composite_row` / `composite_solid_row` run on the SIMD backend in use (`src/image/composite_kernels.inl`, included once for SSE2 and once for AVX2 with a masked tail; bit-identical to scalar, tested for every backend), `tests/cpp/bench_composite_row.cpp` (target `stb_bench_composite_row`), the matching tests in `tests/cpp/test_composite_row.cpp`, CHANGELOG. Blend modes stay one pixel at a time (scalar); only the 13 operators are vectorised.
+issue 10 (weight/width/legacy_family_name) و 11 (`composite_row` + SIMD) قبلاً commit شدن. اضافه شد: `premultiplied_image::fill` و
+`into_image() &&` (ops.cpp)، `stb::span_set` (`raster.hpp`، `src/draw/span_set.cpp`)، `base64_*` (`util.hpp`، `src/util/base64.cpp`)، تست‌ها
+(`test_premultiply.cpp`، `test_span_set.cpp`، `test_base64.cpp`)، CHANGELOG و `docs/guide.md`. دیگه issue برای novasvg نمی‌نویسیم:
+هر چیز عمومی که کم باشه مستقیم همین‌جا پیاده می‌شه و novasvg بهش سوییچ می‌کنه. gate: ۵۴۰ تست C++، ۱۶۷۱ تست Python، بدون warning.
+در ویندوز به جای `std::min/max` از `STB_MIN/STB_MAX` استفاده کن.
 
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 

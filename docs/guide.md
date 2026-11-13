@@ -623,10 +623,36 @@ stb::canvas c(img);
 c.add_outline(p).fill("#09f").stroke(3, "white").dash({8, 4});  // with texts and shapes, drawn in order
 ```
 
+A clip path or a mask is a set of such spans: `stb::span_set` collects what a rasterizer reports and combines two sets:
+
+```cpp
+stb::span_set clip;
+stb::rasterize_fill(circle, stb::fill_rule::non_zero, {}, area, stb::span_sink(clip));   // it is a span sink
+stb::span_set inside = stb::span_set::intersect(clip, stb::span_set::from_rect(0, 0, 64, 64));  // coverages multiply: (a * b) / 255
+clip.extents();            // std::optional<clip_rect>, the box of the spans
+clip.contains(x, y);       // O(log n)
+```
+
+A renderer that draws into premultiplied pixels (`stb::premultiplied_image`, see `composite_row`) starts with
+`img.fill(color)` (straight colour, converted once) and ends with `std::move(img).into_image()`, which turns the same
+memory into a straight RGBA `image` without a copy when the object owns its pixels (a wrapped buffer is copied, and left alone).
+
 `fill` and `stroke` blend through `image::blend` (a layer the size of the outline's box), so the blend modes and
 opacity work as everywhere else. The coordinate, matrix, dash and precision rules are the ones listed
 under "Vector outlines" in the Python section above. The geometry is fixed-point (`src/draw/raster/`), so there is
 no platform-dependent rounding.
+
+### Base64
+
+```cpp
+std::string text = stb::base64_encode(bytes.data(), bytes.size());            // padded, one line
+std::vector<std::uint8_t> back = stb::base64_decode(text);                     // throws invalid_argument
+if (auto data = stb::try_base64_decode(uri_payload)) { /* ... */ }            // nullopt instead
+```
+
+Decoding is the forgiving one of browsers (`atob`, `data:` URLs): white space anywhere is ignored, padding is optional but
+must complete the last group when present, and any other character, data after the padding or a single leftover
+character is an error.
 
 ### Logging
 
