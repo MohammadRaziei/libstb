@@ -68,6 +68,13 @@ def sync_plan() -> dict:
 
 
 def rewrite_links(text: str, src: str, plan: dict) -> str:
+    """Applies _rewrite_links to the prose only: fenced code blocks (C++ lambdas such as `[&](stb::span_view s)` look
+    like links) are left exactly as written."""
+    parts = re.split(r"(^```.*?^```[^\n]*$|^~~~.*?^~~~[^\n]*$)", text, flags=re.S | re.M)
+    return "".join(p if p.startswith(("```", "~~~")) else _rewrite_links(p, src, plan) for p in parts)
+
+
+def _rewrite_links(text: str, src: str, plan: dict) -> str:
     """Relative links keep working in the copy: a link to another synced page is re-aimed at that page's copy,
     and a link to anything else in the repository (README.md, NOTICE.md, benchmarks/README.md ...) becomes a GitHub URL."""
     src_dir = (ROOT / src).parent
