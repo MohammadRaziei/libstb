@@ -43,7 +43,7 @@ bool same_bytes(const stb::mat8u& a, const stb::mat8u& b) {
 }
 float max_diff(const stb::mat32f& a, const stb::mat32f& b) {
     float d = 0;
-    for (std::size_t i = 0; i < a.size(); ++i) d = std::max(d, std::fabs(a.data()[i] - b.data()[i]));
+    for (std::size_t i = 0; i < a.size(); ++i) d = STB_MAX(d, std::fabs(a.data()[i] - b.data()[i]));
     return d;
 }
 
@@ -103,7 +103,7 @@ UTEST(libstb_filter_tests, test_a_2d_kernel_matches_the_brute_force_sum_with_cla
                 float want = 0;
                 for (int ky = 0; ky < 3; ++ky)
                     for (int kx = 0; kx < 3; ++kx) want += k(kx, ky) * src(clampi(x + kx - 1, 9), clampi(y + ky - 1, 7), c);
-                worst = std::max(worst, std::fabs(want - out(x, y, c)));
+                worst = STB_MAX(worst, std::fabs(want - out(x, y, c)));
             }
     EXPECT_TRUE(worst < 1e-5f);
 }
@@ -203,7 +203,7 @@ UTEST(libstb_filter_tests, test_box_blur_matches_the_brute_force_mean) {
                 double sum = 0;
                 for (int dy = -2; dy <= 2; ++dy)
                     for (int dx = -2; dx <= 2; ++dx) sum += double(src(clampi(x + dx, 13), clampi(y + dy, 11), c));
-                worst = std::max(worst, std::fabs(float(sum / 25.0) - out(x, y, c)));
+                worst = STB_MAX(worst, std::fabs(float(sum / 25.0) - out(x, y, c)));
             }
     EXPECT_TRUE(worst < 1e-5f);
     EXPECT_TRUE(same_bits(stb::box_blur(src, 0), src));

@@ -4,7 +4,7 @@ issue 10 (weight/width/legacy_family_name) و 11 (`composite_row` + SIMD) قبل
 `into_image() &&` (ops.cpp)، `stb::span_set` (`raster.hpp`، `src/draw/span_set.cpp`)، `base64_*` (`util.hpp`، `src/util/base64.cpp`)، تست‌ها
 (`test_premultiply.cpp`، `test_span_set.cpp`، `test_base64.cpp`)، CHANGELOG و `docs/guide.md`. دیگه issue برای novasvg نمی‌نویسیم:
 هر چیز عمومی که کم باشه مستقیم همین‌جا پیاده می‌شه و novasvg بهش سوییچ می‌کنه. gate: ۵۴۰ تست C++، ۱۶۷۱ تست Python، بدون warning.
-در ویندوز به جای `std::min/max` از `STB_MIN/STB_MAX` استفاده کن.
+در ویندوز به جای `std::min/max` از `STB_MIN/STB_MAX` استفاده کن، و به جای `std::numeric_limits<T>::max()` از `(std::numeric_limits<T>::max)()` (ماکروهای `windows.h`؛ CI نسخه‌ی 0.4.0 روی `test_filter.cpp` و `test_mat.cpp` همین‌طور شکست و درست شد).
 
 # handoff.md (وضعیت پروژه برای ادامه‌ی کار در چت بعدی)
 

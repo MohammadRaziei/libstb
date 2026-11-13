@@ -104,7 +104,7 @@ UTEST(libstb_mat_tests, test_bad_sizes_throw) {
     ASSERT_THROWS(stb::mat32f(4, 4, 0), std::invalid_argument);
     ASSERT_THROWS(stb::mat32f(2, 2, 3, std::vector<float>(11)), std::invalid_argument);
     ASSERT_THROWS(stb::mat32f::wrap(2, 2, 1, nullptr), std::invalid_argument);
-    ASSERT_THROWS(stb::mat32f(std::numeric_limits<int>::max(), std::numeric_limits<int>::max(), 4), std::invalid_argument);
+    ASSERT_THROWS(stb::mat32f((std::numeric_limits<int>::max)(), (std::numeric_limits<int>::max)(), 4), std::invalid_argument);
 }
 
 UTEST(libstb_mat_tests, test_a_vector_is_adopted_without_changing_the_values) {
