@@ -42,6 +42,8 @@ from .libstb_py import (Align, BlendMode, PremultipliedImage, CompositeOp, Canva
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
 from .libstb_py import logging_bridge, set_threads, thread_count
+from .libstb_py import (EdgeMode, SuperpixelMap, SuperpixelMethod, box_blur, convolve, gaussian_blur, gaussian_kernel, magnitude, sobel,
+                        superpixels, to_8u, to_f32)
 
 
 def simd(name):
@@ -171,6 +173,7 @@ def get_cmake_dir():
 __all__ = [
     "Image", "PremultipliedImage", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "logging_bridge", "imresize",
     "Resizer",
+    "EdgeMode", "SuperpixelMethod", "SuperpixelMap", "gaussian_blur", "box_blur", "convolve", "gaussian_kernel", "sobel", "magnitude", "superpixels", "to_f32", "to_8u",
     "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "CompositeOp", "Align", "FontMetrics", "FontFaceInfo", "SystemFont", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",

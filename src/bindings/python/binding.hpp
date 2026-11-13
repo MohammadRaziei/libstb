@@ -101,6 +101,7 @@ inline stb::align to_align(nb::handle h) {
 }
 
 void bind_image(nb::module_& m);
+void bind_filter(nb::module_& m);  // needs the Image class: after bind_image
 void bind_resizer(nb::module_& m);
 void bind_font(nb::module_& m);
 void bind_outline(nb::module_& m);

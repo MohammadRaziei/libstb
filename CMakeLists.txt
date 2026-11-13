@@ -136,6 +136,18 @@ function(libstb_apply_core_build_settings target)
             PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
     endif()
 
+    # The numeric kernels and what is built on them (filters, superpixels) promise the same bits on every
+    # SIMD backend and every number of threads, so no fused multiply-add contraction there either, and
+    # no errno from sqrt (it would keep the compiler from vectorising it).
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set_source_files_properties(
+            ${PROJECT_SOURCE_DIR}/src/image/math_ops.cpp
+            ${PROJECT_SOURCE_DIR}/src/image/filter.cpp
+            ${PROJECT_SOURCE_DIR}/src/image/superpixel.cpp
+            TARGET_DIRECTORY ${target}
+            PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-math-errno")
+    endif()
+
     # kernels_scalar.cpp is the "scalar" SIMD backend: the same pixel loops with the
     # compiler's auto-vectoriser off. (MSVC has no such switch: there it may still vectorise,
     # with identical results.) TARGET_DIRECTORY: source file properties are per directory scope.
@@ -143,10 +155,16 @@ function(libstb_apply_core_build_settings target)
         set_source_files_properties(${PROJECT_SOURCE_DIR}/src/image/kernels_scalar.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-fno-tree-slp-vectorize")
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/image/math_scalar.cpp
+            TARGET_DIRECTORY ${target}
+            PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-fno-tree-slp-vectorize;-ffp-contract=off;-fno-math-errno")
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set_source_files_properties(${PROJECT_SOURCE_DIR}/src/image/kernels_scalar.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-fno-vectorize;-fno-slp-vectorize")
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/src/image/math_scalar.cpp
+            TARGET_DIRECTORY ${target}
+            PROPERTIES COMPILE_OPTIONS "-fno-vectorize;-fno-slp-vectorize;-ffp-contract=off;-fno-math-errno")
     endif()
 endfunction()
 

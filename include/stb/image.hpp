@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <initializer_list>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -17,39 +18,11 @@
 #include <vector>
 
 #include "stb/export.hpp"
+#include "stb/mat.hpp"
 #include "stb/color.hpp"
 #include "stb/error.hpp"
 
 namespace stb {
-
-// What one pixel holds. The value of each enumerator is its number of 8-bit channels, so
-// channel_count() is a cast, but code never needs to spell that number: say pixel_format::rgb.
-enum class pixel_format : std::uint8_t {
-    gray = 1,        // one channel: luminance
-    gray_alpha = 2,  // luminance, alpha
-    rgb = 3,         // red, green, blue
-    rgba = 4,        // red, green, blue, alpha (straight, not premultiplied)
-};
-
-constexpr int channel_count(pixel_format f) noexcept { return static_cast<int>(f); }
-constexpr bool has_alpha(pixel_format f) noexcept { return f == pixel_format::gray_alpha || f == pixel_format::rgba; }
-// The format with this many channels. Throws invalid_argument unless channels is in 1..4.
-constexpr pixel_format pixel_format_from_channels(int channels) {
-    if (channels < 1 || channels > 4) throw std::invalid_argument("channels must be in 1..4");
-    return static_cast<pixel_format>(channels);
-}
-// "gray", "gray_alpha", "rgb" or "rgba".
-constexpr std::string_view pixel_format_name(pixel_format f) noexcept {
-    switch (f) {
-        case pixel_format::gray: return "gray";
-        case pixel_format::gray_alpha: return "gray_alpha";
-        case pixel_format::rgb: return "rgb";
-        case pixel_format::rgba: return "rgba";
-    }
-    return {};
-}
-// The inverse of pixel_format_name (lower case only). Throws invalid_argument for any other text.
-STB_API pixel_format pixel_format_from_name(std::string_view name);
 
 // How image::blend mixes an overlay pixel (s) into the pixel below it (b), per colour channel,
 // before the overlay's alpha and opacity decide how much of the result shows. These are the
@@ -241,60 +214,16 @@ class resizer;  // defined after image, which only takes a pointer to one
 inline constexpr int default_png_compression = 8;  // 1..9, higher = smaller and slower
 inline constexpr int default_jpg_quality = 90;     // 1..100
 
-namespace detail {
+// The pixel types. image is image8u: the 8-bit image every codec, blend and resize works on, a mat8u
+// (see mat.hpp) with the meaning of a pixel on top. image32f is another name for mat32f: one float
+// per channel (0 is black and 1 is full intensity for colour data), for the maths of filtering.
+class image8u;
+using image = image8u;
+using image32f = mat32f;
 
-// What an image and a premultiplied_image have in common: the pixel memory (owned, or viewed with a
-// keep-alive, see image::wrap) and the size, and nothing about what a pixel means. That is why it is a
-// base class of both and the two are not related to each other: a premultiplied_image has no blend(), no
-// encoder and no resize, so it cannot be mistaken for straight-alpha pixels. Not for direct use: the
-// constructors and the destructor are protected, and it is move-only like both of them (a moved-from
-// object is empty).
-class STB_API image_base {
-public:
-    int width() const noexcept { return width_; }
-    int height() const noexcept { return height_; }
-    bool empty() const noexcept { return !data_; }
-
-    std::uint8_t* data() noexcept { return data_.get(); }
-    const std::uint8_t* data() const noexcept { return data_.get(); }
-
-    // The deleter of type D that was given to the shared_ptr passed as `keep_alive` to wrap(), or
-    // nullptr if the pixels are held by something else. It lets a binding reach what the object keeps
-    // alive (for a garbage collector to see it) without knowing about the host language.
-    template <class D>
-    D* owner_deleter() const noexcept {
-        return std::get_deleter<D>(data_);
-    }
-
-protected:
-    image_base() = default;
-    image_base(int width, int height) noexcept : width_(width), height_(height) {}
-    image_base(image_base&& o) noexcept
-        : width_(std::exchange(o.width_, 0)), height_(std::exchange(o.height_, 0)), data_(std::move(o.data_)) {}
-    image_base& operator=(image_base&& o) noexcept {
-        if (this != &o) {
-            width_ = std::exchange(o.width_, 0);
-            height_ = std::exchange(o.height_, 0);
-            data_ = std::move(o.data_);
-        }
-        return *this;
-    }
-    image_base(const image_base&) = delete;
-    image_base& operator=(const image_base&) = delete;
-    ~image_base() = default;
-
-    int width_ = 0;
-    int height_ = 0;
-    // Owner + pointer in one: the deleter (or aliased owner) is what frees, or keeps alive, the
-    // memory. Null when empty.
-    std::shared_ptr<std::uint8_t> data_;
-};
-
-}  // namespace detail
-
-// An 8-bit image: row-major, interleaved channels, no padding, so
-// size_bytes() == width * height * channels. A default-constructed image is
-// empty.
+// An 8-bit image, the one everything else in libstb works on (image is another name for it): a
+// mat8u plus decoding, encoding, blending, resizing and the other operations below. An empty
+// (default-constructed) image has size() == 0. Being a mat8u, it goes wherever a mat8u does.
 //
 // Move-only: an image never copies its pixels behind your back. Say so with
 // copy(). The pixels may be memory the image owns (constructors, decode) or
@@ -304,32 +233,34 @@ protected:
 // Thread-safety: like std::vector - const members are safe to call
 // concurrently, mutation needs external synchronisation. The static
 // factories are safe to call from any number of threads.
-class STB_API image : public detail::image_base {
+class STB_API image8u : public mat8u {
+    using base = mat8u;
+
 public:
-    image() = default;
+    image8u() = default;
 
     // Zero-filled. Throws invalid_argument unless width, height >= 1.
-    image(int width, int height, pixel_format format);
+    image8u(int width, int height, pixel_format format) : base(width, height, format) {}
     // Takes ownership of `pixels`; throws invalid_argument on a size mismatch.
-    image(int width, int height, pixel_format format, std::vector<std::uint8_t> pixels);
+    image8u(int width, int height, pixel_format format, std::vector<std::uint8_t> pixels)
+        : base(width, height, format, std::move(pixels)) {}
+    // An image from a mat8u of 1 to 4 channels (a move: no pixel is copied).
+    explicit image8u(mat8u&& m) noexcept : base(std::move(m)) {}
 
-    // Views memory that someone else owns, without copying it. `data` must
-    // hold width * height * channel_count(format) bytes and stay valid while the image
-    // (or anything moved from it) lives; `keep_alive` is released when that
-    // image dies, so put whatever owns or frees the memory in it (a deleter,
-    // a Python reference, ...). Throws invalid_argument on a null `data` or
-    // bad dimensions.
-    static image wrap(int width, int height, pixel_format format, std::uint8_t* data,
-                      std::shared_ptr<void> keep_alive = {});
+    // Views memory that someone else owns, without copying it. See mat::wrap.
+    static image8u wrap(int width, int height, pixel_format format, std::uint8_t* data,
+                        std::shared_ptr<void> keep_alive = {}) {
+        return image8u(base::wrap(width, height, format, data, std::move(keep_alive)));
+    }
 
-    image(image&& other) noexcept;
-    image& operator=(image&& other) noexcept;
-    image(const image&) = delete;             // copies are explicit:
-    image& operator=(const image&) = delete;  // see copy()
-    ~image() = default;
+    image8u(image8u&&) noexcept = default;
+    image8u& operator=(image8u&&) noexcept = default;
+    image8u(const image8u&) = delete;             // copies are explicit:
+    image8u& operator=(const image8u&) = delete;  // see copy()
+    ~image8u() = default;
 
     // A deep copy that owns its own pixels (also when this image is a wrap).
-    image copy() const;
+    image8u copy() const { return image8u(base::copy()); }
 
     // --- decoding (throws invalid_argument, decode_error, limit_error) ---
     static image decode(const void* data, std::size_t size, const load_options& opt = {});
@@ -480,32 +411,17 @@ public:
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const&;
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) &&;
 
-    // --- accessors (width(), height(), empty(), data() and owner_deleter() come from the base) ---
-    // An empty image has no format: it reports gray and 0 channels.
-    pixel_format format() const noexcept { return channels_ ? static_cast<pixel_format>(channels_) : pixel_format::gray; }
-    int channels() const noexcept { return channels_; }  // channel_count(format()), 0 when empty
-    std::size_t stride() const noexcept { return std::size_t(width_) * std::size_t(channels_); }
-    std::size_t size_bytes() const noexcept { return stride() * std::size_t(height_); }
-
-    // All bytes, for range-for and <algorithm> (empty range for an empty image).
-    std::uint8_t* begin() noexcept { return data(); }
-    std::uint8_t* end() noexcept { return data() + size_bytes(); }
-    const std::uint8_t* begin() const noexcept { return data(); }
-    const std::uint8_t* end() const noexcept { return data() + size_bytes(); }
-
-    // Unchecked element access (x < width, y < height, c < channels).
-    std::uint8_t& operator()(int x, int y, int c = 0) noexcept { return data_.get()[index(x, y, c)]; }
-    const std::uint8_t& operator()(int x, int y, int c = 0) const noexcept {
-        return data_.get()[index(x, y, c)];
-    }
-
-private:
-    std::size_t index(int x, int y, int c) const noexcept {
-        return std::size_t(y) * stride() + std::size_t(x) * std::size_t(channels_) + std::size_t(c);
-    }
-
-    int channels_ = 0;
 };
+
+// --- 8 bits <-> float ---------------------------------------------------------------------------
+// The two directions of the conversion every float computation starts and ends with. Same size and
+// channels; an empty input gives an empty result. Both use all the cores when the image is big.
+
+// Every value / 255: 0 is 0.0f and 255 is exactly 1.0f.
+STB_API mat32f to_f32(const mat8u& src);
+// round(clamp(v, 0, 1) * 255), and NaN becomes 0: the inverse of to_f32 for every 8-bit value.
+// Throws invalid_argument when src has more than 4 channels (an image has at most 4).
+STB_API image8u to_8u(const mat32f& src);
 
 // Pixels that are already multiplied by alpha, in the layout rasterizers draw into: one 32-bit word per
 // pixel, 0xAARRGGBB (native-endian: on a little-endian machine the bytes are B, G, R, A), exactly what

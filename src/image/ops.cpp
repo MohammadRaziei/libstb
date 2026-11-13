@@ -491,7 +491,7 @@ std::size_t premultiplied_bytes(int width, int height, std::size_t stride) {
 
 }  // namespace
 
-premultiplied_image::premultiplied_image(int width, int height) : image_base(width, height) {
+premultiplied_image::premultiplied_image(int width, int height) : detail::image_base(width, height) {
     const std::size_t stride = 4 * std::size_t(std::max(width, 0));
     const std::size_t n = premultiplied_bytes(width, height, stride);
     stride_ = stride;
@@ -512,11 +512,11 @@ premultiplied_image premultiplied_image::wrap(int width, int height, std::uint8_
 }
 
 premultiplied_image::premultiplied_image(premultiplied_image&& o) noexcept
-    : image_base(std::move(o)), stride_(std::exchange(o.stride_, 0)) {}
+    : detail::image_base(std::move(o)), stride_(std::exchange(o.stride_, 0)) {}
 
 premultiplied_image& premultiplied_image::operator=(premultiplied_image&& o) noexcept {
     if (this != &o) {
-        image_base::operator=(std::move(o));
+        detail::image_base::operator=(std::move(o));
         stride_ = std::exchange(o.stride_, 0);
     }
     return *this;

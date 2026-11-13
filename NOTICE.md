@@ -33,6 +33,22 @@ rights reserved. They are used under the FreeType License (FTL, https://freetype
 which asks for this credit and for the license text to be available with any redistribution; the
 FreeType License is also distributed with plutovg as `FTL.TXT`.
 
+## Filters and superpixels (`stb/filter.hpp`, `stb/superpixel.hpp`)
+
+The Gaussian, box and Sobel filters and the convolution are textbook methods. The superpixel algorithms
+follow these papers, and were written for libstb from them:
+
+- SLIC and SLICO: R. Achanta, A. Shaji, K. Smith, A. Lucchi, P. Fua and S. Susstrunk, "SLIC Superpixels
+  Compared to State-of-the-Art Superpixel Methods", IEEE TPAMI 34(11), 2012.
+- SNIC: R. Achanta and S. Susstrunk, "Superpixels and Polygons using Simple Non-Iterative Clustering",
+  CVPR 2017.
+
+No code of any implementation of them is used or vendored (not the authors' reference code, not OpenCV's
+`ximgproc`, not the benchmark collections that bundle them: several of those are GPL or non-commercial).
+The assignment step is a per-pixel gather over fixed-point sums, not a transcription of the papers'
+pseudocode, so that the result does not depend on the number of threads. Whether these methods are
+covered by any patent has not been checked.
+
 ## Sample data (`data/`)
 
 The pictures and fonts of `data/` are used by the examples and the tests; they are not part of the library or of

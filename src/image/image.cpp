@@ -26,15 +26,6 @@ void check_input(const void* data, std::size_t size) {
     if (size > static_cast<std::size_t>(INT_MAX)) throw limit_error("input larger than 2 GiB");
 }
 
-std::size_t checked_bytes(int width, int height, pixel_format format) {
-    if (width < 1 || height < 1) throw std::invalid_argument("width and height must be >= 1");
-    const int channels = channel_count(format);
-    const std::uint64_t pixels = std::uint64_t(width) * std::uint64_t(height);  // <= 2^62
-    if (pixels > std::uint64_t(std::numeric_limits<std::size_t>::max()) / std::uint64_t(channels))
-        throw std::invalid_argument("image too large");
-    return static_cast<std::size_t>(pixels * std::uint64_t(channels));
-}
-
 codec::raster view_of(const image& img) {
     return codec::raster{img.data(), img.width(), img.height(), img.channels()};
 }
@@ -82,47 +73,6 @@ pixel_format pixel_format_from_name(std::string_view name) {
         if (name == pixel_format_name(f)) return f;
     throw std::invalid_argument("unknown pixel format \"" + std::string(name) +
                                 "\": use gray, gray_alpha, rgb or rgba");
-}
-
-image::image(int width, int height, pixel_format format)
-    : image_base(width, height), channels_(channel_count(format)) {
-    const std::size_t n = checked_bytes(width, height, format);
-    data_ = std::shared_ptr<std::uint8_t>(new std::uint8_t[n](), std::default_delete<std::uint8_t[]>());
-}
-
-image::image(int width, int height, pixel_format format, std::vector<std::uint8_t> pixels)
-    : image_base(width, height), channels_(channel_count(format)) {
-    if (pixels.size() != checked_bytes(width, height, format))
-        throw std::invalid_argument("pixel buffer size does not match width * height * channels");
-    auto holder = std::make_shared<std::vector<std::uint8_t>>(std::move(pixels));
-    data_ = std::shared_ptr<std::uint8_t>(holder, holder->data());  // one block: vector + pointer
-}
-
-image image::wrap(int width, int height, pixel_format format, std::uint8_t* data, std::shared_ptr<void> keep_alive) {
-    checked_bytes(width, height, format);  // validates the dimensions
-    if (!data) throw std::invalid_argument("wrap needs a non-null pointer");
-    image img;
-    img.width_ = width;
-    img.height_ = height;
-    img.channels_ = channel_count(format);
-    img.data_ = std::shared_ptr<std::uint8_t>(keep_alive, data);  // aliasing: keeps `keep_alive` (C++17 has no moving form)
-    return img;
-}
-
-// A moved-from image is empty (not just "valid but unspecified").
-image::image(image&& o) noexcept : image_base(std::move(o)), channels_(std::exchange(o.channels_, 0)) {}
-
-image& image::operator=(image&& o) noexcept {
-    if (this != &o) {
-        image_base::operator=(std::move(o));
-        channels_ = std::exchange(o.channels_, 0);
-    }
-    return *this;
-}
-
-image image::copy() const {
-    if (empty()) return image();
-    return image(width_, height_, format(), std::vector<std::uint8_t>(begin(), end()));
 }
 
 image image::decode(const void* data, std::size_t size, const load_options& opt) {
