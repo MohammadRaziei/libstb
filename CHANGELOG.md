@@ -8,6 +8,17 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **Tone** (`stb/tone.hpp`, `libstb.equalize` and friends): `histogram`, `equalize`, `auto_contrast` (Pillow's cutoff rule, within one
+  level of `ImageOps.autocontrast`), `match_histogram`, `gamma`, `levels`, and the 8-bit tables `gamma_lut`, `levels_lut`, `apply_lut`.
+  They take an `image8u` / `mat8u` or a `mat32f` (floats 0 to 1) with 1 to 4 channels and give back the type they were given; alpha is
+  never changed. `tone_mode::luma` (the default) changes only the BT.601 brightness, so colours do not shift; `per_channel` treats each
+  colour channel on its own. Every adjustment has three forms that share one core: `f(img)` (a copy), `f(std::move(img))` (the buffer
+  is reused, so a chain of temporaries allocates once) and `f_inplace(img)`; in Python `img.equalize(inplace=True)`. The result is the
+  same on every number of threads. Tests: `test_tone.cpp` (hand-computed tables, the three forms, NaN and out-of-range floats, threads)
+  and `tests/python/test_tone.py`.
+- **`stb::traits`** (`stb/mat.hpp`, `stb/image.hpp`): `is_mat_v<M>` (a `mat<T>` or anything derived from one), `mat_value_t<M>`,
+  `is_image_input_v<M>` (a `mat8u` or `mat32f`) and the SFINAE aliases `if_image_t<M, R = M>` / `if_image_rvalue_t<M, R = M>` for writing
+  functions that return the type they are given.
 - **`stb::span_set`** (`stb/raster.hpp`): a set of coverage spans kept for later, a clip path or a mask. It is a `span_sink`
   (collects what `rasterize_fill` / `rasterize_stroke` report), `from_rect`, `extents()` (the true box), `contains(x, y)`
   (binary search) and `intersect(a, b)` (coverages multiplied, `(a * b) / 255`, zero results left out). Spans that are out of
