@@ -1,3 +1,29 @@
+# handoff: دور ۱ گام اول (tone)، parallel عمومی، رفع sanitizer و lcov، 2026-11-15
+
+**این بخش را اول بخوان؛ زیرش handoff قبلی (mat، فیلترها، superpixel، novasvg، ...) است و هنوز معتبر است.**
+
+## چه ساخته شد
+
+- **tone** (`include/stb/tone.hpp`، `src/image/tone.cpp`): `histogram`، `equalize`، `auto_contrast`، `match_histogram`، `gamma`، `levels`، `gamma_lut`، `levels_lut`، `apply_lut`. ورودی `image8u`/`mat8u` یا `mat32f` (float بین 0 و 1) با 1 تا 4 کانال و **همان نوعی که داده شده برگردانده می‌شود**؛ alpha هرگز عوض نمی‌شود. `tone_mode::luma` (پیش‌فرض، فقط روشنایی BT.601) یا `per_channel`.
+- **معماری** (تصمیم کاربر): `*_inplace` یک template روی نوع عنصر است که در هدر فقط **declaration** دارد (`template <class T> ... (mat<T>&, ...)`) و بدنه و instantiation صریح (`uint8_t`، `float`) آخر `tone.cpp` است. شکل‌های copy و rvalue (`f(const M&)`، `f(M&&)`) در هدر و inline‌اند و روی همان `*_inplace` سوار می‌شوند. منطق مشترک: `tone_kernel<T>` (دو specialization) و `remap_from_histogram<T>` داخل `tone.cpp`. کاربر header-only نخواست چون flag محاسبه (بدون FMA) باید در `tone.cpp` بماند.
+- **traits** (`mat.hpp`، `image.hpp`): `stb::traits::is_mat_v`، `mat_value_t`، `is_image_input_v`، و `if_image_t<M, R = M>` / `if_image_rvalue_t` (SFINAE در نوع برگشتی).
+- **`include/stb/parallel.hpp`**: `stb::utils::threads_for`، `run_parallel`، `parallel_for` عمومی شدند (قبلاً `src/util/parallel.hpp` و `detail::`). پوشه‌ی `stb/utils/` ساخته نشد (فایل تخت). `src/util/parallel.hpp` فقط hookهای داخلی را دارد.
+- **Python**: `ToneMode`، `histogram` (شکل `(C, bins)`)، `equalize`، `auto_contrast`، `match_histogram`، `gamma`، `levels`، `gamma_lut`، `levels_lut`، `apply_lut`، و متدهای `Image` با `inplace=True` (خود شیء را برمی‌گرداند).
+
+## رفع‌ها
+
+- UBSan در کد vendored resize (`coders.inl`، `coefficients.hpp`، `simd_vec.hpp`): `memcpy` به‌جای `int*`/`uint64*`، و `_mm_loadh_pi`/`_mm_storeh_pi` به‌جای `double*`. warning Debug `ring_buffer_size` در `sampler.hpp` هم رفع شد. کل suite C++ زیر ASan+UBSan تمیز است (612 تست).
+- **lcov در CI (`font.py:110`، `Atlas.__repr__`)**: coverage.py برای تابعی که هیچ‌وقت صدا زده نشود `DA:<خط def>,1` (def هنگام ساخت کلاس اجرا می‌شود) و `FNDA:0` می‌نویسد و lcov این ناسازگاری را رد می‌کند. ریشه: تستی `repr(atlas)` را صدا نمی‌زد. تست اضافه شد (`test_font.py::test_atlas`). با یک اسکریپت روی خروجی lcov کل suite Python هیچ تابع ناسازگار دیگری پیدا نشد؛ اگر بعداً تابعی بدون تست اضافه شد، همین خطا دوباره می‌آید (راه حل: تست، نه `--ignore-errors`).
+
+## باز
+
+- **خطای Nehalem در CI (`illegal instruction` در job `emulate`، اجرای #162)** روی ساخت من تکرار نشد (qemu-user با `apt-get update && apt-get install qemu-user`؛ `qemu-x86_64 -cpu Nehalem python3 ...` پاس می‌شود). در اجرای #163 که کاربر چسباند فقط job `build-coverage` شکست خورده بود. اگر دوباره دیده شد: لاگ کامل job یا `objdump -d` روی `.so` داخل wheel لازم است (حدس: تابع inline/template که در TU با `target("avx2")` instantiate و weak شده؛ تأیید نشده).
+- بقیه‌ی دور ۱: تبدیل رنگ (HSV/HSL/YCbCr)، `pixelize`، `median_filter`، `unsharp_mask`، PSNR/SSIM/MAE. هر کدام **اول API را بنویس و منتظر تأیید بمان**. `checklist.md` هنوز بخش پردازش تصویر ندارد (سؤال بی‌پاسخ).
+- `equalize` فرمول کلاسیک cdf_min است (نه فرمول Pillow؛ تا حدود 13 سطح فرق دارد). `auto_contrast` تا یک سطح با Pillow فرق دارد.
+- محیط sandbox: `apt-get update` لازم است قبل از نصب بسته؛ بیلد Python با `pip install . --no-build-isolation -Cbuild-dir=/home/claude/build-py` و اجرای foreground با `timeout 280` کار می‌کند (پس‌زمینه با پایان فراخوانی کشته می‌شود). `build-py/` در `.gitignore` نیست: `git add -A` فقط وقتی بی‌خطر است که بیلد خارج از ریپو باشد.
+
+---
+
 # handoff: پردازش تصویر (mat، فیلترها، superpixel) و وضعیت merge، 2026-11-13
 
 **این بخش را اول بخوان؛ زیرش متن قدیمی‌تر handoff (novasvg، فونت، logging، ...) است و هنوز معتبر است.**
