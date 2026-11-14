@@ -136,13 +136,14 @@ function(libstb_apply_core_build_settings target)
             PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
     endif()
 
-    # The numeric kernels and what is built on them (filters, superpixels) promise the same bits on every
+    # The numeric kernels and what is built on them (filters, tone, superpixels) promise the same bits on every
     # SIMD backend and every number of threads, so no fused multiply-add contraction there either, and
     # no errno from sqrt (it would keep the compiler from vectorising it).
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set_source_files_properties(
             ${PROJECT_SOURCE_DIR}/src/image/math_ops.cpp
             ${PROJECT_SOURCE_DIR}/src/image/filter.cpp
+            ${PROJECT_SOURCE_DIR}/src/image/tone.cpp
             ${PROJECT_SOURCE_DIR}/src/image/superpixel.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-math-errno")

@@ -24,6 +24,7 @@
 #include "stb/mat.hpp"
 #include "stb/image.hpp"
 #include "stb/filter.hpp"
+#include "stb/tone.hpp"
 #include "stb/superpixel.hpp"
 #include "stb/outline.hpp"
 #include "stb/raster.hpp"
