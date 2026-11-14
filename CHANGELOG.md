@@ -25,6 +25,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 - **`stb::traits`** (`stb/mat.hpp`, `stb/image.hpp`): `is_mat_v<M>` (a `mat<T>` or anything derived from one), `mat_value_t<M>`,
   `is_image_input_v<M>` (a `mat8u` or `mat32f`) and the SFINAE aliases `if_image_t<M, R = M>` / `if_image_rvalue_t<M, R = M>` for writing
   functions that return the type they are given.
+- **`stb::utf8_decode_lossy`, `stb::utf8_encode`, `stb::utf8_append`** (`stb/util.hpp`): the lenient UTF-8 decoder a browser uses (every byte that cannot start or continue a well-formed sequence becomes one U+FFFD and decoding goes on, it never throws; `utf8_decode` stays strict) and the encoder for code points (a surrogate or a value above U+10FFFF is written as U+FFFD). `utf8_decode` and the lossy one share one sequence reader. Tests: `test_utf8.cpp`.
 - **`stb::span_set`** (`stb/raster.hpp`): a set of coverage spans kept for later, a clip path or a mask. It is a `span_sink`
   (collects what `rasterize_fill` / `rasterize_stroke` report), `from_rect`, `extents()` (the true box), `contains(x, y)`
   (binary search) and `intersect(a, b)` (coverages multiplied, `(a * b) / 255`, zero results left out). Spans that are out of

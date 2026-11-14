@@ -142,6 +142,8 @@
       `contains()` (جستجوی دودویی)، `intersect()` (ضرب coverage، `(a*b)/255`، صفر حذف می‌شه). span نامرتب/خالی `invalid_argument`.
 - [x] **base64**: `base64_encode`، `base64_decode` (throw)، `try_base64_decode` در `util.hpp`؛ دیکد مثل «forgiving-base64»
       مرورگرها (فاصله‌ی ASCII نادیده، padding اختیاری ولی کامل). بردارهای RFC 4648 و ۱ مگابایت round trip.
+- [x] **UTF-8**: `utf8_decode_lossy` (مثل مرورگر: هر بایت بد یک U+FFFD، هرگز throw نمی‌کنه)، `utf8_encode` و `utf8_append` در
+      `util.hpp`؛ `utf8_decode` اکید سر جاشه و با لایه‌ی lossy یک خواننده‌ی دنباله مشترک داره.
 
 ## قبل از هر چیز دیگه
 

@@ -654,6 +654,15 @@ Decoding is the forgiving one of browsers (`atob`, `data:` URLs): white space an
 must complete the last group when present, and any other character, data after the padding or a single leftover
 character is an error.
 
+### UTF-8
+
+```cpp
+std::u32string cps = stb::utf8_decode(text);          // strict: throws invalid_argument on malformed input
+std::u32string any = stb::utf8_decode_lossy(text);    // like a browser: each bad byte becomes U+FFFD, never throws
+std::string utf8 = stb::utf8_encode(cps);             // a surrogate or a value above U+10FFFF is written as U+FFFD
+stb::utf8_append(utf8, U'\u20AC');                    // one code point onto the end of a string
+```
+
 ### Logging
 
 `<stb/logging.hpp>` is a small copy of Python's `logging`: the same names, the same level numbers, the same tree of

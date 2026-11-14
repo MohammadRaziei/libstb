@@ -118,6 +118,16 @@ inline void sformat_to(std::string& out, STB_FORMAT_STRING const char* fmt, ...)
 // surrogates (U+D800..DFFF) and values above U+10FFFF.
 STB_API std::u32string utf8_decode(std::string_view text);
 
+// The lenient decoder, the way a browser reads text: a byte that cannot start or continue a well-formed sequence
+// (stray continuation, bad lead byte, truncated or overlong sequence, surrogate, above U+10FFFF) becomes one U+FFFD and
+// decoding goes on with the next byte. Never throws.
+STB_API std::u32string utf8_decode_lossy(std::string_view text);
+
+// Code points -> UTF-8. A value that is not a Unicode scalar value (a surrogate, above U+10FFFF) is written as U+FFFD.
+STB_API std::string utf8_encode(std::u32string_view text);
+// The same for one code point, appended to `out`.
+STB_API void utf8_append(std::string& out, char32_t cp);
+
 // Base64 with the standard alphabet (RFC 4648: A-Z a-z 0-9 + /), the encoding of data: URLs.
 //
 // Decoding follows the "forgiving-base64 decode" of the WHATWG Infra standard, which is what browsers do for
