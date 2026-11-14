@@ -126,6 +126,7 @@ def test_atlas(font):
     px = a.image.numpy()[g.y0:g.y1, g.x0:g.x1]
     assert (px == 255).all()
     assert a.image.shape == (256, 256, 1)
+    assert repr(a) == "Atlas(256x256, 5 glyphs)"
 
 
 def test_atlas_errors(font):
