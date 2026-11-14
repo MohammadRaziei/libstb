@@ -16,6 +16,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include <algorithm>
@@ -258,5 +259,28 @@ private:
         return std::size_t(y) * stride() + std::size_t(x) * std::size_t(channels_) + std::size_t(c);
     }
 };
+
+// ---------------------------------------------------------------------------------------- traits
+// Type traits for writing functions that take "a mat of some element type": stb::traits::is_mat_v<M>
+// is true for a mat<T> and for every class derived from one (image8u too), whatever const or
+// reference M carries; mat_value_t<M> is the element type T.
+namespace detail {
+template <class T>
+std::true_type is_mat_probe(const mat<T>*);  // a pointer to a derived class converts to this one
+std::false_type is_mat_probe(...);
+}  // namespace detail
+
+namespace traits {
+
+template <class M>
+struct is_mat : decltype(detail::is_mat_probe(static_cast<std::decay_t<M>*>(nullptr))) {};
+template <class M>
+inline constexpr bool is_mat_v = is_mat<M>::value;
+
+// The element type of a mat (mat_value_t<image8u> is std::uint8_t). Only for M with is_mat_v<M>.
+template <class M>
+using mat_value_t = typename std::decay_t<M>::value_type;
+
+}  // namespace traits
 
 }  // namespace stb

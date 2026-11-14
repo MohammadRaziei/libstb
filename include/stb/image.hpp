@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -527,5 +528,36 @@ public:
 private:
     resize_options options_;
 };
+
+// ---------------------------------------------------------------------------------------- traits
+namespace traits {
+namespace detail_image {
+template <class M, class = void>
+struct is_image_input_impl : std::false_type {};
+template <class M>
+struct is_image_input_impl<M, std::enable_if_t<is_mat_v<M>>>
+    : std::bool_constant<std::is_same_v<mat_value_t<M>, std::uint8_t> || std::is_same_v<mat_value_t<M>, float>> {};
+}  // namespace detail_image
+
+// True for what the image functions (tone.hpp) take: a mat8u (so an image8u) or a mat32f (image32f), or a
+// class derived from one of them.
+template <class M>
+struct is_image_input : detail_image::is_image_input_impl<M> {};
+template <class M>
+inline constexpr bool is_image_input_v = is_image_input<M>::value;
+
+// For the return type of a function template: R (M unless said otherwise) when M is an image input,
+// otherwise the function drops out of overload resolution.
+//   template <class M> traits::if_image_t<M> equalize(const M& src);          // returns the type it is given
+//   template <class M> traits::if_image_t<M, image8u> to_gray(const M& src);  // always an image8u
+template <class M, class R = M>
+using if_image_t = std::enable_if_t<is_image_input_v<M>, R>;
+
+// The same for the overload that takes an rvalue as `M&&`: it must not be chosen for an lvalue (M would be
+// deduced as a reference there).
+template <class M, class R = M>
+using if_image_rvalue_t = std::enable_if_t<is_image_input_v<M> && !std::is_lvalue_reference_v<M>, R>;
+
+}  // namespace traits
 
 }  // namespace stb
