@@ -12,10 +12,16 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   level of `ImageOps.autocontrast`), `match_histogram`, `gamma`, `levels`, and the 8-bit tables `gamma_lut`, `levels_lut`, `apply_lut`.
   They take an `image8u` / `mat8u` or a `mat32f` (floats 0 to 1) with 1 to 4 channels and give back the type they were given; alpha is
   never changed. `tone_mode::luma` (the default) changes only the BT.601 brightness, so colours do not shift; `per_channel` treats each
-  colour channel on its own. Every adjustment has three forms that share one core: `f(img)` (a copy), `f(std::move(img))` (the buffer
-  is reused, so a chain of temporaries allocates once) and `f_inplace(img)`; in Python `img.equalize(inplace=True)`. The result is the
+  colour channel on its own. Every adjustment has three forms: `f(img)` (a copy), `f(std::move(img))` (the buffer is reused, so a chain of
+  temporaries allocates once) and `f_inplace(img)`, which is the one with a body (a template declared in the header and
+  instantiated for `uint8_t` and `float` in `src/image/tone.cpp`); in Python `img.equalize(inplace=True)`. The result is the
   same on every number of threads. Tests: `test_tone.cpp` (hand-computed tables, the three forms, NaN and out-of-range floats, threads)
   and `tests/python/test_tone.py`.
+- **`stb::utils::parallel_for`, `run_parallel`, `threads_for`** (`stb/parallel.hpp`, public now; they were internal in
+  `util/parallel.hpp`): run `fn(begin, end)` on contiguous pieces of `[0, n)` on as many threads as the work deserves (never more
+  than `stb::thread_count()`, at least 250 microseconds of work per thread, so small work stays on the calling thread). An exception
+  from any piece is rethrown on the caller after all pieces end. Resize, filters, tone and superpixels use the same functions.
+  Tests: `test_parallel.cpp` (includes only the public header).
 - **`stb::traits`** (`stb/mat.hpp`, `stb/image.hpp`): `is_mat_v<M>` (a `mat<T>` or anything derived from one), `mat_value_t<M>`,
   `is_image_input_v<M>` (a `mat8u` or `mat32f`) and the SFINAE aliases `if_image_t<M, R = M>` / `if_image_rvalue_t<M, R = M>` for writing
   functions that return the type they are given.
@@ -88,6 +94,12 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   not usable on its own). `image` derives from it; its public interface is unchanged.
 
 ### Fixed
+- **Sanitizer findings in the resize engine** (vendored `stb_image_resize2` code): the encoders stored a packed `int` through an
+  `int*` into a byte buffer that is not 4-byte aligned (`coders.inl`), the scalar `STBIR_MOVE_1/2/4` copies did the same with
+  `uint32`/`uint64` (`coefficients.hpp`), and the SSE2 half-register macros went through `double*` (`simd_vec.hpp`). They are
+  `memcpy` of 4, 8 or 16 bytes (one move instruction after optimisation) and `_mm_loadh_pi` / `_mm_storeh_pi`; the pixels are
+  the same. The whole C++ suite now runs clean under AddressSanitizer + UBSan. Also the Debug-build warning `ring_buffer_size set
+  but not used` (`sampler.hpp`): the variable exists only in the layout that uses it.
 - `color::try_parse` / `from_string`: `hsl()` and `hsla()` are converted in float32, as browsers do, so a value that is a
   .5 tie in exact arithmetic rounds the way Chromium paints it (`hsl(90, 100%, 76.2745098039%)` is now R=195, not 194).
 
