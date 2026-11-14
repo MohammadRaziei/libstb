@@ -5,6 +5,7 @@
 #include <cctype>
 #include <climits>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <vector>

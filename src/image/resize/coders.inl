@@ -188,7 +188,7 @@ static void STBIR__CODER_NAME( stbir__encode_uint8_linear_scaled )( void * outpu
     stbir__simdf_madd( e0, STBIR__CONSTF(STBIR_simd_point5), STBIR__CONSTF(STBIR_max_uint8_as_float), e0 );
     stbir__encode_simdf4_unflip( e0 );
     stbir__simdf_pack_to_8bytes( i0, e0, e0 );  // only use first 4
-    *(int*)(output-4) = stbir__simdi_to_int( i0 );
+    { const int packed = stbir__simdi_to_int( i0 ); std::memcpy( output-4, &packed, 4 ); }  // output is not 4-byte aligned: no int* store
     output += 4;
     encode += 4;
   }
@@ -400,7 +400,7 @@ static void STBIR__CODER_NAME( stbir__encode_uint8_linear )( void * outputp, int
     stbir__simdf_add( e0, STBIR__CONSTF(STBIR_simd_point5), e0 );
     stbir__encode_simdf4_unflip( e0 );
     stbir__simdf_pack_to_8bytes( i0, e0, e0 );  // only use first 4
-    *(int*)(output-4) = stbir__simdi_to_int( i0 );
+    { const int packed = stbir__simdi_to_int( i0 ); std::memcpy( output-4, &packed, 4 ); }  // output is not 4-byte aligned: no int* store
     output += 4;
     encode += 4;
   }

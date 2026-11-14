@@ -165,7 +165,7 @@
   #define stbir__simdf_load1frep4( out, fvar ) (out) = _mm_set_ps1( fvar )
   #define stbir__simdf_load2( out, ptr ) (out) = _mm_castsi128_ps( _mm_loadl_epi64( (__m128i*)(ptr)) ) // top values can be random (not denormal or nan for perf)
   #define stbir__simdf_load2z( out, ptr ) (out) = _mm_castsi128_ps( _mm_loadl_epi64( (__m128i*)(ptr)) ) // top values must be zero
-  #define stbir__simdf_load2hmerge( out, reg, ptr ) (out) = _mm_castpd_ps(_mm_loadh_pd( _mm_castps_pd(reg), (double*)(ptr) ))
+  #define stbir__simdf_load2hmerge( out, reg, ptr ) (out) = _mm_loadh_pi( (reg), (const __m64*)(ptr) )
 
   #define stbir__simdf_zeroP() _mm_setzero_ps()
   #define stbir__simdf_zero( reg ) (reg) = _mm_setzero_ps()
@@ -173,7 +173,7 @@
   #define stbir__simdf_store( ptr, reg )  _mm_storeu_ps( (float*)(ptr), reg )
   #define stbir__simdf_store1( ptr, reg ) _mm_store_ss( (float*)(ptr), reg )
   #define stbir__simdf_store2( ptr, reg ) _mm_storel_epi64( (__m128i*)(ptr), _mm_castps_si128(reg) )
-  #define stbir__simdf_store2h( ptr, reg ) _mm_storeh_pd( (double*)(ptr), _mm_castps_pd(reg) )
+  #define stbir__simdf_store2h( ptr, reg ) _mm_storeh_pi( (__m64*)(ptr), (reg) )
 
   #define stbir__simdi_store( ptr, reg )  _mm_storeu_si128( (__m128i*)(ptr), reg )
   #define stbir__simdi_store1( ptr, reg ) _mm_store_ss( (float*)(ptr), _mm_castsi128_ps(reg) )
