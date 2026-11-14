@@ -452,42 +452,6 @@ void remap_from_histogram(mat<T>& img, tone_mode mode, MakeMap&& make_map) {
     kernel::apply(img, p, maps);
 }
 
-template <class T>
-void equalize_impl(mat<T>& img, tone_mode mode) {
-    remap_from_histogram(img, mode, [](std::size_t, const auto& s) { return tone_kernel<T>::equalize(s); });
-}
-
-template <class T>
-void auto_contrast_impl(mat<T>& img, float cutoff_percent, tone_mode mode) {
-    check_cutoff(cutoff_percent);
-    remap_from_histogram(img, mode, [&](std::size_t, const auto& s) { return tone_kernel<T>::auto_contrast(s, cutoff_percent); });
-}
-
-template <class T>
-void match_histogram_impl(mat<T>& img, const mat<T>& reference, tone_mode mode) {
-    using kernel = tone_kernel<T>;
-    if (reference.empty()) throw std::invalid_argument("the reference is empty");
-    if (img.empty()) return;
-    if (reference.channels() != img.channels())
-        throw std::invalid_argument("the reference must have the same number of channels as the image");
-    const plan p = make_plan(img.channels(), mode);
-    const std::vector<typename kernel::stats> refs = kernel::analyse(reference, p);
-    kernel::check_reference(refs);
-    remap_from_histogram(img, mode, [&](std::size_t i, const auto& s) { return kernel::match(s, refs[i]); });
-}
-
-template <class T>
-void gamma_impl(mat<T>& img, float g) {
-    check_gamma(g);
-    tone_kernel<T>::gamma(img, g);
-}
-
-template <class T>
-void levels_impl(mat<T>& img, float in_black, float in_white, float g, float out_black, float out_white) {
-    check_levels(in_black, in_white, g, out_black, out_white);
-    tone_kernel<T>::levels(img, in_black, in_white, g, out_black, out_white);
-}
-
 }  // namespace
 
 // ============================================================================================ histograms
@@ -557,29 +521,56 @@ image8u apply_lut(const mat8u& src, const mat8u& lut) {
     return out;
 }
 
-// ============================================================================================ cores
+// ============================================================================================ adjustments
 
-namespace detail {
-
-// The overloads the templates of tone.hpp call: the pipeline above, for each element type that is supported.
-void equalize_core(mat8u& img, tone_mode mode) { equalize_impl(img, mode); }
-void equalize_core(mat32f& img, tone_mode mode) { equalize_impl(img, mode); }
-
-void auto_contrast_core(mat8u& img, float cutoff_percent, tone_mode mode) { auto_contrast_impl(img, cutoff_percent, mode); }
-void auto_contrast_core(mat32f& img, float cutoff_percent, tone_mode mode) { auto_contrast_impl(img, cutoff_percent, mode); }
-
-void match_histogram_core(mat8u& img, const mat8u& reference, tone_mode mode) { match_histogram_impl(img, reference, mode); }
-void match_histogram_core(mat32f& img, const mat32f& reference, tone_mode mode) { match_histogram_impl(img, reference, mode); }
-
-void gamma_core(mat8u& img, float g) { gamma_impl(img, g); }
-void gamma_core(mat32f& img, float g) { gamma_impl(img, g); }
-
-void levels_core(mat8u& img, float in_black, float in_white, float g, float out_black, float out_white) {
-    levels_impl(img, in_black, in_white, g, out_black, out_white);
-}
-void levels_core(mat32f& img, float in_black, float in_white, float g, float out_black, float out_white) {
-    levels_impl(img, in_black, in_white, g, out_black, out_white);
+template <class T>
+traits::if_image_t<mat<T>, void> equalize_inplace(mat<T>& img, tone_mode mode) {
+    remap_from_histogram(img, mode, [](std::size_t, const auto& s) { return tone_kernel<T>::equalize(s); });
 }
 
-}  // namespace detail
+template <class T>
+traits::if_image_t<mat<T>, void> auto_contrast_inplace(mat<T>& img, float cutoff_percent, tone_mode mode) {
+    check_cutoff(cutoff_percent);
+    remap_from_histogram(img, mode, [&](std::size_t, const auto& s) { return tone_kernel<T>::auto_contrast(s, cutoff_percent); });
+}
+
+template <class T>
+traits::if_image_t<mat<T>, void> match_histogram_inplace(mat<T>& img, const mat<T>& reference, tone_mode mode) {
+    using kernel = tone_kernel<T>;
+    if (reference.empty()) throw std::invalid_argument("the reference is empty");
+    if (img.empty()) return;
+    if (reference.channels() != img.channels())
+        throw std::invalid_argument("the reference must have the same number of channels as the image");
+    const plan p = make_plan(img.channels(), mode);
+    const std::vector<typename kernel::stats> refs = kernel::analyse(reference, p);
+    kernel::check_reference(refs);
+    remap_from_histogram(img, mode, [&](std::size_t i, const auto& s) { return kernel::match(s, refs[i]); });
+}
+
+template <class T>
+traits::if_image_t<mat<T>, void> gamma_inplace(mat<T>& img, float g) {
+    check_gamma(g);
+    tone_kernel<T>::gamma(img, g);
+}
+
+template <class T>
+traits::if_image_t<mat<T>, void> levels_inplace(mat<T>& img, float in_black, float in_white, float g, float out_black,
+                                                float out_white) {
+    check_levels(in_black, in_white, g, out_black, out_white);
+    tone_kernel<T>::levels(img, in_black, in_white, g, out_black, out_white);
+}
+
+// The element types libstb is built for (tone_kernel<T> is defined for these two). The templates are declared in
+// stb/tone.hpp without a body, so these lines are what the rest of the program links to.
+template void equalize_inplace<std::uint8_t>(mat<std::uint8_t>&, tone_mode);
+template void equalize_inplace<float>(mat<float>&, tone_mode);
+template void auto_contrast_inplace<std::uint8_t>(mat<std::uint8_t>&, float, tone_mode);
+template void auto_contrast_inplace<float>(mat<float>&, float, tone_mode);
+template void match_histogram_inplace<std::uint8_t>(mat<std::uint8_t>&, const mat<std::uint8_t>&, tone_mode);
+template void match_histogram_inplace<float>(mat<float>&, const mat<float>&, tone_mode);
+template void gamma_inplace<std::uint8_t>(mat<std::uint8_t>&, float);
+template void gamma_inplace<float>(mat<float>&, float);
+template void levels_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, float, float);
+template void levels_inplace<float>(mat<float>&, float, float, float, float, float);
+
 }  // namespace stb

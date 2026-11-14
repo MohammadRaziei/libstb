@@ -79,6 +79,15 @@ static_assert(std::is_same_v<decltype(stb::equalize(std::declval<image8u>())), i
 static_assert(std::is_same_v<decltype(stb::gamma(std::declval<mat32f>(), 2.0f)), mat32f>);
 static_assert(std::is_same_v<decltype(stb::equalize_inplace(std::declval<image8u&>())), void>);
 
+// The *_inplace functions are built for mat8u (so image8u) and mat32f only, and never for a const.
+template <class M, class = void>
+struct can_equalize_inplace : std::false_type {};
+template <class M>
+struct can_equalize_inplace<M, std::void_t<decltype(stb::equalize_inplace(std::declval<M&>()))>> : std::true_type {};
+static_assert(can_equalize_inplace<mat8u>::value && can_equalize_inplace<image8u>::value && can_equalize_inplace<mat32f>::value);
+static_assert(!can_equalize_inplace<mat32i>::value && !can_equalize_inplace<const mat8u>::value &&
+              !can_equalize_inplace<const image8u>::value && !can_equalize_inplace<int>::value);
+
 }  // namespace
 
 // ----------------------------------------------------------------------------------------------- histogram

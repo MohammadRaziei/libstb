@@ -77,28 +77,17 @@ STB_API mat8u levels_lut(float in_black, float in_white, float g = 1.0f, float o
 STB_API image8u apply_lut(const mat8u& src, const mat8u& lut);
 
 // ------------------------------------------------------------------------------------------- adjustments
-namespace detail {
-// The work, on the mat itself. Defined in src/image/tone.cpp; the templates below are thin wrappers.
-STB_API void equalize_core(mat8u& img, tone_mode mode);
-STB_API void equalize_core(mat32f& img, tone_mode mode);
-STB_API void auto_contrast_core(mat8u& img, float cutoff_percent, tone_mode mode);
-STB_API void auto_contrast_core(mat32f& img, float cutoff_percent, tone_mode mode);
-STB_API void match_histogram_core(mat8u& img, const mat8u& reference, tone_mode mode);
-STB_API void match_histogram_core(mat32f& img, const mat32f& reference, tone_mode mode);
-STB_API void gamma_core(mat8u& img, float g);
-STB_API void gamma_core(mat32f& img, float g);
-STB_API void levels_core(mat8u& img, float in_black, float in_white, float g, float out_black, float out_white);
-STB_API void levels_core(mat32f& img, float in_black, float in_white, float g, float out_black, float out_white);
-}  // namespace detail
+//
+// The work is done by the *_inplace functions, which are templates on the element type that libstb has built for
+// std::uint8_t and for float only (an image8u is a mat<std::uint8_t>, so it goes to the first; a mat of any other
+// element type does not compile). The forms that return an image are thin wrappers over them.
 
 // ---- equalize: the levels are spread so that each one is used about as often (the cumulative histogram becomes
 // a straight line). A picture whose values are all equal is returned unchanged. On floats the histogram has 256
 // bins and the mapping is the cumulative histogram, interpolated between the bin edges.
-template <class M>
-traits::if_image_t<M, void> equalize_inplace(M& img, tone_mode mode = tone_mode::luma) {
-    static_assert(!std::is_const_v<M>, "equalize_inplace changes its argument");
-    detail::equalize_core(img, mode);
-}
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> equalize_inplace(mat<T>& img, tone_mode mode = tone_mode::luma);
+
 template <class M>
 traits::if_image_rvalue_t<M> equalize(M&& img, tone_mode mode = tone_mode::luma) {
     equalize_inplace(img, mode);
@@ -111,14 +100,13 @@ traits::if_image_t<M> equalize(const M& src, tone_mode mode = tone_mode::luma) {
 
 // ---- auto_contrast: the darkest and the brightest `cutoff_percent` percent of the values are dropped (they
 // become 0 and full intensity), and what is left is stretched linearly over the whole range, as Pillow's
-// ImageOps.autocontrast does. 0 stretches from the smallest to the largest value. Throws invalid_argument
-// unless 0 <= cutoff_percent < 50. A picture that has a single value left is returned unchanged.
-template <class M>
-traits::if_image_t<M, void> auto_contrast_inplace(M& img, float cutoff_percent = 0.0f,
-                                                  tone_mode mode = tone_mode::luma) {
-    static_assert(!std::is_const_v<M>, "auto_contrast_inplace changes its argument");
-    detail::auto_contrast_core(img, cutoff_percent, mode);
-}
+// ImageOps.autocontrast does (within one level on 8 bits). 0 stretches from the smallest to the largest value.
+// Throws invalid_argument unless 0 <= cutoff_percent < 50. A picture that has a single value left is returned
+// unchanged.
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> auto_contrast_inplace(mat<T>& img, float cutoff_percent = 0.0f,
+                                                               tone_mode mode = tone_mode::luma);
+
 template <class M>
 traits::if_image_rvalue_t<M> auto_contrast(M&& img, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
     auto_contrast_inplace(img, cutoff_percent, mode);
@@ -132,12 +120,10 @@ traits::if_image_t<M> auto_contrast(const M& src, float cutoff_percent = 0.0f, t
 // ---- match_histogram: the levels are moved so that the histogram of the result follows the one of `reference`
 // (its size does not matter, its element type and number of channels must be those of the image). The
 // reference is not changed. Throws invalid_argument for an empty reference or another number of channels.
-template <class M>
-traits::if_image_t<M, void> match_histogram_inplace(M& img, const mat<traits::mat_value_t<M>>& reference,
-                                                    tone_mode mode = tone_mode::luma) {
-    static_assert(!std::is_const_v<M>, "match_histogram_inplace changes its argument");
-    detail::match_histogram_core(img, reference, mode);
-}
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> match_histogram_inplace(mat<T>& img, const mat<T>& reference,
+                                                                 tone_mode mode = tone_mode::luma);
+
 template <class M>
 traits::if_image_rvalue_t<M> match_histogram(M&& img, const mat<traits::mat_value_t<M>>& reference,
                                              tone_mode mode = tone_mode::luma) {
@@ -152,11 +138,9 @@ traits::if_image_t<M> match_histogram(const M& src, const mat<traits::mat_value_
 
 // ---- gamma: every colour channel c becomes c ^ (1 / g) (0 to 1): g above 1 brightens, below 1 darkens. Alpha is
 // kept. Throws invalid_argument unless g is a positive finite number.
-template <class M>
-traits::if_image_t<M, void> gamma_inplace(M& img, float g) {
-    static_assert(!std::is_const_v<M>, "gamma_inplace changes its argument");
-    detail::gamma_core(img, g);
-}
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> gamma_inplace(mat<T>& img, float g);
+
 template <class M>
 traits::if_image_rvalue_t<M> gamma(M&& img, float g) {
     gamma_inplace(img, g);
@@ -169,21 +153,19 @@ traits::if_image_t<M> gamma(const M& src, float g) {
 
 // ---- levels: the input range [in_black, in_white] of every colour channel is stretched to [0, 1], raised to
 // 1 / g and mapped to [out_black, out_white] (see levels_lut for the rules). Alpha is kept.
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> levels_inplace(mat<T>& img, float in_black, float in_white, float g = 1.0f,
+                                                        float out_black = 0.0f, float out_white = 1.0f);
+
 template <class M>
-traits::if_image_t<M, void> levels_inplace(M& img, float in_black, float in_white, float g = 1.0f,
-                                           float out_black = 0.0f, float out_white = 1.0f) {
-    static_assert(!std::is_const_v<M>, "levels_inplace changes its argument");
-    detail::levels_core(img, in_black, in_white, g, out_black, out_white);
-}
-template <class M>
-traits::if_image_rvalue_t<M> levels(M&& img, float in_black, float in_white, float g = 1.0f,
-                                    float out_black = 0.0f, float out_white = 1.0f) {
+traits::if_image_rvalue_t<M> levels(M&& img, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
+                                    float out_white = 1.0f) {
     levels_inplace(img, in_black, in_white, g, out_black, out_white);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> levels(const M& src, float in_black, float in_white, float g = 1.0f,
-                             float out_black = 0.0f, float out_white = 1.0f) {
+traits::if_image_t<M> levels(const M& src, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
+                             float out_white = 1.0f) {
     return levels(src.copy(), in_black, in_white, g, out_black, out_white);
 }
 
