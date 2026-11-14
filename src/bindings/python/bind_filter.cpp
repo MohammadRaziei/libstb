@@ -14,7 +14,8 @@
 #include "binding.hpp"
 #include "stb.h"
 
-// Filters (gaussian_blur, box_blur, convolve, sobel), the 8-bit <-> float conversions and superpixels.
+// Filters (gaussian_blur, box_blur, convolve, sobel), the tone functions (histogram, equalize, gamma, ...), the 8-bit <-> float
+// conversions and superpixels.
 // Every filter takes an Image (8 bits) or a float32 numpy array of shape (H, W) or (H, W, C), and returns
 // the same kind; they are module functions and, for the Image, methods too.
 
@@ -145,6 +146,272 @@ nb::object labels_view(nb::handle self) {
 constexpr const char* edge_doc =
     "`edge` says what lies outside the picture: \"clamp\" (the default: the nearest edge value repeats), \"reflect\",\n"
     "\"mirror\", \"wrap\" or \"zero\" (or an EdgeMode).";
+
+// ---- tone (stb/tone.hpp): histogram, equalize, auto_contrast, match_histogram, gamma, levels and look-up tables
+
+stb::tone_mode tone_mode_of(nb::handle h) {
+    using stb::tone_mode;
+    return to_enum<tone_mode>(h, {{"luma", tone_mode::luma}, {"per_channel", tone_mode::per_channel}}, "mode");
+}
+
+using lut_array = nb::ndarray<const std::uint8_t, nb::c_contig, nb::device::cpu>;
+using i32_result = nb::ndarray<nb::numpy, std::int32_t>;
+using u8_result = nb::ndarray<nb::numpy, std::uint8_t>;
+
+// A histogram as an int32 array of shape (channels, bins).
+i32_result histogram_array(const stb::mat32i& h) {
+    if (h.empty()) throw std::invalid_argument("the image is empty");
+    const std::size_t c = std::size_t(h.channels()), bins = std::size_t(h.width());
+    auto* owned = new std::vector<std::int32_t>(c * bins);
+    for (std::size_t k = 0; k < c; ++k)
+        for (std::size_t b = 0; b < bins; ++b) (*owned)[k * bins + b] = h.data()[b * c + k];
+    nb::capsule owner(owned, [](void* p) noexcept { delete static_cast<std::vector<std::int32_t>*>(p); });
+    const std::size_t shape[2] = {c, bins};
+    return i32_result(owned->data(), 2, shape, owner);
+}
+
+// A 256 x 1 x C table as a uint8 array of shape (256,) (one channel) or (256, C).
+u8_result lut_to_array(const stb::mat8u& t) {
+    const std::size_t c = std::size_t(t.channels());
+    auto* owned = new std::vector<std::uint8_t>(t.begin(), t.end());
+    nb::capsule owner(owned, [](void* p) noexcept { delete static_cast<std::vector<std::uint8_t>*>(p); });
+    const std::size_t shape[2] = {256, c};
+    return u8_result(owned->data(), c == 1 ? 1 : 2, shape, owner);
+}
+
+stb::mat8u lut_of(const lut_array& a) {
+    if ((a.ndim() != 1 && a.ndim() != 2) || a.shape(0) != 256 || (a.ndim() == 2 && a.shape(1) == 0))
+        throw std::invalid_argument("a look-up table is an array of shape (256,) or (256, channels)");
+    const std::size_t c = a.ndim() == 2 ? a.shape(1) : 1;
+    return stb::mat8u(256, 1, int(c), std::vector<std::uint8_t>(a.data(), a.data() + 256 * c));
+}
+
+// The Image form of a method: a new Image, or with inplace=True the same object, changed.
+template <class CopyFn, class InplaceFn>
+nb::object image_form(nb::handle self, bool inplace, CopyFn&& copy_fn, InplaceFn&& inplace_fn) {
+    stb::image& img = nb::cast<stb::image&>(self);
+    if (inplace) {
+        {
+            nb::gil_scoped_release release;
+            inplace_fn(img);
+        }
+        return nb::borrow(self);
+    }
+    stb::image out;
+    {
+        nb::gil_scoped_release release;
+        out = copy_fn(static_cast<const stb::image&>(img));
+    }
+    return nb::cast(std::move(out));
+}
+
+constexpr const char* tone_doc =
+    "Takes an Image (gives a new Image) or a float32 array of shape (H, W) or (H, W, C) with values 0 to 1 (gives a new\n"
+    "array). 1 to 4 channels: gray, gray + alpha, RGB, RGBA; the alpha channel is never changed.";
+constexpr const char* mode_doc =
+    "`mode` is \"luma\" (the default: only the brightness changes, so the colours do not shift) or \"per_channel\"\n"
+    "(or a ToneMode).";
+
+void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
+    nb::enum_<stb::tone_mode>(m, "ToneMode",
+                              "What equalize, auto_contrast and match_histogram look at. Functions that take a ToneMode also take\n"
+                              "its lower-case name: \"luma\" (the default) or \"per_channel\".")
+        .value("LUMA", stb::tone_mode::luma)
+        .value("PER_CHANNEL", stb::tone_mode::per_channel);
+
+    // ---- histogram
+    const auto histogram8 = [](const stb::image& img) {
+        stb::mat32i h;
+        {
+            nb::gil_scoped_release release;
+            h = stb::histogram(img);
+        }
+        return histogram_array(h);
+    };
+    const char* histogram_doc =
+        "How many pixels have each value, as an int32 array of shape (channels, 256): row k is channel k (alpha included).\n"
+        "For a float32 array: `bins` equal bins over [0, 1] (values outside are counted in the first or last bin, NaN not\n"
+        "at all) and shape (channels, bins).";
+    m.def("histogram", histogram8, "src"_a, histogram_doc);
+    m.def(
+        "histogram",
+        [](const f32_array& src, int bins) {
+            const stb::mat32f in = view_of(src);
+            stb::mat32i h;
+            {
+                nb::gil_scoped_release release;
+                h = stb::histogram(in, bins);
+            }
+            return histogram_array(h);
+        },
+        "src"_a, "bins"_a = 256);
+    image_cls.def("histogram", histogram8, "How many pixels have each value, as an int32 array of shape (channels, 256).");
+
+    // ---- equalize
+    const std::string equalize_doc =
+        std::string("Spreads the levels so that each one is used about as often (histogram equalisation). A picture of one value\n"
+                    "is returned unchanged.\n") + tone_doc + "\n" + mode_doc;
+    m.def(
+        "equalize",
+        [](const stb::image& img, nb::handle mode) -> stb::image {
+            const stb::tone_mode t = tone_mode_of(mode);
+            nb::gil_scoped_release release;
+            return stb::equalize(img, t);
+        },
+        "src"_a, "mode"_a = "luma", equalize_doc.c_str());
+    m.def(
+        "equalize",
+        [](const f32_array& src, nb::handle mode) -> f32_result {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::equalize(in, t); });
+        },
+        "src"_a, "mode"_a = "luma");
+    image_cls.def(
+        "equalize",
+        [](nb::handle self, nb::handle mode, bool inplace) {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::equalize(i, t); },
+                [&](stb::image& i) { stb::equalize_inplace(i, t); });
+        },
+        "mode"_a = "luma", nb::kw_only(), "inplace"_a = false,
+        "Equalizes the histogram: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- auto_contrast
+    const std::string auto_doc =
+        std::string("Stretches the values to the whole range after dropping the darkest and brightest `cutoff` percent (0 up to\n"
+                    "but not including 50), like Pillow's ImageOps.autocontrast.\n") + tone_doc + "\n" + mode_doc;
+    m.def(
+        "auto_contrast",
+        [](const stb::image& img, float cutoff, nb::handle mode) -> stb::image {
+            const stb::tone_mode t = tone_mode_of(mode);
+            nb::gil_scoped_release release;
+            return stb::auto_contrast(img, cutoff, t);
+        },
+        "src"_a, "cutoff"_a = 0.0f, "mode"_a = "luma", auto_doc.c_str());
+    m.def(
+        "auto_contrast",
+        [](const f32_array& src, float cutoff, nb::handle mode) -> f32_result {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::auto_contrast(in, cutoff, t); });
+        },
+        "src"_a, "cutoff"_a = 0.0f, "mode"_a = "luma");
+    image_cls.def(
+        "auto_contrast",
+        [](nb::handle self, float cutoff, nb::handle mode, bool inplace) {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::auto_contrast(i, cutoff, t); },
+                [&](stb::image& i) { stb::auto_contrast_inplace(i, cutoff, t); });
+        },
+        "cutoff"_a = 0.0f, "mode"_a = "luma", nb::kw_only(), "inplace"_a = false,
+        "Stretches the contrast: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- match_histogram
+    const std::string match_doc =
+        std::string("Moves the levels so that the histogram follows the one of `reference` (an Image, or a float32 array for a\n"
+                    "float32 `src`; any size, the same number of channels).\n") + tone_doc + "\n" + mode_doc;
+    m.def(
+        "match_histogram",
+        [](const stb::image& img, const stb::image& reference, nb::handle mode) -> stb::image {
+            const stb::tone_mode t = tone_mode_of(mode);
+            nb::gil_scoped_release release;
+            return stb::match_histogram(img, reference, t);
+        },
+        "src"_a, "reference"_a, "mode"_a = "luma", match_doc.c_str());
+    m.def(
+        "match_histogram",
+        [](const f32_array& src, const f32_array& reference, nb::handle mode) -> f32_result {
+            const stb::tone_mode t = tone_mode_of(mode);
+            const stb::mat32f ref = view_of(reference);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::match_histogram(in, ref, t); });
+        },
+        "src"_a, "reference"_a, "mode"_a = "luma");
+    image_cls.def(
+        "match_histogram",
+        [](nb::handle self, const stb::image& reference, nb::handle mode, bool inplace) {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::match_histogram(i, reference, t); },
+                [&](stb::image& i) { stb::match_histogram_inplace(i, reference, t); });
+        },
+        "reference"_a, "mode"_a = "luma", nb::kw_only(), "inplace"_a = false,
+        "Matches the histogram of `reference`: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- gamma
+    const std::string gamma_doc =
+        std::string("Every colour channel c becomes c ** (1 / g): g above 1 brightens, below 1 darkens. g must be a positive\n"
+                    "finite number.\n") + tone_doc;
+    m.def(
+        "gamma",
+        [](const stb::image& img, float g) -> stb::image {
+            nb::gil_scoped_release release;
+            return stb::gamma(img, g);
+        },
+        "src"_a, "g"_a, gamma_doc.c_str());
+    m.def(
+        "gamma", [](const f32_array& src, float g) -> f32_result {
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::gamma(in, g); });
+        },
+        "src"_a, "g"_a);
+    image_cls.def(
+        "gamma",
+        [](nb::handle self, float g, bool inplace) {
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::gamma(i, g); },
+                [&](stb::image& i) { stb::gamma_inplace(i, g); });
+        },
+        "g"_a, nb::kw_only(), "inplace"_a = false,
+        "Gamma correction: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- levels
+    const std::string levels_doc =
+        std::string("The levels adjustment of an image editor: [in_black, in_white] is stretched to 0..1, raised to 1 / gamma and\n"
+                    "mapped to [out_black, out_white]. All levels are fractions of the full range, 0 <= in_black < in_white <= 1.\n") +
+        tone_doc;
+    m.def(
+        "levels",
+        [](const stb::image& img, float in_black, float in_white, float g, float out_black, float out_white) -> stb::image {
+            nb::gil_scoped_release release;
+            return stb::levels(img, in_black, in_white, g, out_black, out_white);
+        },
+        "src"_a, "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f, levels_doc.c_str());
+    m.def(
+        "levels",
+        [](const f32_array& src, float in_black, float in_white, float g, float out_black, float out_white) -> f32_result {
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::levels(in, in_black, in_white, g, out_black, out_white); });
+        },
+        "src"_a, "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f);
+    image_cls.def(
+        "levels",
+        [](nb::handle self, float in_black, float in_white, float g, float out_black, float out_white, bool inplace) {
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::levels(i, in_black, in_white, g, out_black, out_white); },
+                [&](stb::image& i) { stb::levels_inplace(i, in_black, in_white, g, out_black, out_white); });
+        },
+        "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f, nb::kw_only(), "inplace"_a = false,
+        "The levels adjustment: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- look-up tables
+    m.def("gamma_lut", [](float g) { return lut_to_array(stb::gamma_lut(g)); }, "g"_a,
+          "The look-up table of gamma(): a uint8 array of shape (256,).");
+    m.def(
+        "levels_lut",
+        [](float in_black, float in_white, float g, float out_black, float out_white) {
+            return lut_to_array(stb::levels_lut(in_black, in_white, g, out_black, out_white));
+        },
+        "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f,
+        "The look-up table of levels(): a uint8 array of shape (256,).");
+    const auto apply_lut = [](const stb::image& img, const lut_array& lut) -> stb::image {
+        const stb::mat8u table = lut_of(lut);
+        nb::gil_scoped_release release;
+        return stb::apply_lut(img, table);
+    };
+    m.def("apply_lut", apply_lut, "src"_a, "lut"_a,
+          "An Image with every value v replaced by lut[v]. `lut` is a uint8 array of shape (256,) (one table for every channel,\n"
+          "alpha included) or (256, channels) (one table per channel).");
+    image_cls.def("apply_lut", apply_lut, "lut"_a, "A new Image with every value v replaced by lut[v] (see libstb.apply_lut).");
+}
 
 }  // namespace
 
@@ -432,4 +699,6 @@ void bind_filter(nb::module_& m) {
           "enforce_connectivity"_a = true, sp_doc);
     image_cls.def("superpixels", make, "count"_a = 400, "compactness"_a = 10.0f, "iterations"_a = 10, "method"_a = "slico",
                   "enforce_connectivity"_a = true, sp_doc);
+
+    bind_tone(m, image_cls);
 }
