@@ -215,17 +215,6 @@ void apply_plan8(mat8u& img, const plan& p, const std::vector<lut8>& luts) {
     });
 }
 
-template <class Make>
-void run8(mat8u& img, tone_mode mode, Make&& make) {
-    if (img.empty()) return;
-    const plan p = make_plan(img.channels(), mode);
-    const std::vector<hist8> hs = histograms8(img, p);
-    std::vector<lut8> luts;
-    luts.reserve(hs.size());
-    for (std::size_t i = 0; i < hs.size(); ++i) luts.push_back(make(i, hs[i]));
-    apply_plan8(img, p, luts);
-}
-
 // ------------------------------------------------------------------------------------- float mappings
 
 constexpr int fbins = 256;
@@ -362,24 +351,6 @@ void apply_plan_f(mat32f& img, const plan& p, const std::vector<fmap>& maps) {
     });
 }
 
-template <class Make>
-void run_f(mat32f& img, tone_mode mode, Make&& make) {
-    if (img.empty()) return;
-    const plan p = make_plan(img.channels(), mode);
-    const std::vector<fstats> st = stats_f(img, p);
-    std::vector<fmap> maps;
-    maps.reserve(st.size());
-    for (std::size_t i = 0; i < st.size(); ++i) maps.push_back(make(i, st[i]));
-    apply_plan_f(img, p, maps);
-}
-
-void check_reference(bool empty, int ref_channels, const mat<std::uint8_t>* img8, const mat<float>* imgf) {
-    if (empty) throw std::invalid_argument("the reference is empty");
-    const int c = img8 ? img8->channels() : imgf->channels();
-    if (c != 0 && c != ref_channels)
-        throw std::invalid_argument("the reference must have the same number of channels as the image");
-}
-
 void check_cutoff(float cutoff_percent) {
     if (!(cutoff_percent >= 0.0f && cutoff_percent < 50.0f))
         throw std::invalid_argument("cutoff_percent must be at least 0 and below 50");
@@ -399,6 +370,122 @@ void map_colour_values(mat32f& img, F&& f) {
                     if (!is_nan(s[k])) s[k] = f(clamp01(s[k]));
         }
     });
+}
+
+// ------------------------------------------------------------------------------- one pipeline, two element types
+
+// What differs between 8 bits and floats: how the statistics of a plane are kept (a histogram of 256 levels, or a
+// histogram over [0, 1] with the smallest and the largest value), what a mapping is (a 256-entry table, or a line or a
+// table of knots to interpolate) and how it is applied. The pipeline below is written once over T; only the types
+// listed here are accepted (any other T does not compile: the primary template has no definition).
+template <class T>
+struct tone_kernel;
+
+template <>
+struct tone_kernel<std::uint8_t> {
+    using stats = hist8;
+    using map = lut8;
+
+    static std::vector<stats> analyse(const mat8u& m, const plan& p) { return histograms8(m, p); }
+    static void apply(mat8u& m, const plan& p, const std::vector<map>& maps) { apply_plan8(m, p, maps); }
+
+    static map equalize(const stats& s) { return equalize_lut(s); }
+    static map auto_contrast(const stats& s, float cutoff_percent) { return auto_contrast_lut(s, cutoff_percent); }
+    static map match(const stats& s, const stats& ref) { return match_lut(s, ref); }
+    static void check_reference(const std::vector<stats>&) {}  // a histogram of a non-empty image is never empty
+
+    static void gamma(mat8u& img, float g) {
+        if (img.empty()) return;
+        const plan p = make_plan(img.channels(), tone_mode::per_channel);
+        const lut8 t = gamma_table(g);
+        apply_tables(img, t.data(), 0, p.colour);
+    }
+    static void levels(mat8u& img, float in_black, float in_white, float g, float out_black, float out_white) {
+        if (img.empty()) return;
+        const plan p = make_plan(img.channels(), tone_mode::per_channel);
+        const lut8 t = levels_table(in_black, in_white, g, out_black, out_white);
+        apply_tables(img, t.data(), 0, p.colour);
+    }
+};
+
+template <>
+struct tone_kernel<float> {
+    using stats = fstats;
+    using map = fmap;
+
+    static std::vector<stats> analyse(const mat32f& m, const plan& p) { return stats_f(m, p); }
+    static void apply(mat32f& m, const plan& p, const std::vector<map>& maps) { apply_plan_f(m, p, maps); }
+
+    static map equalize(const stats& s) { return equalize_map(s); }
+    static map auto_contrast(const stats& s, float cutoff_percent) { return auto_contrast_map(s, cutoff_percent); }
+    static map match(const stats& s, const stats& ref) { return match_map(s, ref); }
+    static void check_reference(const std::vector<stats>& refs) {
+        for (const stats& r : refs)
+            if (r.n == 0) throw std::invalid_argument("the reference has no values (all NaN)");
+    }
+
+    static void gamma(mat32f& img, float g) {
+        const float inv = 1.0f / g;
+        map_colour_values(img, [inv](float v) { return inv == 1.0f ? v : std::pow(v, inv); });
+    }
+    static void levels(mat32f& img, float in_black, float in_white, float g, float out_black, float out_white) {
+        const float inv = 1.0f / g, span = in_white - in_black, out_span = out_white - out_black;
+        map_colour_values(img, [=](float v) {
+            float s = clamp01((v - in_black) / span);
+            if (inv != 1.0f) s = std::pow(s, inv);
+            return clamp01(out_black + s * out_span);
+        });
+    }
+};
+
+// The shape of equalize, auto_contrast and match_histogram: take the statistics of each plane of the image, make a
+// mapping out of each (`make_map(plane, stats)`: the one thing that differs between them), apply the mappings.
+template <class T, class MakeMap>
+void remap_from_histogram(mat<T>& img, tone_mode mode, MakeMap&& make_map) {
+    using kernel = tone_kernel<T>;
+    if (img.empty()) return;
+    const plan p = make_plan(img.channels(), mode);
+    const std::vector<typename kernel::stats> st = kernel::analyse(img, p);
+    std::vector<typename kernel::map> maps;
+    maps.reserve(st.size());
+    for (std::size_t i = 0; i < st.size(); ++i) maps.push_back(make_map(i, st[i]));
+    kernel::apply(img, p, maps);
+}
+
+template <class T>
+void equalize_impl(mat<T>& img, tone_mode mode) {
+    remap_from_histogram(img, mode, [](std::size_t, const auto& s) { return tone_kernel<T>::equalize(s); });
+}
+
+template <class T>
+void auto_contrast_impl(mat<T>& img, float cutoff_percent, tone_mode mode) {
+    check_cutoff(cutoff_percent);
+    remap_from_histogram(img, mode, [&](std::size_t, const auto& s) { return tone_kernel<T>::auto_contrast(s, cutoff_percent); });
+}
+
+template <class T>
+void match_histogram_impl(mat<T>& img, const mat<T>& reference, tone_mode mode) {
+    using kernel = tone_kernel<T>;
+    if (reference.empty()) throw std::invalid_argument("the reference is empty");
+    if (img.empty()) return;
+    if (reference.channels() != img.channels())
+        throw std::invalid_argument("the reference must have the same number of channels as the image");
+    const plan p = make_plan(img.channels(), mode);
+    const std::vector<typename kernel::stats> refs = kernel::analyse(reference, p);
+    kernel::check_reference(refs);
+    remap_from_histogram(img, mode, [&](std::size_t i, const auto& s) { return kernel::match(s, refs[i]); });
+}
+
+template <class T>
+void gamma_impl(mat<T>& img, float g) {
+    check_gamma(g);
+    tone_kernel<T>::gamma(img, g);
+}
+
+template <class T>
+void levels_impl(mat<T>& img, float in_black, float in_white, float g, float out_black, float out_white) {
+    check_levels(in_black, in_white, g, out_black, out_white);
+    tone_kernel<T>::levels(img, in_black, in_white, g, out_black, out_white);
 }
 
 }  // namespace
@@ -474,67 +561,24 @@ image8u apply_lut(const mat8u& src, const mat8u& lut) {
 
 namespace detail {
 
-void equalize_core(mat8u& img, tone_mode mode) {
-    run8(img, mode, [](std::size_t, const hist8& h) { return equalize_lut(h); });
-}
-void equalize_core(mat32f& img, tone_mode mode) {
-    run_f(img, mode, [](std::size_t, const fstats& s) { return equalize_map(s); });
-}
+// The overloads the templates of tone.hpp call: the pipeline above, for each element type that is supported.
+void equalize_core(mat8u& img, tone_mode mode) { equalize_impl(img, mode); }
+void equalize_core(mat32f& img, tone_mode mode) { equalize_impl(img, mode); }
 
-void auto_contrast_core(mat8u& img, float cutoff_percent, tone_mode mode) {
-    check_cutoff(cutoff_percent);
-    run8(img, mode, [&](std::size_t, const hist8& h) { return auto_contrast_lut(h, cutoff_percent); });
-}
-void auto_contrast_core(mat32f& img, float cutoff_percent, tone_mode mode) {
-    check_cutoff(cutoff_percent);
-    run_f(img, mode, [&](std::size_t, const fstats& s) { return auto_contrast_map(s, cutoff_percent); });
-}
+void auto_contrast_core(mat8u& img, float cutoff_percent, tone_mode mode) { auto_contrast_impl(img, cutoff_percent, mode); }
+void auto_contrast_core(mat32f& img, float cutoff_percent, tone_mode mode) { auto_contrast_impl(img, cutoff_percent, mode); }
 
-void match_histogram_core(mat8u& img, const mat8u& reference, tone_mode mode) {
-    check_reference(reference.empty(), reference.channels(), &img, nullptr);
-    if (img.empty()) return;
-    const plan p = make_plan(img.channels(), mode);
-    const std::vector<hist8> refs = histograms8(reference, p);
-    run8(img, mode, [&](std::size_t i, const hist8& h) { return match_lut(h, refs[i]); });
-}
-void match_histogram_core(mat32f& img, const mat32f& reference, tone_mode mode) {
-    check_reference(reference.empty(), reference.channels(), nullptr, &img);
-    if (img.empty()) return;
-    const plan p = make_plan(img.channels(), mode);
-    const std::vector<fstats> refs = stats_f(reference, p);
-    for (const fstats& r : refs)
-        if (r.n == 0) throw std::invalid_argument("the reference has no values (all NaN)");
-    run_f(img, mode, [&](std::size_t i, const fstats& s) { return match_map(s, refs[i]); });
-}
+void match_histogram_core(mat8u& img, const mat8u& reference, tone_mode mode) { match_histogram_impl(img, reference, mode); }
+void match_histogram_core(mat32f& img, const mat32f& reference, tone_mode mode) { match_histogram_impl(img, reference, mode); }
 
-void gamma_core(mat8u& img, float g) {
-    check_gamma(g);
-    if (img.empty()) return;
-    const plan p = make_plan(img.channels(), tone_mode::per_channel);
-    const lut8 t = gamma_table(g);
-    apply_tables(img, t.data(), 0, p.colour);
-}
-void gamma_core(mat32f& img, float g) {
-    check_gamma(g);
-    const float inv = 1.0f / g;
-    map_colour_values(img, [inv](float v) { return inv == 1.0f ? v : std::pow(v, inv); });
-}
+void gamma_core(mat8u& img, float g) { gamma_impl(img, g); }
+void gamma_core(mat32f& img, float g) { gamma_impl(img, g); }
 
 void levels_core(mat8u& img, float in_black, float in_white, float g, float out_black, float out_white) {
-    check_levels(in_black, in_white, g, out_black, out_white);
-    if (img.empty()) return;
-    const plan p = make_plan(img.channels(), tone_mode::per_channel);
-    const lut8 t = levels_table(in_black, in_white, g, out_black, out_white);
-    apply_tables(img, t.data(), 0, p.colour);
+    levels_impl(img, in_black, in_white, g, out_black, out_white);
 }
 void levels_core(mat32f& img, float in_black, float in_white, float g, float out_black, float out_white) {
-    check_levels(in_black, in_white, g, out_black, out_white);
-    const float inv = 1.0f / g, span = in_white - in_black, out_span = out_white - out_black;
-    map_colour_values(img, [=](float v) {
-        float s = clamp01((v - in_black) / span);
-        if (inv != 1.0f) s = std::pow(s, inv);
-        return clamp01(out_black + s * out_span);
-    });
+    levels_impl(img, in_black, in_white, g, out_black, out_white);
 }
 
 }  // namespace detail
