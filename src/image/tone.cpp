@@ -9,12 +9,12 @@
 #include <stdexcept>
 #include <vector>
 
-#include "util/parallel.hpp"
+#include "stb/parallel.hpp"
 
 namespace stb {
 namespace {
 
-using detail::parallel_for;
+using utils::parallel_for;
 
 // Floors of what one core does (ns) per value, so that a doubtful case stays on one thread (util/parallel.hpp).
 constexpr double table_ns = 0.4;  // one table look-up or one clamp-and-multiply, per value

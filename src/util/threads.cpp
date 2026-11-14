@@ -3,6 +3,7 @@
 #endif
 
 #include "stb/threads.hpp"
+#include "stb/parallel.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -121,6 +122,10 @@ void set_parallel_grain_ns(double ns) noexcept { g_grain_ns.store(ns > 0 ? ns : 
 unsigned long long parallel_runs() noexcept { return g_runs.load(std::memory_order_relaxed); }
 
 void note_parallel_run() noexcept { g_runs.fetch_add(1, std::memory_order_relaxed); }
+
+void warn_threads_unavailable(std::size_t missing, std::size_t total) {
+    loggers::threads().warning("could not start %zu of %zu thread(s); those pieces run on the calling thread", missing, total);
+}
 
 }  // namespace detail
 

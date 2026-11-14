@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "image/lab.hpp"
-#include "util/parallel.hpp"
+#include "stb/parallel.hpp"
 
 // SLIC / SLICO (Achanta et al., TPAMI 2012) and SNIC (Achanta and Susstrunk, CVPR 2017), written for libstb from
 // those papers; nothing is taken from any implementation of them. How it differs in shape from the textbook:
@@ -23,9 +23,9 @@
 namespace stb {
 namespace {
 
-using detail::parallel_for;
+using utils::parallel_for;
 
-// Floors of what one core does per pixel (ns), see util/parallel.hpp. Not measured yet.
+// Floors of what one core does per pixel (ns), see stb/parallel.hpp. Not measured yet.
 constexpr double lab_ns = 8.0;
 constexpr double assign_ns = 10.0;
 

@@ -8,16 +8,16 @@
 #include <vector>
 
 #include "image/math_kernels.hpp"
-#include "util/parallel.hpp"
+#include "stb/parallel.hpp"
 
 namespace stb {
 namespace {
 
 using detail::math;
 using detail::math_kernels;
-using detail::parallel_for;
+using utils::parallel_for;
 
-// Floors of what one core does (ns), so that a doubtful case stays on one thread, see util/parallel.hpp.
+// Floors of what one core does (ns), so that a doubtful case stays on one thread, see stb/parallel.hpp.
 // Not measured yet: they are low on purpose (a vectorised multiply-add is well below 0.1 ns per value).
 constexpr double tap_ns = 0.1;   // one multiply-add of a filter, per value
 constexpr double copy_ns = 0.3;  // moving or converting one value (padding a row, 8 bits <-> float)

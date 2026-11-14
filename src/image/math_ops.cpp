@@ -2,7 +2,7 @@
 
 #include "image/math_kernels.hpp"
 #include "stb/image.hpp"
-#include "util/parallel.hpp"
+#include "stb/parallel.hpp"
 
 // The instruction-set builds of the numeric kernels (math_kernels.hpp), the choice between them, and
 // the conversions between 8 bits and floats. Built with -ffp-contract=off (see CMakeLists.txt).
@@ -51,7 +51,7 @@ const math_kernels& avx2_kernels() noexcept {
 }
 #endif
 
-// Floors of what one core does per value (ns), so that a doubtful case stays on one thread, see util/parallel.hpp.
+// Floors of what one core does per value (ns), so that a doubtful case stays on one thread, see stb/parallel.hpp.
 constexpr double convert_ns = 0.15;
 
 }  // namespace
@@ -73,7 +73,7 @@ mat32f to_f32(const mat8u& src) {
     const std::uint8_t* s = src.data();
     float* d = out.data();
     const detail::math_kernels& k = detail::math();  // the calling thread's backend, for the workers too
-    detail::parallel_for(src.size(), detail::convert_ns,
+    utils::parallel_for(src.size(), detail::convert_ns,
                          [&](std::size_t b, std::size_t e) { k.u8_to_f32(s + b, d + b, e - b); });
     return out;
 }
@@ -84,7 +84,7 @@ image8u to_8u(const mat32f& src) {
     const float* s = src.data();
     std::uint8_t* d = out.data();
     const detail::math_kernels& k = detail::math();
-    detail::parallel_for(src.size(), detail::convert_ns,
+    utils::parallel_for(src.size(), detail::convert_ns,
                          [&](std::size_t b, std::size_t e) { k.f32_to_u8(s + b, d + b, e - b); });
     return out;
 }

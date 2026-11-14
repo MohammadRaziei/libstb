@@ -20,6 +20,7 @@
 #include "stb/logging.hpp"
 #include "stb/logging_os.hpp"
 #include "stb/threads.hpp"
+#include "stb/parallel.hpp"
 #include "stb/color.hpp"
 #include "stb/mat.hpp"
 #include "stb/image.hpp"

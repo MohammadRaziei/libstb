@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "test_common.hpp"
+#include "stb/parallel.hpp"
 #include "util/parallel.hpp"
 
 // stb::thread_count / set_threads / thread_scope, the internal helpers that decide whether a call
@@ -108,7 +109,7 @@ UTEST(libstb_threads_tests, test_small_work_gets_one_thread_and_big_work_as_many
     stb::set_threads(8);
     const double grain = stb::detail::parallel_grain_ns();
     ASSERT_TRUE(grain > 0);
-    using stb::detail::threads_for;
+    using stb::utils::threads_for;
     ASSERT_EQ(std::size_t(1), threads_for(0));
     ASSERT_EQ(std::size_t(1), threads_for(-5));
     ASSERT_EQ(std::size_t(1), threads_for(grain));            // one thread's worth
@@ -139,7 +140,7 @@ UTEST(libstb_threads_tests, test_the_grain_can_be_lowered_and_restored) {
 UTEST(libstb_threads_tests, test_run_parallel_runs_every_piece_once) {
     for (std::size_t k : {std::size_t(0), std::size_t(1), std::size_t(2), std::size_t(5), std::size_t(17)}) {
         std::vector<std::atomic<int>> runs(k + 1);
-        stb::detail::run_parallel(k, [&](std::size_t i) { runs[i].fetch_add(1); });
+        stb::utils::run_parallel(k, [&](std::size_t i) { runs[i].fetch_add(1); });
         for (std::size_t i = 0; i < k; ++i) ASSERT_EQ(1, runs[i].load());
         ASSERT_EQ(0, runs[k].load());  // nothing past the end
     }
@@ -148,7 +149,7 @@ UTEST(libstb_threads_tests, test_run_parallel_runs_every_piece_once) {
 UTEST(libstb_threads_tests, test_a_single_piece_runs_on_the_calling_thread_without_starting_anything) {
     const unsigned long long before = stb::detail::parallel_runs();
     std::thread::id where;
-    stb::detail::run_parallel(1, [&](std::size_t) { where = std::this_thread::get_id(); });
+    stb::utils::run_parallel(1, [&](std::size_t) { where = std::this_thread::get_id(); });
     ASSERT_TRUE(where == std::this_thread::get_id());
     ASSERT_EQ(before, stb::detail::parallel_runs());
 }
@@ -158,7 +159,7 @@ UTEST(libstb_threads_tests, test_several_pieces_run_on_more_than_one_thread) {
     std::set<std::thread::id> ids;
     std::atomic<int> arrived{0};
     std::vector<std::thread::id> by_piece(4);
-    stb::detail::run_parallel(4, [&](std::size_t i) {
+    stb::utils::run_parallel(4, [&](std::size_t i) {
         by_piece[i] = std::this_thread::get_id();
         arrived.fetch_add(1);
     });
@@ -173,7 +174,7 @@ UTEST(libstb_threads_tests, test_an_exception_is_rethrown_after_every_piece_fini
     std::atomic<int> finished{0};
     bool caught = false;
     try {
-        stb::detail::run_parallel(6, [&](std::size_t i) {
+        stb::utils::run_parallel(6, [&](std::size_t i) {
             if (i == 1 || i == 4) throw std::runtime_error("piece " + std::to_string(i));
             finished.fetch_add(1);
         });
@@ -187,7 +188,7 @@ UTEST(libstb_threads_tests, test_an_exception_is_rethrown_after_every_piece_fini
     // an exception from the calling thread's own piece is handled the same way
     caught = false;
     try {
-        stb::detail::run_parallel(3, [&](std::size_t i) {
+        stb::utils::run_parallel(3, [&](std::size_t i) {
             if (i == 0) throw std::logic_error("zero");
         });
     } catch (const std::logic_error&) {
@@ -205,7 +206,7 @@ UTEST(libstb_threads_tests, test_parallel_for_covers_the_range_once_in_contiguou
     for (std::size_t n : {std::size_t(1), std::size_t(2), std::size_t(3), std::size_t(4), std::size_t(5), std::size_t(97), std::size_t(1000)}) {
         std::vector<std::atomic<int>> seen(n);
         std::atomic<int> pieces{0};
-        stb::detail::parallel_for(n, 1000.0, [&](std::size_t begin, std::size_t end) {
+        stb::utils::parallel_for(n, 1000.0, [&](std::size_t begin, std::size_t end) {
             pieces.fetch_add(1);
             for (std::size_t i = begin; i < end; ++i) seen[i].fetch_add(1);
         });
@@ -213,7 +214,7 @@ UTEST(libstb_threads_tests, test_parallel_for_covers_the_range_once_in_contiguou
         ASSERT_EQ(int(std::min<std::size_t>(n, 4)), pieces.load());  // as many pieces as threads, none empty
     }
     bool called = false;
-    stb::detail::parallel_for(0, 1000.0, [&](std::size_t, std::size_t) { called = true; });
+    stb::utils::parallel_for(0, 1000.0, [&](std::size_t, std::size_t) { called = true; });
     ASSERT_FALSE(called);
 }
 
@@ -223,7 +224,7 @@ UTEST(libstb_threads_tests, test_parallel_for_with_little_work_or_one_thread_is_
     stb::set_threads(8);
     int calls = 0;
     std::size_t b = 99, e = 99;
-    stb::detail::parallel_for(1000, 1.0, [&](std::size_t begin, std::size_t end) {  // 1000 ns: far below the grain
+    stb::utils::parallel_for(1000, 1.0, [&](std::size_t begin, std::size_t end) {  // 1000 ns: far below the grain
         ++calls, b = begin, e = end;
     });
     ASSERT_EQ(1, calls);
@@ -232,7 +233,7 @@ UTEST(libstb_threads_tests, test_parallel_for_with_little_work_or_one_thread_is_
 
     stb::set_threads(1);
     calls = 0;
-    stb::detail::parallel_for(1000, 1e9, [&](std::size_t, std::size_t) { ++calls; });  // plenty of work, but a ceiling of 1
+    stb::utils::parallel_for(1000, 1e9, [&](std::size_t, std::size_t) { ++calls; });  // plenty of work, but a ceiling of 1
     ASSERT_EQ(1, calls);
     ASSERT_EQ(before, stb::detail::parallel_runs());
 }
