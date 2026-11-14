@@ -1,3 +1,66 @@
+# handoff: پردازش تصویر (mat، فیلترها، superpixel) و وضعیت merge، 2026-11-13
+
+**این بخش را اول بخوان؛ زیرش متن قدیمی‌تر handoff (novasvg، فونت، logging، ...) است و هنوز معتبر است.**
+
+## وضعیت ریپو
+
+- شاخه‌ی `master` ریپو `mohammadraziei/libstb`. این بار ریپو public بود: `git clone` و `git fetch origin` کار کرد (کلون عمقِ 1 است، پس `git log` کامل ندارد و `git fetch --unshallow` اگر لازم شد).
+- کاربر **merge** می‌خواهد (نه rebase): `git merge origin/master`. آخرین merge (`d106cce`) بدون تداخل بود و تا `84800c9` (v0.4.0) رسید. بعد از merge: C++ **582 تست پاس**، Python **1700 پاس** (تست‌های `test_packaging.py` و `test_cmake_dir_layout` را deselect کردم چون چیدمان بسته‌ی نصب‌شده را می‌سنجند و من بسته را دستی چیدم؛ روی wheel واقعی یا CI اجرا کن).
+- کاربر خودش یک بار zip من را commit کرد (`cc73500`، پیام «Fix compilation errors for filters and superpixels»): فایل‌های filters/superpixel دو طرف **یکسان** بودند، پس merge بدون تداخل شد. اگر باز چنین شد، قبل از merge با `git diff HEAD origin/master --stat` ببین واقعاً چه فرق دارد.
+- `build/` در `.gitignore` است ولی `build-py/` نه: هرگز `git add -A` نزن؛ فقط مسیرهای مشخص (`include src tests CMakeLists.txt NOTICE.md handoff.md ...`) را add کن، و در zip هر دو را exclude کن (`zip -qr out.zip libstb -x 'libstb/build/*' 'libstb/build-py/*'`).
+- `checklist.md` الان **هیچ بخشی درباره‌ی پردازش تصویر ندارد** (بخشی که من نوشتم در commit `2be4b9a` حذف شد؛ عمدی بود یا نه را نمی‌دانم و دوباره اضافه‌اش نکردم). قبل از اضافه کردن دوباره از کاربر بپرس.
+
+## قاعده‌های کاربر (باز هم)
+
+پاسخ فارسی؛ **em dash ممنوع** (در کد، متن، commit، مستندات)؛ فقط **CMake** (نه g++ مستقیم)؛ **قبل از هر API جدید، API را توضیح بده و منتظر تأیید بمان**؛ warning از ریشه رفع شود (نه با pragma یا flag)؛ در پایان هر مرحله **کل پروژه zip و با `present_files` داده شود** (نه patch)؛ هر مرحله بعد از merge از origin شروع شود. کاربر گفت «به صلاح‌دید خودت» وقتی نام یا معماری را به من سپرد (مثل `mat` در برابر `basic_mat`)، ولی هنوز API عمومی جدید را قبلش تأیید می‌کند.
+
+## چه ساخته شد (همه commit شده؛ `c0e405c` و `e4d67bd` و merge ها)
+
+**معماری نوع‌ها** (`include/stb/mat.hpp`، تصمیم کاربر: «کرنل ماتریس است نه تصویر، و تصویر alias باشد»):
+- `mat<T>` تنها نوع آرایه است: `width x height` با `channels` دلخواه (≥1)، interleaved، بدون padding، **move-only** با `copy()` صریح، `wrap` بدون کپی با keep-alive. `mat8u`، `mat32f`، `mat32i` aliasهایش هستند. اندیس `(x, y, c)` (ستون اول)، `rows()`/`cols()`، `row(y)`، `fill`. سازنده‌ی `mat32f k = {{1,2,1},{2,4,2},{1,2,1}};` برای کرنل.
+- `image8u : public mat8u` (همه‌ی decode/encode/blend/resize/exif/canvas مثل قبل)؛ `using image = image8u;` `using image32f = mat32f;`. `premultiplied_image` جدا ماند و از `detail::image_base` (= `image_base_t<uint8_t>` در `mat.hpp`) ارث می‌برد.
+- `pixel_format`، `channel_count`، `pixel_format_from_channels`، `edge_mode` در `mat.hpp` تعریف شده‌اند (از `image.hpp` منتقل شدند). `mat::format()` برای بیش از 4 کانال `invalid_argument` می‌دهد.
+- تبدیل‌ها توابع آزاد: `to_f32(const mat8u&)` (مقدار / 255 با تقسیم واقعی) و `to_8u(const mat32f&)` (round(clamp(v,0,1)*255)، NaN صفر)، در `src/image/math_ops.cpp`.
+- `edge_mode { clamp, reflect (dcba|abcd|dcba), mirror (dcb|abcd|cba)، wrap, zero }`. جدا از `resize_edge` (آن enum مال stbir است و معنایش یکی نیست؛ alias نشد).
+
+**لایه‌ی عددی داخلی** (`src/image/math_kernels.hpp` + `math_ops.cpp` + `math_scalar.cpp`): کرنل‌های سطری (`u8_to_f32`، `f32_to_u8`، `fir_h`، `fir_v`، `add`، `magnitude`) یک بار به‌صورت always-inline نوشته شده و سه بار instantiate می‌شوند (AVX2 با target attribute، baseline، scalar با auto-vectorize خاموش)؛ انتخاب با `detail::math()` از `current_backend()` (همان `set_simd`/`simd_scope`). هر مقدار خروجی با ترتیب ثابت و **بدون FMA و بدون reduction افقی** حساب می‌شود (CMake: `-ffp-contract=off;-fno-math-errno` روی این فایل‌ها)، پس همه‌ی backendها و هر تعداد thread **بیت‌به‌بیت یکی** هستند (تست دارد). نکته: `current_backend()` thread-local است؛ کرنل را در thread صدازننده بگیر و به workerها بده (کد همین‌طور است).
+
+**فیلترها** (`include/stb/filter.hpp`، `src/image/filter.cpp`): `convolve` (کرنل دوبعدی مستقیم؛ یا جداشدنی `row_kernel, col_kernel`)، `gaussian_kernel(sigma, radius=0)` (1xN، radius صفر = ceil(3σ))، `gaussian_blur`، `box_blur` (running sum به double، O(1) در شعاع؛ ورودی 8 بیتی از یک کپی float می‌گذرد)، `sobel` (kernel `{-1,0,1}` x `{1,2,1}`، بدون normalize: پله‌ی ارتفاع 1 می‌شود 4) و `magnitude(gradients)`. روی `mat8u` (خروجی `image8u`) و `mat32f` (خروجی `mat32f`) overload دارند. `convolve` **correlation** است (kernel flip نمی‌شود، مثل `filter2D`)، پهنا و ارتفاع کرنل باید فرد باشد. ورودی 8 بیتی بدون کپی float کامل (آداپترهای `u8_in/u8_out` سطر به سطر) پردازش می‌شود؛ بخش افقی یک تصویر float میانی می‌سازد (تنها temporary). ثابت‌های `tap_ns`/`copy_ns`/`box_ns` برای `parallel_for` **حدسی و پایین‌اند** (اندازه‌گیری نشده).
+
+**superpixel** (`include/stb/superpixel.hpp`، `src/image/superpixel.cpp`، `src/image/lab.hpp`): `superpixel_method { slic, slico (پیش‌فرض), snic }`، `superpixel_options {count=400, compactness=10, iterations=10, enforce_connectivity=true, method}`، `superpixel_map` (move-only، `labels()` یک `mat32i`، `label(x,y)`، `count()`، `boundaries(color)`، `overlay(src,color)`، `mean_color(src)`، `copy()`)، `superpixels(const mat8u&, options)`. از روی مقاله‌ها نوشته شد (**هیچ کدی کپی نشده**؛ کد superpixels-revisited/OpenCV/SLIC رسمی GPL یا غیرتجاری‌اند). SLIC/SLICO: assignment به‌شکل gather روی مراکز bucket شده (موازی)، مجموع مراکز با fixed-point 16.16 تا ترتیب جمع و تعداد thread اثری نگذارد؛ SNIC: heap ترتیب‌دار (یک thread). اتصال: BFS بر قطعه‌ها و merge قطعه‌های کوچک (< S²/4) به همسایه با بیشترین مرز مشترک. ورودی gray/gray_alpha/rgb/rgba (alpha نادیده). نتیجه روی هر thread count یکی است (تست). `NOTICE.md` مقاله‌ها را ثبت کرده و می‌گوید وضعیت پتنت بررسی نشده.
+
+**Python** (`src/bindings/python/bind_filter.cpp`، ثبت در `binding.cpp/.hpp` و `libstb/__init__.py`): `EdgeMode`، `SuperpixelMethod`، `SuperpixelMap` (`labels` یک view read-only int32 که map را زنده نگه می‌دارد)، توابع `gaussian_blur`، `box_blur`، `convolve` (2D یا row+col)، `gaussian_kernel`، `sobel` (tuple `(dx, dy)`)، `magnitude`، `superpixels`، `to_f32`، `to_8u`، و همان‌ها به‌صورت متد روی `Image`. ورودی `Image` یا آرایه‌ی float32 با شکل (H,W) یا (H,W,C) (خروجی همان شکل). `edge` فقط keyword (`edge="mirror"` یا `EdgeMode.MIRROR`). کرنل می‌تواند لیست تودرتو، آرایه‌ی float64 یا float32 باشد. GIL آزاد می‌شود. تست: `tests/python/test_filter.py` (مقایسه با numpy و SciPy اگر نصب باشد)، `test_superpixel.py`.
+
+**تست C++:** `tests/cpp/test_mat.cpp`، `test_filter.cpp`، `test_superpixel.cpp`. (تست قدیمی `test_image_types.cpp` حذف شد.)
+
+**سنجش دستی** (512x512 RGB، **یک هسته**): SNIC حدود 97 ms، SLIC 136 ms، SLICO 124 ms، gaussian σ=3 حدود 8 ms، sobel+magnitude حدود 9 ms. کیفیت را روی `astronaut.png` با چشم دیدم (مرزها روی لبه‌ها). **هیچ بنچمارکی در برابر OpenCV/Pillow/scikit-image اجرا نشده** و ماشین چندهسته‌ای نبود: ثابت‌های cost و آستانه‌ی thread تنظیم نشده‌اند.
+
+## محیط build در sandbox (چیزی که وقت می‌گیرد)
+
+`pip install cmake ninja nanobind scikit-build-core numpy pytest pillow scipy --break-system-packages` (cmake از PyPI، 4.x). فقط یک هسته است و هر فراخوانی bash حدود 300 ثانیه؛ build را پس‌زمینه بگیر: `setsid nohup cmake --build build --target test_stb_cpp > /tmp/log 2>&1 < /dev/null &` و با `sleep` پیگیری کن (بدون `setsid` با پایان فراخوانی کشته می‌شود). بیلد اول حدود 8 دقیقه، تغییر هدر `image.hpp` یا `mat.hpp` کل پروژه را دوباره می‌سازد.
+- C++: `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=OFF` سپس `cmake --build build --target test_stb_cpp` و `cmake --build build --target stb_test_cpp` (اجرا، خروجی را به فایل بریز و فقط `FAILED|PASSED|test cases ran` را grep کن؛ اسم تست‌ها کلمه‌ی «error» دارند).
+- کتابخانه‌ی مشترک: `--target stb_core` (تست‌ها منبع را خودشان کامپایل می‌کنند، پس `build/libstb.so` را جدا بساز اگر برنامه‌ی دیگر لینک می‌کنی).
+- Python: `cmake -S . -B build-py -G Ninja -DCMAKE_BUILD_TYPE=Release -DSKBUILD=ON -Dnanobind_DIR=$(python3 -m nanobind --cmake_dir)` سپس `--target libstb_py`. بسته را دستی بچین: پوشه‌ی `src/bindings/python/libstb/` + `libstb_py.abi3.so` از `build-py/src/bindings/python/` در یک پوشه (مثلاً `/tmp/pkg/libstb/`)، بعد `PYTHONPATH=/tmp/pkg LD_LIBRARY_PATH=$PWD/build-py LIBSTB_NO_MEMRAY=1 python3 -m pytest tests/python -q`. `test_packaging.py` و `test_cmake_dir_layout` فقط روی نصب واقعی کار می‌کنند.
+- دام‌ها که این دور خوردم: `std::vector<double> w(std::size_t(n));` یعنی **most vexing parse** (تابع اعلام می‌شود): از `static_cast<std::size_t>(n)` استفاده کن؛ در یک `python3` با `str.index` برای برش متن، anchor باید در محدوده‌ای که می‌خواهی جست‌وجو شود شروع شود (یک بار متنی که خودم در بخش دیگر هدر کپی کرده بودم را اشتباه چید و کل کلاس را پاک کرد؛ با `git checkout` برگشت).
+
+## کارهای بعدی (به ترتیبی که با کاربر توافق شد)
+
+دور ۱ (از لیست): هیستوگرام، `equalize` (روشنایی در YCbCr/LAB تا رنگ‌ها جابه‌جا نشوند، `per_channel` اختیاری)، `match_histogram`، `auto_contrast`، gamma/levels/LUT، تبدیل‌های رنگ (CIELAB موجود است در `lab.hpp` ولی داخلی، HSV/HSL/YCbCr)، `pixelize` (+ `mean_color` برای موزائیک هوشمند)، `median_filter`، `unsharp_mask`، و معیارهای PSNR/SSIM/MAE. دور ۲: `bilateral_filter`، `guided_filter`، Scharr، **Canny**، آستانه‌گذاری (Otsu، تطبیقی)، morphology (`mat8u` به‌عنوان structuring element)، connected components (الان داخل superpixel است و باید عمومی/مشترک شود)، `warp_affine/perspective`، CLAHE. دور ۳: دیترینگ و پالت، QOI/GIF، ردیابی مرز به `stb::outline`، QR. WebP جدا و آخر (حدسی 200 تا 400 KB، شاید اختیاری). DISF/SICLE فقط بعد از بررسی لایسنس/پتنت.
+- هر کدام **API پیشنهادی را اول بنویس و منتظر تأیید بمان**.
+- اندازه‌ی wheel: الان حدود 600 تا 700 KB (گفته‌ی کاربر)؛ حدس من برای همه‌ی دورها بدون WebP +180 تا +340 KB است و **اندازه‌گیری نشده** (بعد از هر دور با `size`/`bloaty` بسنج).
+- جایگزین کردن حلقه‌های ساده‌ی reduction: PSNR/SSIM/dot به کرنل‌های کاهش با ترتیب ثابت (8 lane ثابت، بلوک‌های ثابت، جمع جزئی‌ها به ترتیب) نیاز دارند تا بیت‌به‌بیت یکی بمانند؛ هنوز ساخته نشده‌اند.
+- بهینه‌سازی‌های ممکن (هیچ‌کدام اندازه‌گیری نشده): fuse کردن دو پاس افقی/عمودی در نوار سطری (الان یک تصویر float میانی)، مسیر 16 بیتی ثابت‌نقطه برای blur روی 8 بیت، `box_blur` مستقیم روی 8 بیت، بهتر کردن SNIC (heap بزرگ: حافظه حدود 12 بایت به‌ازای هر ورودی heap، تا ~4N ورودی).
+
+## سؤال‌های باز برای کاربر
+
+- `to_8u`/`to_f32` توابع آزاد شدند (نه متد)؛ در Python متد `Image.to_f32()` هم هست. اگر کاربر متد `to_8u` روی آرایه می‌خواهد، چون `image32f` فقط alias است، نمی‌شود (باید تابع آزاد بماند).
+- `mat` copy ندارد (move-only)؛ اگر برای کرنل‌های کوچک بد بود، copyable کردنش تغییر کوچک است ولی با رفتار تصویر ناهماهنگ می‌شود.
+- کلاس‌های Python برای `mat32f` ساخته نشد (آرایه‌ی numpy مستقیم استفاده می‌شود)؛ اگر کاربر `Mat32F` خواست، نام را با هم تعیین کنید.
+- `docs/guide.md`، `README.md`، `CHANGELOG.md` هنوز درباره‌ی `mat`/filters/superpixel چیزی ندارند و مثال (`examples/`) هم ندارد؛ و `checklist.md` پیشرفت را نشان نمی‌دهد. قبل از انتشار اضافه شود.
+- ویندوز/MSVC/macOS/ARM اجرا نشده؛ `-ffp-contract=off` برای MSVC در CMake نیست (فقط GNU/Clang).
+
+---
+
 # وضعیت: issue های ۱۰ و ۱۱ novasvg و سه قابلیت بعدی (کار روی `af2c386`، commit نشده)
 
 issue 10 (weight/width/legacy_family_name) و 11 (`composite_row` + SIMD) قبلاً commit شدن. اضافه شد: `premultiplied_image::fill` و
