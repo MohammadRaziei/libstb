@@ -183,7 +183,7 @@ traits::if_image_t<mat<T>, void> convert_color_inplace(mat<T>& img, color_space 
     });
 }
 
-template void convert_color_inplace<std::uint8_t>(mat<std::uint8_t>&, color_space, color_space);
-template void convert_color_inplace<float>(mat<float>&, color_space, color_space);
+template STB_API void convert_color_inplace<std::uint8_t>(mat<std::uint8_t>&, color_space, color_space);
+template STB_API void convert_color_inplace<float>(mat<float>&, color_space, color_space);
 
 }  // namespace stb

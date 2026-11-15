@@ -606,9 +606,9 @@ traits::if_image_t<mat<T>, void> pixelize_inplace(mat<T>& img, int block_w, int 
     });
 }
 
-template void unsharp_mask_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, edge_mode);
-template void unsharp_mask_inplace<float>(mat<float>&, float, float, float, edge_mode);
-template void pixelize_inplace<std::uint8_t>(mat<std::uint8_t>&, int, int);
-template void pixelize_inplace<float>(mat<float>&, int, int);
+template STB_API void unsharp_mask_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, edge_mode);
+template STB_API void unsharp_mask_inplace<float>(mat<float>&, float, float, float, edge_mode);
+template STB_API void pixelize_inplace<std::uint8_t>(mat<std::uint8_t>&, int, int);
+template STB_API void pixelize_inplace<float>(mat<float>&, int, int);
 
 }  // namespace stb

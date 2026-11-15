@@ -17,7 +17,7 @@
 
 ## باز
 
-- **CI ویندوز اجرای #165 (commit `d411566`، utf-8 lenient)**: لاگ چسبانده‌شده هیچ خط خطایی نداشت (فقط «1 error» و فهرست فایل‌های compile)؛ علت دیده نشد و چیزی در آن commit تغییر نکردم. متن خطا لازم است.
+- **CI ویندوز (LNK2019 برای 16 `*_inplace<T>`)**: علت پیدا شد و رفع شد: instantiation صریح قالب‌ها (`template void f<T>(...)` آخر `tone.cpp`، `filter.cpp`، `colorspace.cpp`) `STB_API` نداشت؛ MSVC روی instantiation صریح dllexport را از declaration به ارث نمی‌برد، پس نماد از `stb.dll` صادر نمی‌شد و ماژول Python لینک نمی‌شد. حالا `template STB_API void f<T>(...)`. (احتمالاً همین علت شکست #165 هم بود: tone از قبل همین الگو را داشت.) هر قالب `*_inplace` جدید باید همین را داشته باشد.
 - دور ۱ تمام است. گام بعد طبق برنامه: دور ۲ (`bilateral_filter`، `guided_filter`، Scharr، Canny، آستانه‌گذاری، morphology، connected components عمومی، warp، CLAHE). هر API اول پیشنهاد و منتظر تأیید.
 - `checklist.md` هنوز بخش پردازش تصویر ندارد (سؤال بی‌پاسخ)، تغییرش نداده‌ام.
 - هنوز بنچمارک ندارند (`median_filter` روی float برای radius بزرگ کند است: O(r^2) برای هر مقدار؛ اگر لازم شد روی float هم به الگوریتم هیستوگرام/مرتب‌شده‌ی لغزان برو).

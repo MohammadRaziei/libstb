@@ -562,15 +562,15 @@ traits::if_image_t<mat<T>, void> levels_inplace(mat<T>& img, float in_black, flo
 
 // The element types libstb is built for (tone_kernel<T> is defined for these two). The templates are declared in
 // stb/tone.hpp without a body, so these lines are what the rest of the program links to.
-template void equalize_inplace<std::uint8_t>(mat<std::uint8_t>&, tone_mode);
-template void equalize_inplace<float>(mat<float>&, tone_mode);
-template void auto_contrast_inplace<std::uint8_t>(mat<std::uint8_t>&, float, tone_mode);
-template void auto_contrast_inplace<float>(mat<float>&, float, tone_mode);
-template void match_histogram_inplace<std::uint8_t>(mat<std::uint8_t>&, const mat<std::uint8_t>&, tone_mode);
-template void match_histogram_inplace<float>(mat<float>&, const mat<float>&, tone_mode);
-template void gamma_inplace<std::uint8_t>(mat<std::uint8_t>&, float);
-template void gamma_inplace<float>(mat<float>&, float);
-template void levels_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, float, float);
-template void levels_inplace<float>(mat<float>&, float, float, float, float, float);
+template STB_API void equalize_inplace<std::uint8_t>(mat<std::uint8_t>&, tone_mode);
+template STB_API void equalize_inplace<float>(mat<float>&, tone_mode);
+template STB_API void auto_contrast_inplace<std::uint8_t>(mat<std::uint8_t>&, float, tone_mode);
+template STB_API void auto_contrast_inplace<float>(mat<float>&, float, tone_mode);
+template STB_API void match_histogram_inplace<std::uint8_t>(mat<std::uint8_t>&, const mat<std::uint8_t>&, tone_mode);
+template STB_API void match_histogram_inplace<float>(mat<float>&, const mat<float>&, tone_mode);
+template STB_API void gamma_inplace<std::uint8_t>(mat<std::uint8_t>&, float);
+template STB_API void gamma_inplace<float>(mat<float>&, float);
+template STB_API void levels_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, float, float);
+template STB_API void levels_inplace<float>(mat<float>&, float, float, float, float, float);
 
 }  // namespace stb
