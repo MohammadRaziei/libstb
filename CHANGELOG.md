@@ -8,6 +8,17 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **Median, unsharp mask, pixelize, colour spaces and metrics** (round 1 of the image-processing plan; Python names are the same).
+  `stb::median_filter(src, radius, edge)` (`mat8u` gives an `image8u`, `mat32f` a `mat32f`; per channel; a sliding histogram on 8 bits, so
+  the cost hardly depends on the radius). `unsharp_mask(img, sigma, amount, threshold, edge)` and `pixelize(img, block_w, block_h)` follow the
+  tone conventions (`*_inplace` templates for `uint8_t` and `float`, copy and rvalue forms, same type in and out, alpha untouched by
+  `unsharp_mask`; `pixelize` weights the colour by alpha and averages alpha). `convert_color(img, from, to)` for `color_space::{rgb, hsv, hsl, ycbcr}` on 3 or 4
+  channels (8 bits: hue has 256 steps for the turn; floats: hue is a fraction of the turn; YCbCr is the full-range BT.601 of JPEG).
+  `stb/metrics.hpp`: `mae`, `mse`, `psnr` and `ssim` / `ssim_map` (Gaussian window 11 x 11, sigma 1.5, like scikit-image's
+  `gaussian_weights=True`; sums are exact integers on 8 bits and fixed-order doubles on floats, so threads never change the result).
+  Everything is split over rows with `stb::utils::parallel_for`; the new sources are built without FMA contraction. Tests: `test_metrics.cpp`,
+  `test_colorspace.cpp`, the new cases of `test_filter.cpp`, and `tests/python/test_image_ops.py` (scipy, scikit-image and colorsys as
+  independent references).
 - **`stb::font::codepoints()`**: every Unicode scalar value the font maps to a real glyph (glyph 0 does not count), ascending; the same set `has_glyph()` accepts, read from the cmap's own ranges (formats 0, 4, 6, 12, 13) instead of asking all 1.1 million code points. Test: `test_font.cpp` compares it with a `has_glyph` sweep on five fonts (cmap 4 and 12, CFF, Persian).
 - **Tone** (`stb/tone.hpp`, `libstb.equalize` and friends): `histogram`, `equalize`, `auto_contrast` (Pillow's cutoff rule, within one
   level of `ImageOps.autocontrast`), `match_histogram`, `gamma`, `levels`, and the 8-bit tables `gamma_lut`, `levels_lut`, `apply_lut`.

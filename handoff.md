@@ -1,3 +1,31 @@
+# handoff: دور ۱ تمام شد (median، unsharp، pixelize، تبدیل رنگ، معیارها)، 2026-11-15
+
+**این بخش را اول بخوان؛ زیرش handoff قبلی (tone، parallel، mat، فیلترها، superpixel، novasvg، ...) است و هنوز معتبر است.**
+
+## چه ساخته شد (API را کاربر تأیید کرد)
+
+- **`include/stb/filter.hpp` / `src/image/filter.cpp`**: `median_filter(src, radius 1..1000, edge)` (`mat8u` برمی‌گرداند `image8u`، `mat32f` برمی‌گرداند `mat32f`؛ 8 بیتی با هیستوگرام لغزان، float با `nth_element` و NaN آخر مرتب می‌شود)، `unsharp_mask` و `pixelize` به قالب tone (`*_inplace` قالبی، instantiate برای `uint8_t` و `float` آخر `filter.cpp`، شکل‌های copy و rvalue در هدر). `unsharp_mask`: `src + amount*(src-blur)`، threshold کسری از بازه (0 تا 1)، خروجی clamp، alpha دست‌نخورده، یک کپی float لازم دارد. `pixelize`: بلوک‌های لبه کوچک‌ترند؛ رنگ با وزن alpha و alpha میانگین ساده (8 بیتی: جمع صحیح و گرد به نزدیک‌ترین)، بلوک بدون opacity میانگین ساده می‌گیرد.
+- **`include/stb/colorspace.hpp` / `src/image/colorspace.cpp`**: `enum class color_space {rgb, hsv, hsl, ycbcr}`، `convert_color_inplace<T>` (فقط declaration در هدر) و فرم‌های copy و rvalue. 3 یا 4 کانال (gray و gray+alpha و 5+ کانال `invalid_argument`)، alpha دست‌نخورده. 8 بیتی: hue با 256 گام برای دور کامل (`round(turns*256) mod 256`)، بقیه 0..255؛ float: همه 0..1 و hue کسری از دور و wrap می‌شود؛ YCbCr همان BT.601 تمام‌بازه‌ی JPEG. رفت و برگشت HSV/HSL روی 8 بیتی تا چند سطح خطا دارد (تست: حداکثر 6)؛ YCbCr حداکثر 3.
+- **`include/stb/metrics.hpp` / `src/image/metrics.cpp`**: `mae`، `mse`، `psnr`، `ssim`، `ssim_map` برای `mat8u` و `mat32f`. همه کانال‌ها (alpha هم) حساب می‌شوند. SSIM مثل `skimage.structural_similarity(gaussian_weights=True, sigma=1.5, use_sample_covariance=False)`، فقط پنجره‌های کاملاً داخل تصویر، نقشه `(w-10) x (h-10)`، حساب در double؛ تصویر کوچک‌تر از 11x11 خطا می‌دهد. جمع 8 بیتی عدد صحیح دقیق، float جمع جزئی هر ردیف و بعد ردیف‌ها به ترتیب، پس نتیجه به تعداد thread بستگی ندارد.
+- **CMake**: `colorspace.cpp` و `metrics.cpp` به لیست بدون FMA (`-ffp-contract=off -fno-math-errno`) اضافه شدند.
+- **Python** (`bind_filter.cpp`، تابع `bind_image_ops`): `ColorSpace`، `median_filter`، `unsharp_mask`، `pixelize`، `convert_color`، `mae`، `mse`، `psnr`، `ssim`، `ssim_map` (تابع ماژول روی `Image` و float32، و متد `Image` با `inplace=True` برای unsharp/pixelize/convert_color؛ رشته‌ی `"hsv"` هم قبول است). exportها در `libstb/__init__.py`.
+
+## تست
+
+- C++: 661 تست پاس (جدید: `test_metrics.cpp`، `test_colorspace.cpp`، و بخش آخر `test_filter.cpp`). Python: 1744 پاس و 16 skip (uharfbuzz، torch، pytest_memray نصب نبود). `tests/python/test_image_ops.py` با scipy (median، gaussian)، scikit-image (psnr، ssim) و colorsys (hsv/hsl) مقایسه می‌کند؛ این‌ها اختیاری‌اند (`importorskip`).
+- بدون warning در بیلد gcc 13 (`-Wall -Wextra -Wpedantic`). MSVC و ARM روی CI تست نشدند.
+
+## باز
+
+- **CI ویندوز اجرای #165 (commit `d411566`، utf-8 lenient)**: لاگ چسبانده‌شده هیچ خط خطایی نداشت (فقط «1 error» و فهرست فایل‌های compile)؛ علت دیده نشد و چیزی در آن commit تغییر نکردم. متن خطا لازم است.
+- دور ۱ تمام است. گام بعد طبق برنامه: دور ۲ (`bilateral_filter`، `guided_filter`، Scharr، Canny، آستانه‌گذاری، morphology، connected components عمومی، warp، CLAHE). هر API اول پیشنهاد و منتظر تأیید.
+- `checklist.md` هنوز بخش پردازش تصویر ندارد (سؤال بی‌پاسخ)، تغییرش نداده‌ام.
+- هنوز بنچمارک ندارند (`median_filter` روی float برای radius بزرگ کند است: O(r^2) برای هر مقدار؛ اگر لازم شد روی float هم به الگوریتم هیستوگرام/مرتب‌شده‌ی لغزان برو).
+- ثابت‌های ns (`median_u8_ns` و ...) کف‌اند و اندازه‌گیری نشده‌اند.
+- sandbox: `touch a/{b,c}.cpp` زیر `sh` فایل‌های با نام brace واقعی می‌سازد؛ در `bash -c` بزن.
+
+---
+
 # handoff: دور ۱ گام اول (tone)، parallel عمومی، رفع sanitizer و lcov، 2026-11-15
 
 **این بخش را اول بخوان؛ زیرش handoff قبلی (mat، فیلترها، superpixel، novasvg، ...) است و هنوز معتبر است.**

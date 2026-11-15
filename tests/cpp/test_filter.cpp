@@ -1,6 +1,8 @@
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -311,4 +313,272 @@ UTEST(libstb_filter_tests, test_the_number_of_threads_does_not_change_the_bits) 
     stb::thread_scope threads(4);
     EXPECT_TRUE(same_bits(stb::gaussian_blur(f, 3.0f), one_g));
     EXPECT_TRUE(same_bits(stb::box_blur(f, 5), one_box));
+}
+
+// ---------------------------------------------------------------- median, unsharp mask, pixelize
+
+namespace {
+
+using stb::edge_mode;
+
+// The index that stands for i in [0, n) under a mode (-1 for "zero"): the definition of the modes, written out.
+int edge_index(int i, int n, edge_mode mode) {
+    if (i >= 0 && i < n) return i;
+    switch (mode) {
+        case edge_mode::zero: return -1;
+        case edge_mode::wrap: return ((i % n) + n) % n;
+        case edge_mode::reflect: {
+            const int p = ((i % (2 * n)) + 2 * n) % (2 * n);
+            return p < n ? p : 2 * n - 1 - p;
+        }
+        case edge_mode::mirror: {
+            if (n == 1) return 0;
+            const int p = ((i % (2 * (n - 1))) + 2 * (n - 1)) % (2 * (n - 1));
+            return p < n ? p : 2 * (n - 1) - p;
+        }
+        case edge_mode::clamp: break;
+    }
+    return clampi(i, n);
+}
+
+// The median of the window around (x, y) of channel k by sorting it.
+template <class M>
+auto brute_median(const M& m, int x, int y, int k, int r, edge_mode mode) {
+    using T = typename M::value_type;
+    std::vector<T> win;
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx) {
+            const int sx = edge_index(x + dx, m.width(), mode), sy = edge_index(y + dy, m.height(), mode);
+            win.push_back(sx < 0 || sy < 0 ? T(0) : m(sx, sy, k));
+        }
+    std::sort(win.begin(), win.end());
+    return win[win.size() / 2];
+}
+
+const edge_mode all_modes[] = {edge_mode::clamp, edge_mode::reflect, edge_mode::mirror, edge_mode::wrap, edge_mode::zero};
+
+}  // namespace
+
+UTEST(libstb_filter_tests, test_the_median_removes_a_single_outlier) {
+    stb::image8u img(5, 5, stb::pixel_format::gray, std::vector<std::uint8_t>(25, 100));
+    img(2, 2, 0) = 255;
+    const stb::image8u out = stb::median_filter(img, 1);
+    for (std::uint8_t v : out) ASSERT_EQ(int(v), 100);
+    stb::mat32f f(5, 5, 1, std::vector<float>(25, 0.25f));
+    f(1, 3, 0) = 1.0f;
+    for (float v : stb::median_filter(f, 1)) ASSERT_EQ(v, 0.25f);
+}
+
+UTEST(libstb_filter_tests, test_the_median_matches_sorting_every_window_for_every_edge_mode) {
+    const stb::image8u u = patterned8(19, 13, stb::pixel_format::rgb);
+    const stb::mat32f f = patterned(17, 11, 2);
+    for (edge_mode mode : all_modes)
+        for (int r : {1, 2, 3}) {
+            const stb::image8u gu = stb::median_filter(u, r, mode);
+            const stb::mat32f gf = stb::median_filter(f, r, mode);
+            ASSERT_EQ(gu.channels(), 3);
+            for (int y = 0; y < u.height(); ++y)
+                for (int x = 0; x < u.width(); ++x)
+                    for (int k = 0; k < 3; ++k) ASSERT_EQ(int(gu(x, y, k)), int(brute_median(u, x, y, k, r, mode)));
+            for (int y = 0; y < f.height(); ++y)
+                for (int x = 0; x < f.width(); ++x)
+                    for (int k = 0; k < 2; ++k) ASSERT_EQ(gf(x, y, k), brute_median(f, x, y, k, r, mode));
+        }
+}
+
+UTEST(libstb_filter_tests, test_the_median_with_a_radius_larger_than_the_image) {
+    const stb::image8u u = patterned8(4, 3, stb::pixel_format::gray);
+    for (edge_mode mode : all_modes) {
+        const stb::image8u g = stb::median_filter(u, 9, mode);
+        for (int y = 0; y < 3; ++y)
+            for (int x = 0; x < 4; ++x) ASSERT_EQ(int(g(x, y, 0)), int(brute_median(u, x, y, 0, 9, mode)));
+    }
+}
+
+UTEST(libstb_filter_tests, test_a_nan_sorts_last_in_the_float_median) {
+    stb::mat32f f(3, 3, 1, std::vector<float>(9, 0.5f));
+    f(1, 1, 0) = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_EQ(stb::median_filter(f, 1)(1, 1, 0), 0.5f);  // one NaN of nine: the median is a number
+    stb::mat32f all(3, 3, 1, std::vector<float>(9, std::numeric_limits<float>::quiet_NaN()));
+    EXPECT_TRUE(std::isnan(stb::median_filter(all, 1)(1, 1, 0)));
+}
+
+UTEST(libstb_filter_tests, test_the_median_refuses_a_bad_radius_and_handles_an_empty_input) {
+    const stb::image8u u = patterned8(6, 6, stb::pixel_format::gray);
+    ASSERT_THROWS(stb::median_filter(u, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::median_filter(u, -2), std::invalid_argument);
+    ASSERT_THROWS(stb::median_filter(u, 1001), std::invalid_argument);
+    ASSERT_THROWS(stb::median_filter(stb::mat32f(), 0), std::invalid_argument);
+    EXPECT_TRUE(stb::median_filter(stb::mat8u(), 1).empty());
+    EXPECT_TRUE(stb::median_filter(stb::mat32f(), 1).empty());
+}
+
+UTEST(libstb_filter_tests, test_the_median_does_not_depend_on_the_number_of_threads) {
+    const stb::image8u u = patterned8(400, 300, stb::pixel_format::rgb);
+    const stb::mat32f f = patterned(160, 120, 3);
+    stb::image8u one_u;
+    stb::mat32f one_f;
+    {
+        stb::thread_scope scope(1);
+        one_u = stb::median_filter(u, 4);
+        one_f = stb::median_filter(f, 2);
+    }
+    stb::thread_scope scope(4);
+    EXPECT_TRUE(same_bytes(stb::median_filter(u, 4), one_u));
+    EXPECT_TRUE(same_bits(stb::median_filter(f, 2), one_f));
+}
+
+// ---- unsharp mask
+
+UTEST(libstb_filter_tests, test_unsharp_mask_is_the_source_plus_amount_times_its_difference_from_the_blur) {
+    const stb::mat32f f = patterned(40, 30, 3);
+    const stb::mat32f blur = stb::gaussian_blur(f, 1.5f);
+    const stb::mat32f got = stb::unsharp_mask(f, 1.5f, 0.8f);
+    for (std::size_t i = 0; i < f.size(); ++i) {
+        float want = f.data()[i] + 0.8f * (f.data()[i] - blur.data()[i]);
+        want = want < 0.0f ? 0.0f : (want > 1.0f ? 1.0f : want);
+        ASSERT_NEAR(got.data()[i], want, 1e-6f);
+    }
+}
+
+UTEST(libstb_filter_tests, test_unsharp_mask_with_amount_0_or_a_high_threshold_changes_nothing) {
+    const stb::image8u u = patterned8(30, 20, stb::pixel_format::rgb);
+    EXPECT_TRUE(same_bytes(stb::unsharp_mask(u, 2.0f, 0.0f), u));
+    const stb::mat32f f = patterned(30, 20, 1);
+    EXPECT_TRUE(same_bits(stb::unsharp_mask(f, 2.0f, 0.0f), f));
+    // a threshold above every difference of this smooth image
+    stb::mat32f smooth(20, 20, 1);
+    for (int y = 0; y < 20; ++y)
+        for (int x = 0; x < 20; ++x) smooth(x, y, 0) = 0.3f + 0.001f * float(x);
+    EXPECT_TRUE(same_bits(stb::unsharp_mask(smooth, 1.0f, 5.0f, 0.05f), smooth));
+}
+
+UTEST(libstb_filter_tests, test_unsharp_mask_sharpens_an_edge_and_never_touches_alpha) {
+    stb::image8u step(8, 1, stb::pixel_format::gray_alpha);
+    for (int x = 0; x < 8; ++x) {
+        step(x, 0, 0) = x < 4 ? 64 : 192;
+        step(x, 0, 1) = std::uint8_t(10 + x);
+    }
+    const stb::image8u out = stb::unsharp_mask(step, 1.0f, 1.0f);
+    EXPECT_LT(int(out(3, 0, 0)), 64);   // darker on the dark side of the edge
+    EXPECT_GT(int(out(4, 0, 0)), 192);  // brighter on the bright side
+    EXPECT_EQ(int(out(0, 0, 0)), 64);   // flat far from the edge
+    for (int x = 0; x < 8; ++x) EXPECT_EQ(int(out(x, 0, 1)), 10 + x);
+    const stb::mat32f rgba = patterned(12, 12, 4);
+    const stb::mat32f sharp = stb::unsharp_mask(rgba, 1.0f, 2.0f);
+    for (int y = 0; y < 12; ++y)
+        for (int x = 0; x < 12; ++x) ASSERT_EQ(sharp(x, y, 3), rgba(x, y, 3));
+}
+
+UTEST(libstb_filter_tests, test_unsharp_mask_forms_and_errors) {
+    const stb::image8u u = patterned8(20, 20, stb::pixel_format::rgb);
+    stb::image8u in_place(u.copy());
+    stb::unsharp_mask_inplace(in_place, 1.0f, 1.5f, 0.02f);
+    EXPECT_TRUE(same_bytes(stb::unsharp_mask(u, 1.0f, 1.5f, 0.02f), in_place));
+    EXPECT_TRUE(same_bytes(stb::unsharp_mask(u.copy(), 1.0f, 1.5f, 0.02f), in_place));
+    stb::image8u keep(u.copy());
+    ASSERT_THROWS(stb::unsharp_mask_inplace(keep, 0.0f), std::invalid_argument);
+    ASSERT_THROWS(stb::unsharp_mask_inplace(keep, 1.0f, -1.0f), std::invalid_argument);
+    ASSERT_THROWS(stb::unsharp_mask_inplace(keep, 1.0f, std::numeric_limits<float>::infinity()), std::invalid_argument);
+    ASSERT_THROWS(stb::unsharp_mask_inplace(keep, 1.0f, 1.0f, 1.5f), std::invalid_argument);
+    ASSERT_THROWS(stb::unsharp_mask_inplace(keep, 1.0f, 1.0f, -0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::unsharp_mask(stb::mat8u(4, 4, 5), 1.0f), std::invalid_argument);
+    EXPECT_TRUE(same_bytes(keep, u));
+    EXPECT_TRUE(stb::unsharp_mask(stb::image8u(), 1.0f).empty());
+}
+
+UTEST(libstb_filter_tests, test_unsharp_mask_does_not_depend_on_the_number_of_threads) {
+    const stb::image8u u = patterned8(500, 400, stb::pixel_format::rgb);
+    stb::image8u one(u.copy()), many(u.copy());
+    {
+        stb::thread_scope scope(1);
+        stb::unsharp_mask_inplace(one, 2.0f, 1.2f, 0.01f);
+    }
+    stb::thread_scope scope(4);
+    stb::unsharp_mask_inplace(many, 2.0f, 1.2f, 0.01f);
+    EXPECT_TRUE(same_bytes(one, many));
+}
+
+// ---- pixelize
+
+UTEST(libstb_filter_tests, test_pixelize_fills_each_block_with_its_rounded_mean) {
+    std::vector<std::uint8_t> v(16);
+    for (int i = 0; i < 16; ++i) v[std::size_t(i)] = std::uint8_t(i);
+    const stb::image8u img(4, 4, stb::pixel_format::gray, v);
+    const stb::image8u out = stb::pixelize(img, 2);
+    // blocks: {0,1,4,5} -> 2.5 -> 3, {2,3,6,7} -> 4.5 -> 5, {8,9,12,13} -> 10.5 -> 11, {10,11,14,15} -> 12.5 -> 13
+    const int want[4][4] = {{3, 3, 5, 5}, {3, 3, 5, 5}, {11, 11, 13, 13}, {11, 11, 13, 13}};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x) ASSERT_EQ(int(out(x, y, 0)), want[y][x]);
+}
+
+UTEST(libstb_filter_tests, test_pixelize_blocks_at_the_edges_are_smaller_and_block_h_defaults_to_block_w) {
+    stb::image8u img(5, 3, stb::pixel_format::gray, std::vector<std::uint8_t>{0, 2, 10, 20, 40, 4, 6, 30, 40, 60, 8, 8, 8, 8, 8});
+    const stb::image8u out = stb::pixelize(img, 2);
+    // block (0,0): 0 2 4 6 -> 3; (2,0): 10 20 30 40 -> 25; (4,0): 40 60 -> 50; row 2: (0): 8 8 -> 8, (2): 8 8 -> 8, (4): 8
+    const int want[3][5] = {{3, 3, 25, 25, 50}, {3, 3, 25, 25, 50}, {8, 8, 8, 8, 8}};
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 5; ++x) ASSERT_EQ(int(out(x, y, 0)), want[y][x]);
+    EXPECT_TRUE(same_bytes(stb::pixelize(img, 2, 2), out));
+}
+
+UTEST(libstb_filter_tests, test_pixelize_with_a_block_taller_than_wide_or_larger_than_the_image) {
+    const stb::image8u img(4, 2, stb::pixel_format::gray, std::vector<std::uint8_t>{0, 4, 8, 12, 100, 104, 108, 112});
+    const stb::image8u rows = stb::pixelize(img, 4, 1);  // each row is one block
+    EXPECT_EQ(int(rows(0, 0, 0)), 6);
+    EXPECT_EQ(int(rows(3, 1, 0)), 106);
+    const stb::image8u one = stb::pixelize(img, 50);  // one block: the mean of all, 56
+    for (std::uint8_t v : one) ASSERT_EQ(int(v), 56);
+}
+
+UTEST(libstb_filter_tests, test_pixelize_weights_the_colour_by_alpha_and_averages_alpha) {
+    // a red pixel that is opaque and a green one that is transparent: the block is red, half transparent
+    const stb::image8u img(2, 1, stb::pixel_format::rgba, std::vector<std::uint8_t>{255, 0, 0, 255, 0, 255, 0, 0});
+    const stb::image8u out = stb::pixelize(img, 2);
+    for (int x = 0; x < 2; ++x) {
+        EXPECT_EQ(int(out(x, 0, 0)), 255);
+        EXPECT_EQ(int(out(x, 0, 1)), 0);
+        EXPECT_EQ(int(out(x, 0, 2)), 0);
+        EXPECT_EQ(int(out(x, 0, 3)), 128);  // 127.5 rounds up
+    }
+    // nothing opaque: the plain mean of the colours
+    const stb::image8u clear(2, 1, stb::pixel_format::rgba, std::vector<std::uint8_t>{10, 20, 30, 0, 20, 40, 60, 0});
+    const stb::image8u c = stb::pixelize(clear, 2);
+    EXPECT_EQ(int(c(1, 0, 0)), 15);
+    EXPECT_EQ(int(c(1, 0, 1)), 30);
+    EXPECT_EQ(int(c(0, 0, 2)), 45);
+    EXPECT_EQ(int(c(0, 0, 3)), 0);
+}
+
+UTEST(libstb_filter_tests, test_pixelize_floats_and_forms_and_errors) {
+    const stb::mat32f f(2, 2, 1, std::vector<float>{0.0f, 0.25f, 0.5f, 0.75f});
+    for (float v : stb::pixelize(f, 2)) ASSERT_NEAR(v, 0.375f, 1e-6f);
+    const stb::image8u u = patterned8(31, 17, stb::pixel_format::rgb);
+    stb::image8u in_place(u.copy());
+    stb::pixelize_inplace(in_place, 4, 3);
+    EXPECT_TRUE(same_bytes(stb::pixelize(u, 4, 3), in_place));
+    EXPECT_TRUE(same_bytes(stb::pixelize(u.copy(), 4, 3), in_place));
+    ASSERT_THROWS(stb::pixelize(u, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::pixelize(u, 2, -1), std::invalid_argument);
+    ASSERT_THROWS(stb::pixelize(stb::mat8u(4, 4, 5), 2), std::invalid_argument);
+    EXPECT_TRUE(stb::pixelize(stb::mat32f(), 2).empty());
+}
+
+UTEST(libstb_filter_tests, test_pixelize_does_not_depend_on_the_number_of_threads) {
+    const stb::image8u u = patterned8(600, 400, stb::pixel_format::rgba);
+    const stb::mat32f f = patterned(500, 300, 4);
+    stb::image8u one(u.copy());
+    stb::mat32f one_f(f.copy());
+    {
+        stb::thread_scope scope(1);
+        stb::pixelize_inplace(one, 7, 5);
+        stb::pixelize_inplace(one_f, 9);
+    }
+    stb::image8u many(u.copy());
+    stb::mat32f many_f(f.copy());
+    stb::thread_scope scope(4);
+    stb::pixelize_inplace(many, 7, 5);
+    stb::pixelize_inplace(many_f, 9);
+    EXPECT_TRUE(same_bytes(one, many));
+    EXPECT_TRUE(same_bits(one_f, many_f));
 }

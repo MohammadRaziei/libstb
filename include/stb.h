@@ -26,6 +26,8 @@
 #include "stb/image.hpp"
 #include "stb/filter.hpp"
 #include "stb/tone.hpp"
+#include "stb/colorspace.hpp"
+#include "stb/metrics.hpp"
 #include "stb/superpixel.hpp"
 #include "stb/outline.hpp"
 #include "stb/raster.hpp"

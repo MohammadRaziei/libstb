@@ -1,6 +1,6 @@
 #pragma once
 
-// Filters: convolution, blurs and gradients. They work on 8-bit data (mat8u, so image8u too) and on
+// Filters: convolution, blurs, gradients, the median, sharpening and pixelizing. They work on 8-bit data (mat8u, so image8u too) and on
 // floats (mat32f, which is image32f); an 8-bit input gives an image8u, a float one gives a mat32f. Every
 // filter is applied to each channel on its own, returns a new array of the same size and channels, and
 // uses all the cores when the work is big enough (stb::set_threads), with the same result on every
@@ -17,6 +17,9 @@
 //
 // On 8-bit data the arithmetic is done in floats and rounded once at the end (to_8u), so a chain of
 // filters is best written on mat32f: to_f32 first, to_8u last.
+
+#include <type_traits>
+#include <utility>
 
 #include "stb/export.hpp"
 #include "stb/image.hpp"
@@ -69,5 +72,60 @@ STB_API gradients sobel(const mat8u& src, edge_mode edge = edge_mode::clamp);
 
 // sqrt(dx^2 + dy^2) for each value of g. Throws invalid_argument if dx and dy differ in size or channels.
 STB_API mat32f magnitude(const gradients& g);
+
+
+// ------------------------------------------------------------------------------------------ median, sharpen, pixelize
+
+// The median of the (2 * radius + 1)-square around each value, per channel: it removes isolated noise (salt and pepper)
+// and keeps edges. radius must be 1 to 1000, else invalid_argument. An 8-bit input costs about the same for every
+// radius (a sliding histogram); on floats the cost grows with radius^2 per value. On floats a NaN sorts after every
+// number, so a window that is more than half NaN gives NaN.
+STB_API mat32f median_filter(const mat32f& src, int radius, edge_mode edge = edge_mode::clamp);
+STB_API image8u median_filter(const mat8u& src, int radius, edge_mode edge = edge_mode::clamp);
+
+// The functions below take an image (1 to 4 channels: gray, gray + alpha, RGB, RGBA) and give back what they were
+// given (see tone.hpp for the three forms and the rules). The alpha channel is never changed. Floats are read as 0 to 1.
+// The work is done by the *_inplace templates, which libstb has built for std::uint8_t and for float.
+
+// ---- unsharp_mask: out = src + amount * (src - blur), where blur is gaussian_blur(src, sigma, edge), and a value whose
+// difference |src - blur| is below `threshold` (a fraction of the whole range, 0 to 1) is left alone. The result is
+// clamped to [0, 1] (a NaN stays NaN). amount 1 is "100 %" of Pillow's UnsharpMask; 0 changes nothing. Throws
+// invalid_argument for a sigma that is not a positive finite number, an amount that is not finite and >= 0, or a
+// threshold outside [0, 1]. Needs a float copy of the image while it works.
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> unsharp_mask_inplace(mat<T>& img, float sigma, float amount = 1.0f,
+                                                              float threshold = 0.0f,
+                                                              edge_mode edge = edge_mode::clamp);
+
+template <class M>
+traits::if_image_rvalue_t<M> unsharp_mask(M&& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
+                                          edge_mode edge = edge_mode::clamp) {
+    unsharp_mask_inplace(img, sigma, amount, threshold, edge);
+    return std::move(img);
+}
+template <class M>
+traits::if_image_t<M> unsharp_mask(const M& src, float sigma, float amount = 1.0f, float threshold = 0.0f,
+                                   edge_mode edge = edge_mode::clamp) {
+    return unsharp_mask(src.copy(), sigma, amount, threshold, edge);
+}
+
+// ---- pixelize: the picture is cut into blocks of block_w x block_h values (block_h 0 means the same as block_w),
+// starting at the top left, and every block is filled with its mean (the blocks at the right and bottom edges are
+// smaller and only use their own values). The colour of gray + alpha and RGBA images is the mean weighted by alpha
+// (a transparent pixel does not tint its block; a block with no opacity at all gets the plain mean), and the alpha of
+// a block becomes the plain mean of its alpha, so here the alpha channel does change. On 8 bits the means are exact
+// integer arithmetic rounded to the nearest. Throws invalid_argument for block_w below 1 or block_h below 0.
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> pixelize_inplace(mat<T>& img, int block_w, int block_h = 0);
+
+template <class M>
+traits::if_image_rvalue_t<M> pixelize(M&& img, int block_w, int block_h = 0) {
+    pixelize_inplace(img, block_w, block_h);
+    return std::move(img);
+}
+template <class M>
+traits::if_image_t<M> pixelize(const M& src, int block_w, int block_h = 0) {
+    return pixelize(src.copy(), block_w, block_h);
+}
 
 }  // namespace stb

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <type_traits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -381,5 +383,232 @@ mat32f magnitude(const gradients& g) {
     parallel_for(out.size(), copy_ns, [&](std::size_t b, std::size_t e) { k.magnitude(dx + b, dy + b, d + b, e - b); });
     return out;
 }
+
+
+// ============================================================================================ median
+
+namespace {
+
+constexpr double median_u8_ns = 0.5;    // one step of the sliding histogram, per value and per row of the window
+constexpr double median_f32_ns = 1.5;   // one value of a window handed to nth_element, per value of the window
+
+// One channel `k` of `src` with `r` values added around it on every side as the edge mode says: (w + 2r) x (h + 2r).
+template <class T>
+std::vector<T> padded_plane(const mat<T>& src, int k, int r, edge_mode edge) {
+    const int w = src.width(), h = src.height(), c = src.channels();
+    const std::size_t pw = std::size_t(w) + 2 * std::size_t(r), ph = std::size_t(h) + 2 * std::size_t(r);
+    std::vector<int> cx(pw);
+    for (std::size_t x = 0; x < pw; ++x) cx[x] = resolve(int(x) - r, w, edge);
+    std::vector<T> plane(pw * ph);
+    parallel_for(ph, double(pw) * copy_ns, [&](std::size_t b, std::size_t e) {
+        for (std::size_t y = b; y < e; ++y) {
+            T* d = plane.data() + y * pw;
+            const int sy = resolve(int(y) - r, h, edge);
+            if (sy < 0) {
+                std::fill(d, d + pw, T(0));
+                continue;
+            }
+            const T* row = src.row(sy);
+            for (std::size_t x = 0; x < pw; ++x) d[x] = cx[x] < 0 ? T(0) : row[std::size_t(cx[x]) * std::size_t(c) + std::size_t(k)];
+        }
+    });
+    return plane;
+}
+
+// The median of every window of one 8-bit plane, by a histogram that slides along the row: a step to the right
+// removes one column of the window and adds one, and the median (the value `m` with `below` values under it) moves
+// to where it belongs. The cost per value hardly depends on the radius.
+void median_plane(const std::vector<std::uint8_t>& plane, int w, int h, int c, int k, int r, std::uint8_t* out) {
+    const std::size_t pw = std::size_t(w) + 2 * std::size_t(r);
+    const int side = 2 * r + 1;
+    const int target = (side * side) / 2;  // the index of the median among the sorted values of a window
+    parallel_for(std::size_t(h), double(w) * double(side) * median_u8_ns, [&](std::size_t b, std::size_t e) {
+        int hist[256];
+        for (std::size_t y = b; y < e; ++y) {
+            std::fill(hist, hist + 256, 0);
+            const std::uint8_t* top = plane.data() + y * pw;
+            for (int ry = 0; ry < side; ++ry)
+                for (int x = 0; x < side; ++x) ++hist[top[std::size_t(ry) * pw + std::size_t(x)]];
+            int m = 0, below = 0;
+            while (below + hist[m] <= target) below += hist[m++];
+            std::uint8_t* dst = out + y * std::size_t(w) * std::size_t(c) + std::size_t(k);
+            dst[0] = std::uint8_t(m);
+            for (int x = 1; x < w; ++x) {
+                for (int ry = 0; ry < side; ++ry) {
+                    const std::uint8_t* line = top + std::size_t(ry) * pw;
+                    const int gone = line[x - 1], came = line[x + side - 1];
+                    --hist[gone];
+                    if (gone < m) --below;
+                    ++hist[came];
+                    if (came < m) ++below;
+                }
+                while (below > target) below -= hist[--m];
+                while (below + hist[m] <= target) below += hist[m++];
+                dst[std::size_t(x) * std::size_t(c)] = std::uint8_t(m);
+            }
+        }
+    });
+}
+
+// The same for floats: the window is gathered and the middle one is selected (NaNs sort last).
+void median_plane(const std::vector<float>& plane, int w, int h, int c, int k, int r, float* out) {
+    const std::size_t pw = std::size_t(w) + 2 * std::size_t(r);
+    const int side = 2 * r + 1;
+    const std::size_t n = std::size_t(side) * std::size_t(side);
+    parallel_for(std::size_t(h), double(w) * double(n) * median_f32_ns, [&](std::size_t b, std::size_t e) {
+        std::vector<float> win(n);
+        for (std::size_t y = b; y < e; ++y) {
+            for (int x = 0; x < w; ++x) {
+                std::size_t i = 0;
+                for (int ry = 0; ry < side; ++ry) {
+                    const float* line = plane.data() + (y + std::size_t(ry)) * pw + std::size_t(x);
+                    for (int rx = 0; rx < side; ++rx) win[i++] = line[rx];
+                }
+                std::nth_element(win.begin(), win.begin() + std::ptrdiff_t(n / 2), win.end(),
+                                 [](float a, float b2) { return a < b2 || (b2 != b2 && a == a); });
+                out[y * std::size_t(w) * std::size_t(c) + std::size_t(x) * std::size_t(c) + std::size_t(k)] = win[n / 2];
+            }
+        }
+    });
+}
+
+template <class T>
+void median_into(const mat<T>& src, int radius, edge_mode edge, T* out) {
+    for (int k = 0; k < src.channels(); ++k)
+        median_plane(padded_plane(src, k, radius, edge), src.width(), src.height(), src.channels(), k, radius, out);
+}
+
+void check_radius(int radius) {
+    if (radius < 1 || radius > 1000) throw std::invalid_argument("radius must be in 1..1000");
+}
+
+}  // namespace
+
+mat32f median_filter(const mat32f& src, int radius, edge_mode edge) {
+    check_radius(radius);
+    if (src.empty()) return mat32f();
+    mat32f out(src.width(), src.height(), src.channels());
+    median_into(src, radius, edge, out.data());
+    return out;
+}
+
+image8u median_filter(const mat8u& src, int radius, edge_mode edge) {
+    check_radius(radius);
+    if (src.empty()) return image8u();
+    image8u out(src.width(), src.height(), pixel_format_from_channels(src.channels()));
+    median_into(src, radius, edge, out.data());
+    return out;
+}
+
+// ============================================================================================ unsharp mask, pixelize
+
+namespace {
+
+constexpr double sharpen_ns = 1.0;   // the combination of one value, per value
+constexpr double pixelize_ns = 1.0;  // reading and writing one value, per value
+
+inline float clamp01(float v) noexcept { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }  // NaN passes
+
+// 1 gray, 2 gray + alpha, 3 RGB, 4 RGBA: how many channels are colour. Throws for any other count.
+int colour_channels(int channels) {
+    if (channels < 1 || channels > 4)
+        throw std::invalid_argument("expected an image of 1 to 4 channels (gray, gray + alpha, RGB, RGBA)");
+    return (channels == 2 || channels == 4) ? channels - 1 : channels;
+}
+
+// What goes into one block of pixelize: sums in 64-bit integers for 8 bits (exact) and in double for floats.
+template <class T>
+using block_sum_t = std::conditional_t<std::is_same_v<T, std::uint8_t>, std::uint64_t, double>;
+
+// The mean num / den, rounded to the nearest for integers.
+inline std::uint8_t mean_value(std::uint64_t num, std::uint64_t den) { return std::uint8_t((2 * num + den) / (2 * den)); }
+inline float mean_value(double num, double den) { return float(num / den); }
+
+}  // namespace
+
+template <class T>
+traits::if_image_t<mat<T>, void> unsharp_mask_inplace(mat<T>& img, float sigma, float amount, float threshold,
+                                                      edge_mode edge) {
+    const mat32f g = gaussian_kernel(sigma);  // throws for a bad sigma
+    if (!(amount >= 0.0f) || !std::isfinite(amount)) throw std::invalid_argument("amount must be a finite number >= 0");
+    if (!(threshold >= 0.0f && threshold <= 1.0f)) throw std::invalid_argument("threshold must be in [0, 1]");
+    if (img.empty()) return;
+    const int c = img.channels(), colour = colour_channels(c);
+
+    // `base` holds the values as floats and is where the result is made; `blur` is the blurred copy.
+    mat32f converted;
+    if constexpr (std::is_same_v<T, std::uint8_t>) converted = to_f32(img);
+    mat32f& base = [&]() -> mat32f& {
+        if constexpr (std::is_same_v<T, std::uint8_t>) return converted;
+        else return img;
+    }();
+    const mat32f blur = separable_f32(base, taps_of(g, "kernel"), taps_of(g, "kernel"), edge);
+
+    const std::size_t pixels = std::size_t(img.width()) * std::size_t(img.height());
+    float* d = base.data();
+    const float* bl = blur.data();
+    parallel_for(pixels, double(c) * sharpen_ns, [&](std::size_t b, std::size_t e) {
+        for (std::size_t p = b; p < e; ++p) {
+            const std::size_t o = p * std::size_t(c);
+            for (int ch = 0; ch < colour; ++ch) {
+                const float v = d[o + std::size_t(ch)];
+                const float diff = v - bl[o + std::size_t(ch)];
+                d[o + std::size_t(ch)] = clamp01(std::fabs(diff) < threshold ? v : v + amount * diff);
+            }
+            // the alpha channel (if any) keeps its value; for floats it is not clamped, as nothing here reads it as a level
+        }
+    });
+    if constexpr (std::is_same_v<T, std::uint8_t>) math().f32_to_u8(base.data(), img.data(), img.size());
+}
+
+template <class T>
+traits::if_image_t<mat<T>, void> pixelize_inplace(mat<T>& img, int block_w, int block_h) {
+    if (block_w < 1) throw std::invalid_argument("block_w must be >= 1");
+    if (block_h < 0) throw std::invalid_argument("block_h must be >= 0");
+    if (block_h == 0) block_h = block_w;
+    if (img.empty()) return;
+    const int w = img.width(), h = img.height(), c = img.channels();
+    const int colour = colour_channels(c);
+    const bool alpha = colour < c;
+    using sum_t = block_sum_t<T>;
+
+    const std::size_t block_rows = (std::size_t(h) + std::size_t(block_h) - 1) / std::size_t(block_h);
+    parallel_for(block_rows, double(block_h) * double(img.stride()) * pixelize_ns, [&](std::size_t b, std::size_t e) {
+        for (std::size_t by = b; by < e; ++by) {
+            const int y0 = int(by) * block_h, y1 = STB_MIN(h, y0 + block_h);
+            for (int x0 = 0; x0 < w; x0 += block_w) {
+                const int x1 = STB_MIN(w, x0 + block_w);
+                sum_t weighted[3] = {0, 0, 0}, plain[3] = {0, 0, 0}, alpha_sum = 0;
+                for (int y = y0; y < y1; ++y) {
+                    const T* row = img.row(y);
+                    for (int x = x0; x < x1; ++x) {
+                        const T* px = row + std::size_t(x) * std::size_t(c);
+                        const sum_t a = alpha ? sum_t(px[colour]) : sum_t(1);
+                        for (int k = 0; k < colour; ++k) {
+                            weighted[k] += sum_t(px[k]) * a;
+                            plain[k] += sum_t(px[k]);
+                        }
+                        if (alpha) alpha_sum += a;
+                    }
+                }
+                const sum_t count = sum_t(y1 - y0) * sum_t(x1 - x0);
+                T value[4] = {};
+                for (int k = 0; k < colour; ++k)
+                    value[k] = (alpha && alpha_sum != sum_t(0)) ? T(mean_value(weighted[k], alpha_sum)) : T(mean_value(plain[k], count));
+                if (alpha) value[colour] = T(mean_value(alpha_sum, count));
+                for (int y = y0; y < y1; ++y) {
+                    T* row = img.row(y);
+                    for (int x = x0; x < x1; ++x)
+                        for (int k = 0; k < c; ++k) row[std::size_t(x) * std::size_t(c) + std::size_t(k)] = value[k];
+                }
+            }
+        }
+    });
+}
+
+template void unsharp_mask_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, edge_mode);
+template void unsharp_mask_inplace<float>(mat<float>&, float, float, float, edge_mode);
+template void pixelize_inplace<std::uint8_t>(mat<std::uint8_t>&, int, int);
+template void pixelize_inplace<float>(mat<float>&, int, int);
 
 }  // namespace stb

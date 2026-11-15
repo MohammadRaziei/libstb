@@ -413,7 +413,207 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
     image_cls.def("apply_lut", apply_lut, "lut"_a, "A new Image with every value v replaced by lut[v] (see libstb.apply_lut).");
 }
 
+// ---- median_filter, unsharp_mask, pixelize (stb/filter.hpp), colour spaces (stb/colorspace.hpp), metrics (stb/metrics.hpp)
+
+stb::color_space space_of(nb::handle h, const char* what) {
+    using stb::color_space;
+    return to_enum<color_space>(h,
+                                {{"rgb", color_space::rgb}, {"hsv", color_space::hsv}, {"hsl", color_space::hsl}, {"ycbcr", color_space::ycbcr}},
+                                what);
+}
+
+constexpr const char* alpha_doc =
+    "Takes an Image (gives a new Image) or a float32 array of shape (H, W) or (H, W, C) with values 0 to 1 (gives a new\n"
+    "array); 1 to 4 channels: gray, gray + alpha, RGB, RGBA.";
+
+void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
+    nb::enum_<stb::color_space>(m, "ColorSpace",
+                                "A colour space for convert_color. Functions that take a ColorSpace also take its lower-case name:\n"
+                                "\"rgb\", \"hsv\", \"hsl\" or \"ycbcr\".")
+        .value("RGB", stb::color_space::rgb)
+        .value("HSV", stb::color_space::hsv)
+        .value("HSL", stb::color_space::hsl)
+        .value("YCBCR", stb::color_space::ycbcr);
+
+    // ---- median_filter
+    const std::string median_doc =
+        std::string("The median of the (2 * radius + 1)-square around each value, per channel (radius 1 to 1000): removes isolated\n"
+                    "noise and keeps edges. Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array).\n") +
+        edge_doc;
+    m.def(
+        "median_filter",
+        [](const stb::image& img, int radius, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return stb::median_filter(img, radius, e);
+        },
+        "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp", median_doc.c_str());
+    m.def(
+        "median_filter",
+        [](const f32_array& src, int radius, nb::handle edge) -> f32_result {
+            const stb::edge_mode e = edge_of(edge);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::median_filter(in, radius, e); });
+        },
+        "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp");
+    image_cls.def(
+        "median_filter",
+        [](const stb::image& img, int radius, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return stb::median_filter(img, radius, e);
+        },
+        "radius"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the median filter of this one.");
+
+    // ---- unsharp_mask
+    const std::string unsharp_doc =
+        std::string("out = src + amount * (src - gaussian_blur(src, sigma)), clamped to 0..1; a value whose difference from the blur is\n"
+                    "below `threshold` (a fraction of the full range) is left alone. amount 1 is \"100 %\" of Pillow's UnsharpMask.\n"
+                    "The alpha channel is never changed.\n") + alpha_doc + "\n" + edge_doc;
+    m.def(
+        "unsharp_mask",
+        [](const stb::image& img, float sigma, float amount, float threshold, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return stb::unsharp_mask(img, sigma, amount, threshold, e);
+        },
+        "src"_a, "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp", unsharp_doc.c_str());
+    m.def(
+        "unsharp_mask",
+        [](const f32_array& src, float sigma, float amount, float threshold, nb::handle edge) -> f32_result {
+            const stb::edge_mode e = edge_of(edge);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::unsharp_mask(in, sigma, amount, threshold, e); });
+        },
+        "src"_a, "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp");
+    image_cls.def(
+        "unsharp_mask",
+        [](nb::handle self, float sigma, float amount, float threshold, nb::handle edge, bool inplace) {
+            const stb::edge_mode e = edge_of(edge);
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::unsharp_mask(i, sigma, amount, threshold, e); },
+                [&](stb::image& i) { stb::unsharp_mask_inplace(i, sigma, amount, threshold, e); });
+        },
+        "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp", "inplace"_a = false,
+        "Unsharp mask: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- pixelize
+    const std::string pixelize_doc =
+        std::string("Cuts the picture into blocks of block_w x block_h values (block_h 0: the same as block_w), from the top left, and\n"
+                    "fills each block with its mean; the blocks at the right and bottom edges are smaller. The colour of an image with\n"
+                    "alpha is the mean weighted by alpha, and the alpha of a block is the mean of its alpha.\n") + alpha_doc;
+    m.def(
+        "pixelize",
+        [](const stb::image& img, int block_w, int block_h) -> stb::image {
+            nb::gil_scoped_release release;
+            return stb::pixelize(img, block_w, block_h);
+        },
+        "src"_a, "block_w"_a, "block_h"_a = 0, pixelize_doc.c_str());
+    m.def(
+        "pixelize",
+        [](const f32_array& src, int block_w, int block_h) -> f32_result {
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::pixelize(in, block_w, block_h); });
+        },
+        "src"_a, "block_w"_a, "block_h"_a = 0);
+    image_cls.def(
+        "pixelize",
+        [](nb::handle self, int block_w, int block_h, bool inplace) {
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::pixelize(i, block_w, block_h); },
+                [&](stb::image& i) { stb::pixelize_inplace(i, block_w, block_h); });
+        },
+        "block_w"_a, "block_h"_a = 0, nb::kw_only(), "inplace"_a = false,
+        "Pixelizes: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- convert_color
+    const std::string color_doc =
+        std::string("Converts the colour channels from the space `from_space` to `to_space` (ColorSpace, or \"rgb\", \"hsv\", \"hsl\",\n"
+                    "\"ycbcr\"). 3 or 4 channels (an alpha channel is never changed); the array keeps its type and size and its\n"
+                    "channels become (H, S, V), (H, S, L), (Y, Cb, Cr) or (R, G, B). In 8 bits every channel is 0 to 255 and the hue has\n"
+                    "256 steps for the full turn; in float32 every channel is 0 to 1 and the hue is a fraction of the turn. YCbCr is the\n"
+                    "full-range BT.601 of JPEG.\n");
+    m.def(
+        "convert_color",
+        [](const stb::image& img, nb::handle from_space, nb::handle to_space) -> stb::image {
+            const stb::color_space a = space_of(from_space, "from_space"), b = space_of(to_space, "to_space");
+            nb::gil_scoped_release release;
+            return stb::convert_color(img, a, b);
+        },
+        "src"_a, "from_space"_a, "to_space"_a, color_doc.c_str());
+    m.def(
+        "convert_color",
+        [](const f32_array& src, nb::handle from_space, nb::handle to_space) -> f32_result {
+            const stb::color_space a = space_of(from_space, "from_space"), b = space_of(to_space, "to_space");
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::convert_color(in, a, b); });
+        },
+        "src"_a, "from_space"_a, "to_space"_a);
+    image_cls.def(
+        "convert_color",
+        [](nb::handle self, nb::handle from_space, nb::handle to_space, bool inplace) {
+            const stb::color_space a = space_of(from_space, "from_space"), b = space_of(to_space, "to_space");
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::convert_color(i, a, b); },
+                [&](stb::image& i) { stb::convert_color_inplace(i, a, b); });
+        },
+        "from_space"_a, "to_space"_a, nb::kw_only(), "inplace"_a = false,
+        "Converts the colour space: a new Image, or this one changed (and returned) with inplace=True.");
+
+    // ---- metrics
+    const char* pair_doc =
+        "Both pictures are Images, or both float32 arrays, of the same size and channels. Every channel counts, alpha included.";
+    const auto both = [&](const char* name, double (*on_u8)(const stb::mat8u&, const stb::mat8u&),
+                          double (*on_f32)(const stb::mat32f&, const stb::mat32f&), const std::string& doc) {
+        m.def(
+            name,
+            [on_u8](const stb::image& a, const stb::image& b) {
+                nb::gil_scoped_release release;
+                return on_u8(a, b);
+            },
+            "a"_a, "b"_a, doc.c_str());
+        m.def(
+            name,
+            [on_f32](const f32_array& a, const f32_array& b) {
+                const stb::mat32f ma = view_of(a), mb = view_of(b);
+                nb::gil_scoped_release release;
+                return on_f32(ma, mb);
+            },
+            "a"_a, "b"_a);
+    };
+    both("mae", stb::mae, stb::mae,
+         std::string("The mean absolute difference, in levels (0 to 255) for Images and in value units for float32 arrays.\n") + pair_doc);
+    both("mse", stb::mse, stb::mse, std::string("The mean squared difference (levels^2 for Images).\n") + pair_doc);
+    both("psnr", stb::psnr, stb::psnr,
+         std::string("Peak signal-to-noise ratio in dB (peak 255 for Images, 1 for float32 arrays); inf for equal pictures.\n") + pair_doc);
+    both("ssim", stb::ssim, stb::ssim,
+         std::string("Structural similarity (Wang et al. 2004: Gaussian window 11 x 11, sigma 1.5, like scikit-image's\n"
+                     "structural_similarity(gaussian_weights=True)): the mean of ssim_map(). The picture must be at least 11 x 11.\n") + pair_doc);
+    m.def(
+        "ssim_map",
+        [](const stb::image& a, const stb::image& b) {
+            stb::mat32f out;
+            {
+                nb::gil_scoped_release release;
+                out = stb::ssim_map(a, b);
+            }
+            return to_array(std::move(out), true);
+        },
+        "a"_a, "b"_a,
+        "The local SSIM values as a float32 array of shape (H - 10, W - 10, C): one per window that lies inside the picture.");
+    m.def(
+        "ssim_map",
+        [](const f32_array& a, const f32_array& b) {
+            const bool with_channels = a.ndim() == 3;
+            const stb::mat32f ma = view_of(a), mb = view_of(b);
+            stb::mat32f out;
+            {
+                nb::gil_scoped_release release;
+                out = stb::ssim_map(ma, mb);
+            }
+            return to_array(std::move(out), with_channels);
+        },
+        "a"_a, "b"_a);
+}
+
 }  // namespace
+
 
 void bind_filter(nb::module_& m) {
     nb::enum_<stb::edge_mode>(m, "EdgeMode",
@@ -701,4 +901,5 @@ void bind_filter(nb::module_& m) {
                   "enforce_connectivity"_a = true, sp_doc);
 
     bind_tone(m, image_cls);
+    bind_image_ops(m, image_cls);
 }
