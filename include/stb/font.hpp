@@ -199,6 +199,9 @@ public:
     // so ascent - descent of the result is pixel_height. anything else throws invalid_argument.
     font_metrics metrics(float pixel_height) const;
     bool has_glyph(char32_t codepoint) const;
+    // Every Unicode scalar value the font maps to a real glyph (glyph 0, .notdef, does not count), ascending:
+    // exactly the code points for which has_glyph() is true, without asking all 1.1 million of them.
+    std::vector<char32_t> codepoints() const;
     float advance(char32_t codepoint, float pixel_height) const;
     // Kerning (kern table or GPOS pair adjustment) in pixels, usually <= 0.
     float kerning(char32_t left, char32_t right, float pixel_height) const;

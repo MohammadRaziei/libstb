@@ -176,6 +176,43 @@ int face::glyph_index(int codepoint) const {
     return 0;  // not found, or a format this reader does not know (format 2: CJK high-byte mapping)
 }
 
+std::vector<char32_t> face::codepoints() const {
+    // The ranges the cmap subtable declares; glyph_index() then keeps the code points it really maps to a glyph, so the
+    // answer is always what has_glyph() says.
+    const byte_view& m = cmap_;
+    const unsigned format = m.u16(0);
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> ranges;  // [first, last]
+    if (format == 0) {
+        const int bytes = m.u16(2);
+        if (bytes > 6) ranges.emplace_back(0u, std::uint32_t(bytes - 7));
+    } else if (format == 6) {
+        const std::uint32_t first = m.u16(6), count = m.u16(8);
+        if (count) ranges.emplace_back(first, first + count - 1);
+    } else if (format == 4) {
+        const unsigned seg_count = m.u16(6) >> 1;
+        for (unsigned i = 0; i < seg_count; ++i)
+            ranges.emplace_back(m.u16(14 + seg_count * 2 + 2 + 2 * std::size_t(i)), m.u16(14 + 2 * std::size_t(i)));
+    } else if (format == 12 || format == 13) {
+        const std::uint32_t groups = m.u32(12);
+        for (std::uint32_t i = 0; i < groups; ++i) {
+            const std::size_t group = 16 + std::size_t(i) * 12;
+            ranges.emplace_back(m.u32(group), m.u32(group + 4));
+        }
+    }
+    std::vector<char32_t> out;
+    std::uint32_t next = 0;  // the segments of a well-formed cmap ascend; skipping what is behind `next` keeps the result ascending anyway
+    for (const auto& r : ranges) {
+        const std::uint32_t last = r.second < 0x10FFFFu ? r.second : 0x10FFFFu;
+        for (std::uint32_t cp = r.first > next ? r.first : next; cp <= last; ++cp) {
+            if (cp >= 0xD800u && cp <= 0xDFFFu) continue;
+            if (glyph_index(int(cp)) != 0) out.push_back(static_cast<char32_t>(cp));
+            if (cp == 0x10FFFFu) break;
+        }
+        if (last >= next) next = last + 1;
+    }
+    return out;
+}
+
 void face::v_metrics(int& ascent, int& descent, int& line_gap) const {
     ascent = hhea_.i16(4);
     descent = hhea_.i16(6);

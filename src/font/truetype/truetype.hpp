@@ -81,6 +81,8 @@ public:
 
     // The glyph of a Unicode code point, 0 (.notdef) when the font has none.
     int glyph_index(int codepoint) const;
+    // Every Unicode scalar value the cmap maps to a real glyph (glyph 0 does not count), ascending.
+    std::vector<char32_t> codepoints() const;
 
     // hhea ascender, descender (negative) and line gap, in font units.
     void v_metrics(int& ascent, int& descent, int& line_gap) const;

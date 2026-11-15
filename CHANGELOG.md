@@ -8,6 +8,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **`stb::font::codepoints()`**: every Unicode scalar value the font maps to a real glyph (glyph 0 does not count), ascending; the same set `has_glyph()` accepts, read from the cmap's own ranges (formats 0, 4, 6, 12, 13) instead of asking all 1.1 million code points. Test: `test_font.cpp` compares it with a `has_glyph` sweep on five fonts (cmap 4 and 12, CFF, Persian).
 - **Tone** (`stb/tone.hpp`, `libstb.equalize` and friends): `histogram`, `equalize`, `auto_contrast` (Pillow's cutoff rule, within one
   level of `ImageOps.autocontrast`), `match_histogram`, `gamma`, `levels`, and the 8-bit tables `gamma_lut`, `levels_lut`, `apply_lut`.
   They take an `image8u` / `mat8u` or a `mat32f` (floats 0 to 1) with 1 to 4 channels and give back the type they were given; alpha is
@@ -39,6 +40,8 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   when present). Tests: the RFC 4648 vectors, every length and byte value, 1 MiB.
 
 ### Changed
+
+- **`font::outline` caches the commands per glyph** (per font object, thread-safe, one entry per glyph asked for): parsing a glyph was the costly part of drawing text and the same few glyphs are asked for again and again. The result is the same commands as before; `test_font_outline.cpp` checks that against a fresh font from four threads.
 - **Left-to-right text is shaped** (`font::shape`, and with it `draw_text`, `measure`, `render` and the canvas): a line without a
   right-to-left letter used to be one glyph per character; it now runs the font's GSUB (`ccmp`, `locl`, `rlig`, `calt`, `liga`,
   `clig`, `rclt`) and GPOS (`kern`, `dist`, `mark`, `mkmk`) per script run (Latin, Greek, Cyrillic), so "fi" is one glyph

@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <set>
+#include <thread>
 #include <string>
 #include <utility>
 #include <vector>
@@ -293,4 +294,37 @@ UTEST(libstb_font_outline_tests, test_face_count_rejects_what_is_not_a_font) {
     ASSERT_THROWS(stb::font::face_count(std::vector<std::uint8_t>(junk.begin(), junk.end())), stb::decode_error);
     ASSERT_THROWS(stb::font::face_count(std::vector<std::uint8_t>()), stb::decode_error);
     ASSERT_THROWS(stb::font::face_count(std::filesystem::path("/definitely/missing.ttc")), stb::io_error);
+}
+
+// The outlines are cached per glyph: a second ask, and asks from several threads at once, give the commands a fresh
+// font gives.
+UTEST(libstb_font_outline_tests, test_cached_outlines_match_a_fresh_font_across_threads) {
+    const std::string path = std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-test.ttf";
+    const stb::font fresh = stb::font::open(path);
+    const stb::font shared = stb::font::open(path);
+    const std::uint32_t count = shared.glyph_count();
+    ASSERT_TRUE(count > 1);
+    std::vector<std::vector<stb::outline_command>> expected(count);
+    for (std::uint32_t g = 0; g < count; ++g) fresh.outline(g, expected[g]);
+    std::vector<int> bad(4, 0);
+    std::vector<std::thread> threads;
+    for (int t = 0; t < 4; ++t)
+        threads.emplace_back([&, t] {
+            std::vector<stb::outline_command> got;
+            for (int round = 0; round < 3; ++round)
+                for (std::uint32_t i = 0; i < count; ++i) {
+                    const std::uint32_t g = t % 2 ? count - 1 - i : i;
+                    shared.outline(g, got);
+                    if (got.size() != expected[g].size()) { ++bad[t]; continue; }
+                    for (std::size_t k = 0; k < got.size(); ++k)
+                        if (got[k].op != expected[g][k].op || got[k].p[0].x != expected[g][k].p[0].x ||
+                            got[k].p[0].y != expected[g][k].p[0].y || got[k].p[1].x != expected[g][k].p[1].x ||
+                            got[k].p[2].y != expected[g][k].p[2].y) { ++bad[t]; break; }
+                }
+        });
+    for (std::thread& th : threads) th.join();
+    for (int t = 0; t < 4; ++t) ASSERT_EQ(bad[t], 0);
+    std::vector<stb::outline_command> out{stb::outline_command{}};
+    shared.outline(count + 5, out);  // out of range: empty, as before
+    ASSERT_TRUE(out.empty());
 }

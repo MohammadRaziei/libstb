@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <stdexcept>
 #include <string>
 #include <set>
@@ -95,6 +96,12 @@ struct font::impl {
     int index = 0;
 
     float scale(float pixel_height) const { return face.scale_for_pixel_height(pixel_height); }
+
+    // The outline commands of every glyph asked for so far (font::outline): parsing a glyph is the costly part of drawing
+    // text, and a page asks for the same few glyphs again and again. ponytail: unbounded, at most one entry per glyph of
+    // the font; bound it (LRU) if a caller ever walks every glyph of a large CJK font.
+    mutable std::mutex outline_mutex;
+    mutable std::unordered_map<std::uint32_t, std::vector<outline_command>> outline_cache;
 
     // The font's GSUB data for Arabic script, parsed the first time right-to-left text is shaped.
     const arabic_layout& arabic() const {
@@ -325,6 +332,8 @@ float font::kerning(char32_t left, char32_t right, float px) const {
 
 // ------------------------------------------------------------ glyph-index API (font units)
 
+std::vector<char32_t> font::codepoints() const { return impl_->face.codepoints(); }
+
 std::uint32_t font::glyph_index(char32_t cp) const { return std::uint32_t(impl_->face.glyph_index(check_cp(cp))); }
 
 std::uint32_t font::glyph_count() const noexcept { return std::uint32_t(impl_->face.num_glyphs()); }
@@ -355,10 +364,8 @@ font_design_metrics font::design_metrics() const noexcept {
     return d;
 }
 
-void font::outline(std::uint32_t g, std::vector<outline_command>& out) const {
-    out.clear();
-    if (g >= glyph_count()) return;
-    const std::vector<truetype::vertex> vertices = impl_->face.outline(int(g));
+static void parse_outline(const truetype::face& face, std::uint32_t g, std::vector<outline_command>& out) {
+    const std::vector<truetype::vertex> vertices = face.outline(int(g));
     const auto at = [](int x, int y) { return point{float(x), float(y)}; };
     const auto command = [](outline_op op, point a = {}, point b = {}, point c = {}) {
         outline_command cmd;
@@ -385,6 +392,22 @@ void font::outline(std::uint32_t g, std::vector<outline_command>& out) const {
         }
     }
     if (open) out.push_back(command(outline_op::close));
+}
+
+void font::outline(std::uint32_t g, std::vector<outline_command>& out) const {
+    out.clear();
+    if (g >= glyph_count()) return;
+    {
+        const std::lock_guard<std::mutex> lock(impl_->outline_mutex);
+        const auto found = impl_->outline_cache.find(g);
+        if (found != impl_->outline_cache.end()) {
+            out = found->second;
+            return;
+        }
+    }
+    parse_outline(impl_->face, g, out);  // outside the lock: two threads may parse the same glyph once, both get the same commands
+    const std::lock_guard<std::mutex> lock(impl_->outline_mutex);
+    impl_->outline_cache.emplace(g, out);
 }
 
 std::vector<outline_command> font::outline(std::uint32_t g) const {

@@ -837,3 +837,19 @@ UTEST(libstb_shaping_tests, test_gsub_font_and_presentation_form_font_make_the_s
         ASSERT_TRUE(g.shape_glyphs(text).size() == p.shape_glyphs(text).size());
     }
 }
+
+// font::codepoints() walks the cmap; has_glyph() asks one code point at a time. They must agree on every font the tests
+// ship (cmap formats 4 and 12, a CFF font, a Persian font).
+UTEST(libstb_font_tests, test_codepoints_are_exactly_the_code_points_with_a_glyph) {
+    for (const char* name : {"libstb-test.ttf", "libstb-latin-test.ttf", "libstb-cff-test.otf", "libstb-fa-test.ttf",
+                             "libstb-curves-test.ttf"}) {
+        const stb::font f = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/" + name);
+        const std::vector<char32_t> got = f.codepoints();
+        std::vector<char32_t> expected;
+        for (std::uint32_t cp = 0; cp <= 0x10FFFFu; ++cp)
+            if (!(cp >= 0xD800u && cp <= 0xDFFFu) && f.has_glyph(static_cast<char32_t>(cp)))
+                expected.push_back(static_cast<char32_t>(cp));
+        ASSERT_FALSE(expected.empty());
+        ASSERT_TRUE(got == expected);
+    }
+}

@@ -508,6 +508,9 @@ for (const stb::system_font_info& s : stb::font::system_fonts())      // every f
     if (s.family_name == "DejaVu Sans" && !s.bold && !s.italic) f = stb::font::open(s.path, s.index);
 ```
 
+`f.codepoints()` lists every code point the font has a glyph for (ascending), for a caller that builds a table of advances or
+checks coverage; it reads the cmap's own ranges, so it does not cost a `has_glyph` call per Unicode value.
+
 **Shaped text as data.** `font::shape` does the layout work `draw_text` does, but returns it instead of drawing it:
 the glyphs in visual order (left to right), in font units with y up, each with its pen movement and where it came from.
 
