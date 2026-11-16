@@ -8,6 +8,19 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **Thresholds, morphology, connected components, Canny and Scharr** (round 2a of the image-processing plan; Python names are the same,
+  except that `open` and `close` are `morph_open` and `morph_close` in both languages, `libstb.open` being taken). `stb/threshold.hpp`:
+  `threshold` (the step function: 255 where `src > t`), `otsu_threshold` (as scikit-image's `threshold_otsu`) and `adaptive_threshold`
+  (mean or Gaussian neighbourhood, with an offset and an `edge` mode), giving 0/255 masks. `stb/morphology.hpp`: `structuring_element`
+  (rect, ellipse, cross) and `erode`, `dilate`, `morph_open`, `morph_close`, `morph_gradient`, `top_hat`, `black_hat` on `mat8u` or
+  `mat32f` with any number of channels and every `edge_mode` (a full rectangle costs width + height comparisons per value; the
+  differences never go below 0). `stb/components.hpp`: `connected_components` of a mask or of a map of labels (4 or 8 neighbours;
+  pieces numbered by their first value in reading order like `scipy.ndimage.label`; area, bounding box and centre of each), which
+  `superpixel.cpp` now uses instead of its own flood fill. `canny(src, low, high, sigma)` in `stb/filter.hpp` (Gaussian blur, Sobel,
+  thinning, hysteresis; limits are fractions of a full step) and `scharr` next to `sobel`. The functions are templates for
+  `std::uint8_t` and `float`, built in the `.cpp` files with `STB_API` on every explicit instantiation (needed by MSVC). Tests:
+  `test_threshold.cpp`, `test_morphology.cpp`, `test_components.cpp`, `test_canny.cpp`, the scharr cases of `test_filter.cpp`, and
+  `tests/python/test_segmentation.py` (scipy and scikit-image as independent references: exact for morphology, components and Otsu).
 - **Median, unsharp mask, pixelize, colour spaces and metrics** (round 1 of the image-processing plan; Python names are the same).
   `stb::median_filter(src, radius, edge)` (`mat8u` gives an `image8u`, `mat32f` a `mat32f`; per channel; a sliding histogram on 8 bits, so
   the cost hardly depends on the radius). `unsharp_mask(img, sigma, amount, threshold, edge)` and `pixelize(img, block_w, block_h)` follow the

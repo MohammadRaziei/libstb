@@ -46,6 +46,9 @@ from .libstb_py import (EdgeMode, SuperpixelMap, SuperpixelMethod, box_blur, con
                         superpixels, to_8u, to_f32)
 from .libstb_py import (ToneMode, apply_lut, auto_contrast, equalize, gamma, gamma_lut, histogram, levels, levels_lut, match_histogram)
 from .libstb_py import (ColorSpace, convert_color, mae, median_filter, mse, pixelize, psnr, ssim, ssim_map, unsharp_mask)
+from .libstb_py import (AdaptiveMethod, Components, Connectivity, MorphShape, adaptive_threshold, black_hat, canny, connected_components,
+                        dilate, erode, morph_close, morph_gradient, morph_open, otsu_threshold, scharr, structuring_element,
+                        threshold, top_hat)
 
 
 def simd(name):
@@ -177,7 +180,9 @@ __all__ = [
     "Resizer",
     "EdgeMode", "SuperpixelMethod", "SuperpixelMap", "gaussian_blur", "box_blur", "convolve", "gaussian_kernel", "sobel", "magnitude", "superpixels", "to_f32", "to_8u",
     "ToneMode", "histogram", "equalize", "auto_contrast", "match_histogram", "gamma", "levels", "gamma_lut", "levels_lut", "apply_lut",
-    "ColorSpace", "convert_color", "median_filter", "unsharp_mask", "pixelize", "mae", "mse", "psnr", "ssim", "ssim_map",
+    "ColorSpace", "convert_color", "AdaptiveMethod", "Components", "Connectivity", "MorphShape", "adaptive_threshold",
+    "black_hat", "canny", "connected_components", "dilate", "erode", "morph_close", "morph_gradient", "morph_open",
+    "otsu_threshold", "scharr", "structuring_element", "threshold", "top_hat", "median_filter", "unsharp_mask", "pixelize", "mae", "mse", "psnr", "ssim", "ssim_map",
     "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "CompositeOp", "Align", "FontMetrics", "FontFaceInfo", "SystemFont", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",

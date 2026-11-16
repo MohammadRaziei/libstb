@@ -70,6 +70,11 @@ STB_API image8u box_blur(const mat8u& src, int radius, edge_mode edge = edge_mod
 STB_API gradients sobel(const mat32f& src, edge_mode edge = edge_mode::clamp);
 STB_API gradients sobel(const mat8u& src, edge_mode edge = edge_mode::clamp);
 
+// The Scharr derivatives: like sobel() with {3, 10, 3} as the smoothing across (so a step of height 1 gives 16), which
+// is more exact for the direction of an edge.
+STB_API gradients scharr(const mat32f& src, edge_mode edge = edge_mode::clamp);
+STB_API gradients scharr(const mat8u& src, edge_mode edge = edge_mode::clamp);
+
 // sqrt(dx^2 + dy^2) for each value of g. Throws invalid_argument if dx and dy differ in size or channels.
 STB_API mat32f magnitude(const gradients& g);
 
@@ -126,6 +131,22 @@ traits::if_image_rvalue_t<M> pixelize(M&& img, int block_w, int block_h = 0) {
 template <class M>
 traits::if_image_t<M> pixelize(const M& src, int block_w, int block_h = 0) {
     return pixelize(src.copy(), block_w, block_h);
+}
+
+// ---- canny: the edges of a picture as a mask (a mat8u, 255 on an edge, 0 elsewhere), one value wide. A picture of 3 or
+// 4 channels is read as its luma (0.299 R + 0.587 G + 0.114 B), one of 1 channel as it is; 2 or 5 and more channels
+// throw invalid_argument. The steps: a Gaussian blur of `sigma` (0: none), the Sobel gradient, the thinning of its
+// magnitude to the ridge along the direction of the gradient, and the hysteresis: a ridge point is an edge when its
+// magnitude is at least `high`, or at least `low` and connected (8 neighbours) through such points to one that is.
+// The two limits are fractions of a step from 0 to 1 across the picture, along an axis: the magnitude of Sobel divided
+// by 4 (8-bit values are read as value / 255), the same for 8 bits and floats. Throws invalid_argument unless
+// 0 <= low <= high and sigma is a finite number >= 0.
+template <class T>
+STB_API mat8u canny_mat(const mat<T>& src, float low, float high, float sigma);
+
+template <class M>
+traits::if_image_t<M, mat8u> canny(const M& src, float low = 0.1f, float high = 0.2f, float sigma = 1.0f) {
+    return canny_mat<traits::mat_value_t<M>>(src, low, high, sigma);
 }
 
 }  // namespace stb

@@ -22,6 +22,28 @@
 
 namespace testutil {
 
+// The index that stands for i in [0, n) under an edge mode (-1 for "zero"): the definition of the modes, written out, to
+// compare the filters with a plain loop.
+inline int edge_index(int i, int n, stb::edge_mode mode) {
+    if (i >= 0 && i < n) return i;
+    switch (mode) {
+        case stb::edge_mode::zero: return -1;
+        case stb::edge_mode::wrap: return ((i % n) + n) % n;
+        case stb::edge_mode::reflect: {
+            const int p = ((i % (2 * n)) + 2 * n) % (2 * n);
+            return p < n ? p : 2 * n - 1 - p;
+        }
+        case stb::edge_mode::mirror: {
+            if (n == 1) return 0;
+            const int p = ((i % (2 * (n - 1))) + 2 * (n - 1)) % (2 * (n - 1));
+            return p < n ? p : 2 * (n - 1) - p;
+        }
+        case stb::edge_mode::clamp: break;
+    }
+    return i < 0 ? 0 : n - 1;
+}
+
+
 // Collects the records of the "libstb" logger tree at `at` and above while it lives (and puts the logger back
 // as it was). A test that feeds libstb bad input on purpose uses it to say what libstb answered: with no
 // handler, a warning would go to stderr and into the test output.

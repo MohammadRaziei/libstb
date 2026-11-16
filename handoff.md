@@ -1,3 +1,37 @@
+# handoff: دور ۲الف تمام شد (threshold، morphology، components، canny، scharr)، 2026-11-17
+
+**این بخش را اول بخوان؛ زیرش handoff دور ۱ و قبل از آن است و معتبر است.**
+
+## چه ساخته شد (API را کاربر تأیید کرد؛ قالبی با instantiation در cpp و `STB_API` روی آن)
+
+- **`stb/threshold.hpp`**: `threshold(src, t, invert)` (255 وقتی `src > t`)، `otsu_threshold(src)` (مثل `skimage.threshold_otsu`، اولین بیشینه؛ float: 256 دسته بین min و max متناهی، خروجی مرکز دسته)، `adaptive_threshold(src, radius, offset, method, invert, edge)` (`src > local - offset`؛ میانگین یا گاوسی با sigma `0.3r+0.5` مثل OpenCV؛ اختلاف زیر `1e-5` برابر حساب می‌شود تا تصویر یکنواخت نویز نشود). ورودی یک کاناله، خروجی ماسک `mat8u` با 0/255. هسته‌ها `threshold_mat<T>` و `otsu_threshold_mat<T>` و `adaptive_threshold_mat<T>`؛ بسته‌های هدر روی `M` با `traits::if_image_t<M, ...>` و `traits::mat_value_t<M>`.
+- **`stb/morphology.hpp`**: `structuring_element(shape, w, h)` (rect، ellipse از میان وسط چهار ضلع، cross؛ ابعاد فرد)، `erode`، `dilate`، `morph_open`، `morph_close`، `morph_gradient`، `top_hat`، `black_hat` (سه شکل مثل tone؛ `*_inplace<T>` صادرشده برای erode، dilate، gradient، hats؛ open و close فقط ترکیب inline). هر تعداد کانال، هر `edge_mode`، پیش‌فرض clamp. مستطیل کامل جداپذیر (w+h مقایسه)، بقیه یکی برای هر عضو. **نام `open`/`close` به `morph_open`/`morph_close` تغییر کرد** (`libstb.open` در Python تکراری بود و `stb::close` در C++ `::close` را پنهان می‌کرد). تفاضل‌ها اشباع‌اند (هرگز زیر 0 نمی‌روند؛ با clamp روی مرز open می‌تواند بالاتر از تصویر باشد).
+- **`stb/components.hpp`**: `connected_components(mask)` و `connected_components(mat32i labels)` (برچسب منفی پس‌زمینه). `components{labels, count, stats}`؛ شماره‌گذاری به ترتیب اولین مقدار در پیمایش سطری (برابر `scipy.ndimage.label`)، تک‌threadی. `superpixel.cpp` حالا از همین استفاده می‌کند (کد flood fill خودش حذف شد).
+- **`filter.hpp`**: `scharr` کنار `sobel`، و `canny(src, low, high, sigma)`: luma برای 3 و 4 کانال (2 و 5+ خطا)، blur، Sobel، thinning با 4 جهت بدون atan (`strict` سمت اول)، hysteresis هشت‌همسایه. حدها کسری از پله‌ی کامل (بزرگی Sobel تقسیم بر 4)؛ بعد از blur با sigma 1 یک پله‌ی کامل حدود 0.62 می‌شود.
+- **`src/image/plane.hpp`** (داخلی): `resolve` و `padded_plane(src, k, rx, ry, edge)` مشترک بین median و morphology (از `filter.cpp` بیرون آمد).
+- **Python** (`bind_filter.cpp`، تابع `bind_segmentation`): `MorphShape`، `AdaptiveMethod`، `Connectivity`، `scharr`، `threshold`، `otsu_threshold`، `adaptive_threshold`، `structuring_element`، هفت تابع morphology (تابع ماژول روی Image و float32 و متد Image با `inplace=`)، `Components` (`labels` int32 فقط‌خواندنی، `count`، `stats` آرایه‌ی float64 با ستون‌های area, x, y, width, height, cx, cy)، `connected_components`، `canny`. ماسک‌ها همیشه `Image` خاکستری برمی‌گردند.
+- **CMake**: چهار cpp جدید به لیست بدون FMA اضافه شدند.
+
+## تست
+
+- C++: 701 تست پاس (جدید: `test_threshold.cpp`، `test_morphology.cpp`، `test_components.cpp`، `test_canny.cpp`، بخش scharr در `test_filter.cpp`). Python: 1783 پاس و 16 skip. `tests/python/test_segmentation.py` با scipy (morphology و label به‌صورت دقیق برای همه‌ی edge modeها)، scikit-image (Otsu دقیق، Canny با هم‌پوشانی روی حلقه‌ی یک دیسک) مقایسه می‌کند. در CI این‌ها skip می‌شوند چون scipy و scikit-image در extra تست نیستند (تصمیمی گرفته نشده).
+- بدون warning در gcc 13.
+
+## دام‌ها (دوباره نیفت)
+
+- هر `template` صریح باید `STB_API` داشته باشد (MSVC: LNK2019).
+- `std::vector<T> v(std::size_t(w));` با `w` نام یک متغیر، vexing parse است: اول مقدار را در یک `const std::size_t` بریز.
+- `touch a/{b,c}.cpp` زیر `sh` فایل با نام brace می‌سازد: `bash -c` بزن.
+- sandbox: `cmake` و `g++-14` و `qemu-user` را باید apt نصب کرد؛ زیر `qemu -cpu Nehalem` همه‌ی تست‌ها در CI کار می‌کنند (runner `emulate` روی ubuntu-24.04 پین است).
+
+## باز
+
+- دور ۲ب: `bilateral_filter`، `guided_filter`، `warp_affine`/`warp_perspective`، CLAHE (هر API اول پیشنهاد و منتظر تأیید).
+- شیء `Components` را با `SuperpixelMap` ترکیب نکرده‌ام (`connected_components` فقط Image و آرایه‌ی int32 می‌گیرد).
+- ثابت‌های ns جدید (`member_ns`، `compare_ns`، `thin_ns`) کف‌اند و اندازه‌گیری نشده‌اند. بنچمارک ندارند.
+
+---
+
 # handoff: دور ۱ تمام شد (median، unsharp، pixelize، تبدیل رنگ، معیارها)، 2026-11-15
 
 **این بخش را اول بخوان؛ زیرش handoff قبلی (tone، parallel، mat، فیلترها، superpixel، novasvg، ...) است و هنوز معتبر است.**

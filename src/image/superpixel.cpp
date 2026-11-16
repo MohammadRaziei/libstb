@@ -1,4 +1,5 @@
 #include "stb/superpixel.hpp"
+#include "stb/components.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -333,33 +334,12 @@ int enforce_connectivity(mat32i& labels, std::size_t min_size) {
     const std::size_t N = labels.size(), W = std::size_t(labels.width());
     std::int32_t* L = labels.data();
 
-    // the connected pieces
-    std::vector<std::int32_t> piece(N, -1);
-    std::vector<std::size_t> size_of;
-    std::vector<std::size_t> stack;
-    for (std::size_t s = 0; s < N; ++s) {
-        if (piece[s] >= 0) continue;
-        const std::int32_t id = std::int32_t(size_of.size());
-        size_of.push_back(0);
-        piece[s] = id;
-        stack.push_back(s);
-        while (!stack.empty()) {
-            const std::size_t p = stack.back();
-            stack.pop_back();
-            ++size_of[std::size_t(id)];
-            const std::size_t x = p % W;
-            const auto take = [&](std::size_t q) {
-                if (piece[q] < 0 && L[q] == L[p]) {
-                    piece[q] = id;
-                    stack.push_back(q);
-                }
-            };
-            if (x > 0) take(p - 1);
-            if (x + 1 < W) take(p + 1);
-            if (p >= W) take(p - W);
-            if (p + W < N) take(p + W);
-        }
-    }
+    // the connected pieces (numbered in the order of their first value, which is what the rest of the function relies on)
+    const components found = connected_components(labels, connectivity::four);
+    std::vector<std::int32_t> piece(N);
+    for (std::size_t p = 0; p < N; ++p) piece[p] = found.labels.data()[p] - 1;
+    std::vector<std::size_t> size_of(found.stats.size());
+    for (std::size_t i = 0; i < size_of.size(); ++i) size_of[i] = std::size_t(found.stats[i].area);
 
     const std::size_t pieces = size_of.size();
     std::vector<std::int32_t> parent(pieces);

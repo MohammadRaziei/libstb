@@ -321,25 +321,7 @@ namespace {
 
 using stb::edge_mode;
 
-// The index that stands for i in [0, n) under a mode (-1 for "zero"): the definition of the modes, written out.
-int edge_index(int i, int n, edge_mode mode) {
-    if (i >= 0 && i < n) return i;
-    switch (mode) {
-        case edge_mode::zero: return -1;
-        case edge_mode::wrap: return ((i % n) + n) % n;
-        case edge_mode::reflect: {
-            const int p = ((i % (2 * n)) + 2 * n) % (2 * n);
-            return p < n ? p : 2 * n - 1 - p;
-        }
-        case edge_mode::mirror: {
-            if (n == 1) return 0;
-            const int p = ((i % (2 * (n - 1))) + 2 * (n - 1)) % (2 * (n - 1));
-            return p < n ? p : 2 * (n - 1) - p;
-        }
-        case edge_mode::clamp: break;
-    }
-    return clampi(i, n);
-}
+using testutil::edge_index;
 
 // The median of the window around (x, y) of channel k by sorting it.
 template <class M>
@@ -581,4 +563,33 @@ UTEST(libstb_filter_tests, test_pixelize_does_not_depend_on_the_number_of_thread
     stb::pixelize_inplace(many_f, 9);
     EXPECT_TRUE(same_bytes(one, many));
     EXPECT_TRUE(same_bits(one_f, many_f));
+}
+
+// ---- scharr
+
+UTEST(libstb_filter_tests, test_scharr_of_a_step_is_16_times_its_height_and_follows_the_direction) {
+    // a step of 1 between the columns 2 and 3: the difference across is 1 and the smoothing along sums to 3 + 10 + 3
+    stb::mat32f step(6, 5, 1);
+    for (int y = 0; y < 5; ++y)
+        for (int x = 0; x < 6; ++x) step(x, y, 0) = x < 3 ? 0.0f : 1.0f;
+    const stb::gradients g = stb::scharr(step);
+    EXPECT_NEAR(g.dx(2, 2, 0), 16.0f, 1e-5f);
+    EXPECT_NEAR(g.dx(3, 2, 0), 16.0f, 1e-5f);
+    EXPECT_NEAR(g.dx(0, 2, 0), 0.0f, 1e-6f);
+    EXPECT_NEAR(g.dy(2, 2, 0), 0.0f, 1e-6f);
+    // a step between rows is seen by dy and not by dx
+    stb::mat32f rows(5, 6, 1);
+    for (int y = 0; y < 6; ++y)
+        for (int x = 0; x < 5; ++x) rows(x, y, 0) = y < 3 ? 0.0f : 1.0f;
+    const stb::gradients r = stb::scharr(rows);
+    EXPECT_NEAR(r.dy(2, 3, 0), 16.0f, 1e-5f);
+    EXPECT_NEAR(r.dx(2, 3, 0), 0.0f, 1e-6f);
+}
+
+UTEST(libstb_filter_tests, test_scharr_of_8_bits_is_the_scharr_of_the_floats_and_an_empty_input_has_empty_gradients) {
+    const stb::image8u u = patterned8(14, 9, stb::pixel_format::rgb);
+    const stb::gradients a = stb::scharr(u), b = stb::scharr(stb::to_f32(u));
+    EXPECT_TRUE(same_bits(a.dx, b.dx));
+    EXPECT_TRUE(same_bits(a.dy, b.dy));
+    EXPECT_TRUE(stb::scharr(stb::mat8u()).dx.empty());
 }

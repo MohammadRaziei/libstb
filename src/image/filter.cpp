@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "image/math_kernels.hpp"
+#include "plane.hpp"
 #include "stb/parallel.hpp"
 
 namespace stb {
@@ -27,32 +28,7 @@ constexpr double box_ns = 0.6;   // one step of a running sum, per value
 
 // ----------------------------------------------------------------------------------- edges
 
-// The index that stands for i in [0, n) under the edge mode, or -1 where the mode says "zero".
-int resolve(int i, int n, edge_mode mode) noexcept {
-    if (i >= 0 && i < n) return i;
-    switch (mode) {
-        case edge_mode::zero: return -1;
-        case edge_mode::wrap: {
-            const int r = i % n;
-            return r < 0 ? r + n : r;
-        }
-        case edge_mode::reflect: {  // dcba|abcd|dcba
-            const int period = 2 * n;
-            int r = i % period;
-            if (r < 0) r += period;
-            return r < n ? r : period - 1 - r;
-        }
-        case edge_mode::mirror: {  // dcb|abcd|cba
-            if (n == 1) return 0;
-            const int period = 2 * (n - 1);
-            int r = i % period;
-            if (r < 0) r += period;
-            return r < n ? r : period - r;
-        }
-        case edge_mode::clamp: break;
-    }
-    return i < 0 ? 0 : n - 1;
-}
+using detail_plane::resolve;
 
 // `row` (w pixels of c channels) with `r` pixels added on each side as the edge mode says: (w + 2r) * c values.
 void pad_row(const float* row, int w, int c, int r, edge_mode mode, float* out) {
@@ -371,6 +347,20 @@ gradients sobel(const mat8u& src, edge_mode edge) {
     return sobel(to_f32(src), edge);
 }
 
+gradients scharr(const mat32f& src, edge_mode edge) {
+    static const float diff[3] = {-1.0f, 0.0f, 1.0f};
+    static const float smooth[3] = {3.0f, 10.0f, 3.0f};
+    gradients g;
+    g.dx = separable_f32(src, {diff, 3}, {smooth, 3}, edge);
+    g.dy = separable_f32(src, {smooth, 3}, {diff, 3}, edge);
+    return g;
+}
+
+gradients scharr(const mat8u& src, edge_mode edge) {
+    if (src.empty()) return gradients();
+    return scharr(to_f32(src), edge);
+}
+
 mat32f magnitude(const gradients& g) {
     if (g.dx.empty() && g.dy.empty()) return mat32f();
     if (g.dx.width() != g.dy.width() || g.dx.height() != g.dy.height() || g.dx.channels() != g.dy.channels())
@@ -391,29 +381,6 @@ namespace {
 
 constexpr double median_u8_ns = 0.5;    // one step of the sliding histogram, per value and per row of the window
 constexpr double median_f32_ns = 1.5;   // one value of a window handed to nth_element, per value of the window
-
-// One channel `k` of `src` with `r` values added around it on every side as the edge mode says: (w + 2r) x (h + 2r).
-template <class T>
-std::vector<T> padded_plane(const mat<T>& src, int k, int r, edge_mode edge) {
-    const int w = src.width(), h = src.height(), c = src.channels();
-    const std::size_t pw = std::size_t(w) + 2 * std::size_t(r), ph = std::size_t(h) + 2 * std::size_t(r);
-    std::vector<int> cx(pw);
-    for (std::size_t x = 0; x < pw; ++x) cx[x] = resolve(int(x) - r, w, edge);
-    std::vector<T> plane(pw * ph);
-    parallel_for(ph, double(pw) * copy_ns, [&](std::size_t b, std::size_t e) {
-        for (std::size_t y = b; y < e; ++y) {
-            T* d = plane.data() + y * pw;
-            const int sy = resolve(int(y) - r, h, edge);
-            if (sy < 0) {
-                std::fill(d, d + pw, T(0));
-                continue;
-            }
-            const T* row = src.row(sy);
-            for (std::size_t x = 0; x < pw; ++x) d[x] = cx[x] < 0 ? T(0) : row[std::size_t(cx[x]) * std::size_t(c) + std::size_t(k)];
-        }
-    });
-    return plane;
-}
 
 // The median of every window of one 8-bit plane, by a histogram that slides along the row: a step to the right
 // removes one column of the window and adds one, and the median (the value `m` with `below` values under it) moves
@@ -475,7 +442,7 @@ void median_plane(const std::vector<float>& plane, int w, int h, int c, int k, i
 template <class T>
 void median_into(const mat<T>& src, int radius, edge_mode edge, T* out) {
     for (int k = 0; k < src.channels(); ++k)
-        median_plane(padded_plane(src, k, radius, edge), src.width(), src.height(), src.channels(), k, radius, out);
+        median_plane(detail_plane::padded_plane(src, k, radius, radius, edge), src.width(), src.height(), src.channels(), k, radius, out);
 }
 
 void check_radius(int radius) {

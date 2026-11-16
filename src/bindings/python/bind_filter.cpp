@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -612,6 +613,294 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
         "a"_a, "b"_a);
 }
 
+// ---- scharr, thresholds, morphology, connected components and canny (stb/threshold.hpp, morphology.hpp, components.hpp, filter.hpp)
+
+stb::morph_shape shape_of(nb::handle h) {
+    using stb::morph_shape;
+    return to_enum<morph_shape>(h, {{"rect", morph_shape::rect}, {"ellipse", morph_shape::ellipse}, {"cross", morph_shape::cross}}, "shape");
+}
+
+stb::adaptive_method adaptive_of(nb::handle h) {
+    using stb::adaptive_method;
+    return to_enum<adaptive_method>(h, {{"mean", adaptive_method::mean}, {"gaussian", adaptive_method::gaussian}}, "method");
+}
+
+stb::connectivity connectivity_of(nb::handle h) {
+    using stb::connectivity;
+    return to_enum<connectivity>(h, {{"four", connectivity::four}, {"eight", connectivity::eight}}, "connectivity");
+}
+
+// A mask (a mat8u of one channel) as a gray Image: the masks of this section are given back as Images, whatever the input was.
+stb::image mask_image(const stb::mat8u& mask) {
+    if (mask.empty()) return stb::image();
+    stb::image out(mask.width(), mask.height(), stb::pixel_format::gray);
+    std::memcpy(out.data(), mask.data(), mask.size());
+    return out;
+}
+
+// The statistics of the pieces as a float64 array (count, 7): area, x, y, width, height, cx, cy.
+nb::object stats_array(const stb::components& c) {
+    auto* data = new std::vector<double>(std::max<std::size_t>(1, c.stats.size() * 7));
+    for (std::size_t i = 0; i < c.stats.size(); ++i) {
+        const stb::component_stat& s = c.stats[i];
+        const double v[7] = {double(s.area), double(s.x), double(s.y), double(s.width), double(s.height), double(s.cx), double(s.cy)};
+        for (std::size_t k = 0; k < 7; ++k) (*data)[i * 7 + k] = v[k];
+    }
+    nb::capsule owner(data, [](void* p) noexcept { delete static_cast<std::vector<double>*>(p); });
+    const std::size_t shape[2] = {c.stats.size(), 7};
+    return nb::cast(nb::ndarray<nb::numpy, double, nb::ndim<2>>(data->data(), 2, shape, owner));
+}
+
+// One morphology operation: module function on an Image and on a float32 array, and an Image method.
+template <class CopyFn, class InplaceFn>
+void def_morphology(nb::module_& m, nb::class_<stb::image>& image_cls, const char* name, const std::string& doc, CopyFn copy_fn,
+                    InplaceFn inplace_fn) {
+    m.def(
+        name,
+        [copy_fn](const stb::image& img, const stb::image& se, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return copy_fn(img, static_cast<const stb::mat8u&>(se), e);
+        },
+        "src"_a, "se"_a, nb::kw_only(), "edge"_a = "clamp", doc.c_str());
+    m.def(
+        name,
+        [copy_fn](const f32_array& src, const stb::image& se, nb::handle edge) -> f32_result {
+            const stb::edge_mode e = edge_of(edge);
+            return run_f32(src, [&](const stb::mat32f& in) { return copy_fn(in, static_cast<const stb::mat8u&>(se), e); });
+        },
+        "src"_a, "se"_a, nb::kw_only(), "edge"_a = "clamp");
+    image_cls.def(
+        name,
+        [copy_fn, inplace_fn](nb::handle self, const stb::image& se, nb::handle edge, bool inplace) {
+            const stb::edge_mode e = edge_of(edge);
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return copy_fn(i, static_cast<const stb::mat8u&>(se), e); },
+                [&](stb::image& i) { inplace_fn(i, static_cast<const stb::mat8u&>(se), e); });
+        },
+        "se"_a, nb::kw_only(), "edge"_a = "clamp", "inplace"_a = false,
+        "A new Image, or this one changed (and returned) with inplace=True; see the module function of the same name.");
+}
+
+void bind_segmentation(nb::module_& m, nb::class_<stb::image>& image_cls) {
+    nb::enum_<stb::morph_shape>(m, "MorphShape", "The shape of structuring_element(); the lower-case names \"rect\", \"ellipse\", \"cross\" work too.")
+        .value("RECT", stb::morph_shape::rect)
+        .value("ELLIPSE", stb::morph_shape::ellipse)
+        .value("CROSS", stb::morph_shape::cross);
+    nb::enum_<stb::adaptive_method>(m, "AdaptiveMethod", "How adaptive_threshold weighs the neighbourhood: \"mean\" or \"gaussian\".")
+        .value("MEAN", stb::adaptive_method::mean)
+        .value("GAUSSIAN", stb::adaptive_method::gaussian);
+    nb::enum_<stb::connectivity>(m, "Connectivity", "Which values touch in connected_components: \"four\" (an edge) or \"eight\" (an edge or a corner).")
+        .value("FOUR", stb::connectivity::four)
+        .value("EIGHT", stb::connectivity::eight);
+
+    // ---- scharr
+    m.def(
+        "scharr",
+        [](const stb::image& img, nb::handle edge) {
+            const stb::edge_mode e = edge_of(edge);
+            stb::gradients g;
+            {
+                nb::gil_scoped_release release;
+                g = stb::scharr(img, e);
+            }
+            return gradients_tuple(std::move(g), true);
+        },
+        "src"_a, nb::kw_only(), "edge"_a = "clamp",
+        "Like sobel() with {3, 10, 3} as the smoothing across: a tuple (dx, dy) of float32 arrays. A step of height 1 gives 16.");
+    m.def(
+        "scharr",
+        [](const f32_array& src, nb::handle edge) {
+            const stb::edge_mode e = edge_of(edge);
+            const bool with_channels = src.ndim() == 3;
+            const stb::mat32f in = view_of(src);
+            stb::gradients g;
+            {
+                nb::gil_scoped_release release;
+                g = stb::scharr(in, e);
+            }
+            return gradients_tuple(std::move(g), with_channels);
+        },
+        "src"_a, nb::kw_only(), "edge"_a = "clamp");
+
+    // ---- thresholds: the masks are gray Images of 0 and 255
+    m.def(
+        "threshold",
+        [](const stb::image& img, int t, bool invert) {
+            if (t < 0 || t > 255) throw std::invalid_argument("t must be a level from 0 to 255");
+            nb::gil_scoped_release release;
+            return mask_image(stb::threshold(img, std::uint8_t(t), invert));
+        },
+        "src"_a, "t"_a, "invert"_a = false,
+        "The mask (a gray Image) of the values above `t`: 255 where src > t, else 0; invert swaps the two. src is an Image of one\n"
+        "channel with t a level 0 to 255, or a float32 array (H, W) with t a value of the 0 to 1 range. out = 255 * H(src - t) with\n"
+        "H the step function.");
+    m.def(
+        "threshold",
+        [](const f32_array& src, float t, bool invert) {
+            const stb::mat32f in = view_of(src);
+            nb::gil_scoped_release release;
+            return mask_image(stb::threshold(in, t, invert));
+        },
+        "src"_a, "t"_a, "invert"_a = false);
+    m.def(
+        "otsu_threshold",
+        [](const stb::image& img) {
+            nb::gil_scoped_release release;
+            return int(stb::otsu_threshold(img));
+        },
+        "src"_a,
+        "Otsu's level (an int for an Image, a float for a float32 array): the one that best splits the histogram in two, as\n"
+        "scikit-image's threshold_otsu. Use it as the `t` of threshold().");
+    m.def(
+        "otsu_threshold",
+        [](const f32_array& src) {
+            const stb::mat32f in = view_of(src);
+            nb::gil_scoped_release release;
+            return double(stb::otsu_threshold(in));
+        },
+        "src"_a);
+    const std::string adaptive_doc =
+        std::string("The mask (a gray Image) of the values above the local level of their neighbourhood: 255 where\n"
+                    "src > local - offset, `local` being the mean or the Gaussian-weighted mean of the (2 * radius + 1)-square around the value.\n"
+                    "`offset` is in levels for an Image and in values for a float32 array. Takes one channel.\n") + edge_doc;
+    m.def(
+        "adaptive_threshold",
+        [](const stb::image& img, int radius, float offset, nb::handle method, bool invert, nb::handle edge) {
+            const stb::adaptive_method a = adaptive_of(method);
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return mask_image(stb::adaptive_threshold(img, radius, offset, a, invert, e));
+        },
+        "src"_a, "radius"_a, "offset"_a = 0.0f, "method"_a = "gaussian", "invert"_a = false, nb::kw_only(), "edge"_a = "clamp",
+        adaptive_doc.c_str());
+    m.def(
+        "adaptive_threshold",
+        [](const f32_array& src, int radius, float offset, nb::handle method, bool invert, nb::handle edge) {
+            const stb::adaptive_method a = adaptive_of(method);
+            const stb::edge_mode e = edge_of(edge);
+            const stb::mat32f in = view_of(src);
+            nb::gil_scoped_release release;
+            return mask_image(stb::adaptive_threshold(in, radius, offset, a, invert, e));
+        },
+        "src"_a, "radius"_a, "offset"_a = 0.0f, "method"_a = "gaussian", "invert"_a = false, nb::kw_only(), "edge"_a = "clamp");
+
+    // ---- morphology
+    m.def(
+        "structuring_element",
+        [](nb::handle shape, int width, int height) { return mask_image(stb::structuring_element(shape_of(shape), width, height)); },
+        "shape"_a, "width"_a, "height"_a = 0,
+        "A structuring element as a gray Image (members 255): \"rect\", \"ellipse\" or \"cross\" (or a MorphShape), width x height\n"
+        "values, both odd (height 0: the same as the width). Any odd-sized gray Image with non-zero members works as an element too.");
+    const std::string morph_doc =
+        std::string("Takes an Image (a new Image) or a float32 array (a new array), any number of channels, and the structuring element\n"
+                    "`se` (a gray Image). Each channel is done on its own. ") +
+        edge_doc;
+    def_morphology(
+        m, image_cls, "erode", "The smallest value under the element for every position.\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::erode(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::erode_inplace(i, se, e); });
+    def_morphology(
+        m, image_cls, "dilate", "The largest value under the element for every position.\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::dilate(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::dilate_inplace(i, se, e); });
+    def_morphology(
+        m, image_cls, "morph_open", "Erode, then dilate: removes small bright parts.\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::morph_open(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::morph_open_inplace(i, se, e); });
+    def_morphology(
+        m, image_cls, "morph_close", "Dilate, then erode: fills small dark holes.\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::morph_close(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::morph_close_inplace(i, se, e); });
+    def_morphology(
+        m, image_cls, "morph_gradient", "dilate - erode: the outline of the shapes.\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::morph_gradient(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::morph_gradient_inplace(i, se, e); });
+    def_morphology(
+        m, image_cls, "top_hat", "src - morph_open(src): the small bright parts (never below 0).\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::top_hat(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::top_hat_inplace(i, se, e); });
+    def_morphology(
+        m, image_cls, "black_hat", "morph_close(src) - src: the small dark parts (never below 0).\n" + morph_doc,
+        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::black_hat(s, se, e); },
+        [](stb::image& i, const stb::mat8u& se, stb::edge_mode e) { stb::black_hat_inplace(i, se, e); });
+
+    // ---- connected components
+    nb::class_<stb::components>(m, "Components",
+                                "The pieces of a mask: `labels` (int32 array (H, W), 0 the background, 1..count in the order of the first value of\n"
+                                "each piece), `count`, and `stats` (float64 array (count, 7): area, x, y, width, height, cx, cy of the piece\n"
+                                "labelled i + 1 in row i; cx and cy are the centre of mass).")
+        .def_prop_ro("count", [](const stb::components& c) { return c.count; })
+        .def_prop_ro("labels",
+                     [](nb::handle self) {
+                         const stb::components& c = nb::cast<const stb::components&>(self);
+                         static const std::int32_t none = 0;
+                         const std::size_t shape[2] = {std::size_t(c.labels.height()), std::size_t(c.labels.width())};
+                         const std::int32_t* data = c.labels.empty() ? &none : c.labels.data();
+                         return nb::cast(nb::ndarray<nb::numpy, const std::int32_t, nb::ndim<2>>(data, 2, shape, self));  // read-only, keeps the object alive
+                     })
+        .def_prop_ro("stats", [](const stb::components& c) { return stats_array(c); })
+        .def("__repr__", [](const stb::components& c) { return "<libstb.Components count=" + std::to_string(c.count) + ">"; });
+    m.def(
+        "connected_components",
+        [](const stb::image& mask, nb::handle conn) {
+            const stb::connectivity c = connectivity_of(conn);
+            nb::gil_scoped_release release;
+            return stb::connected_components(mask, c);
+        },
+        "mask"_a, "connectivity"_a = "four",
+        "The pieces of the non-zero values of a mask (a gray Image) as a Components. connectivity is \"four\" (values that share\n"
+        "an edge touch) or \"eight\" (an edge or a corner). With an int32 array (H, W) of labels instead of an Image, the pieces are\n"
+        "the touching values of the same label, and a negative label is the background.");
+    m.def(
+        "connected_components",
+        [](const nb::ndarray<const std::int32_t, nb::c_contig, nb::device::cpu>& labels, nb::handle conn) {
+            if (labels.ndim() != 2) throw std::invalid_argument("expected an int32 array of shape (H, W)");
+            const stb::connectivity c = connectivity_of(conn);
+            stb::mat32i map(int(labels.shape(1)), int(labels.shape(0)), 1);
+            if (labels.size() != 0) std::memcpy(map.data(), labels.data(), labels.size() * sizeof(std::int32_t));
+            nb::gil_scoped_release release;
+            return stb::connected_components(map, c);
+        },
+        "labels"_a, "connectivity"_a = "four");
+
+    // ---- canny
+    const std::string canny_doc =
+        "The edges of a picture as a mask (a gray Image, 255 on an edge, one value wide). Takes an Image or a float32 array of 1, 3 or 4\n"
+        "channels (3 and 4 are read as luma). A Gaussian blur of `sigma` (0: none), the Sobel gradient, the thinning to the ridge, and the\n"
+        "hysteresis: a ridge point is an edge if its magnitude is at least `high`, or at least `low` and connected to such a point. The\n"
+        "limits are fractions of a step from 0 to 1 across the picture (the Sobel magnitude divided by 4).";
+    m.def(
+        "canny",
+        [](const stb::image& img, float low, float high, float sigma) {
+            nb::gil_scoped_release release;
+            return mask_image(stb::canny(img, low, high, sigma));
+        },
+        "src"_a, "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f, canny_doc.c_str());
+    m.def(
+        "canny",
+        [](const f32_array& src, float low, float high, float sigma) {
+            const stb::mat32f in = view_of(src);
+            nb::gil_scoped_release release;
+            return mask_image(stb::canny(in, low, high, sigma));
+        },
+        "src"_a, "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f);
+    image_cls.def(
+        "canny", [](const stb::image& img, float low, float high, float sigma) {
+            nb::gil_scoped_release release;
+            return mask_image(stb::canny(img, low, high, sigma));
+        },
+        "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f, "The edges of this Image as a gray Image mask; see libstb.canny.");
+    image_cls.def(
+        "threshold",
+        [](const stb::image& img, int t, bool invert) {
+            if (t < 0 || t > 255) throw std::invalid_argument("t must be a level from 0 to 255");
+            nb::gil_scoped_release release;
+            return mask_image(stb::threshold(img, std::uint8_t(t), invert));
+        },
+        "t"_a, "invert"_a = false, "The mask of the values above `t` as a gray Image; see libstb.threshold.");
+}
+
 }  // namespace
 
 
@@ -902,4 +1191,5 @@ void bind_filter(nb::module_& m) {
 
     bind_tone(m, image_cls);
     bind_image_ops(m, image_cls);
+    bind_segmentation(m, image_cls);
 }
