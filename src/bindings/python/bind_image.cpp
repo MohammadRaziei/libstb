@@ -345,7 +345,15 @@ void bind_image(nb::module_& m) {
         .value("LIGHTEN", stb::blend_mode::lighten)
         .value("ADD", stb::blend_mode::add)
         .value("DIFFERENCE", stb::blend_mode::difference)
-        .value("EXCLUSION", stb::blend_mode::exclusion);
+        .value("EXCLUSION", stb::blend_mode::exclusion)
+        .value("COLOR_DODGE", stb::blend_mode::color_dodge)
+        .value("COLOR_BURN", stb::blend_mode::color_burn)
+        .value("HARD_LIGHT", stb::blend_mode::hard_light)
+        .value("SOFT_LIGHT", stb::blend_mode::soft_light)
+        .value("HUE", stb::blend_mode::hue)
+        .value("SATURATION", stb::blend_mode::saturation)
+        .value("COLOR", stb::blend_mode::color)
+        .value("LUMINOSITY", stb::blend_mode::luminosity);
 
     nb::enum_<stb::composite_op>(m, "CompositeOp",
                                  "How Image.blend shares the alpha between the overlay and the pixels below (the\n"
@@ -655,7 +663,7 @@ void bind_image(nb::module_& m) {
             "overlay"_a, "x"_a = 0, "y"_a = 0, "mode"_a = "normal", "opacity"_a = 1.0f, "op"_a = "source_over",
             "A new Image: this one with `overlay` blended on top at (x, y). `mode` is a BlendMode or its name\n"
             "(\"normal\" is the usual \"over\" operator with straight alpha; \"multiply\", \"screen\", \"overlay\",\n"
-            "\"darken\", \"lighten\", \"add\", \"difference\" and \"exclusion\" are the Photoshop modes of those names), and\n"
+            "\"darken\", \"lighten\", \"add\", \"difference\", \"exclusion\", \"color_dodge\", \"color_burn\", \"hard_light\", \"soft_light\", \"hue\", \"saturation\", \"color\" and \"luminosity\" are the Photoshop modes of those names), and\n"
             "`opacity` (0..1) scales the overlay's alpha. `op` is a CompositeOp or its name (\"source_over\", the\n"
             "usual \"over\", by default; the other Porter-Duff operators work inside the overlay's rectangle only). The overlay may hang over the edges (it is\n"
             "clipped) and may have any channel count: without alpha it is opaque, gray is replicated\n"

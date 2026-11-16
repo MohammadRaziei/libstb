@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
@@ -27,7 +28,10 @@ const composite_op all_ops[] = {composite_op::clear,           composite_op::sou
                                 composite_op::plus_lighter};
 const blend_mode all_modes[] = {blend_mode::normal,     blend_mode::multiply, blend_mode::screen,
                                 blend_mode::overlay,    blend_mode::darken,   blend_mode::lighten,
-                                blend_mode::add,        blend_mode::difference, blend_mode::exclusion};
+                                blend_mode::add,        blend_mode::difference, blend_mode::exclusion,
+                                blend_mode::color_dodge, blend_mode::color_burn, blend_mode::hard_light,
+                                blend_mode::soft_light, blend_mode::hue,        blend_mode::saturation,
+                                blend_mode::color,      blend_mode::luminosity};
 
 double mix_channel(blend_mode m, double b, double s) {
     switch (m) {
@@ -40,8 +44,58 @@ double mix_channel(blend_mode m, double b, double s) {
         case blend_mode::add: return STB_MIN(1.0, b + s);
         case blend_mode::difference: return std::fabs(b - s);
         case blend_mode::exclusion: return b + s - 2 * b * s;
+        case blend_mode::color_dodge: return b == 0 ? 0 : s >= 1 ? 1 : STB_MIN(1.0, b / (1 - s));
+        case blend_mode::color_burn: return b >= 1 ? 1 : s <= 0 ? 0 : 1 - STB_MIN(1.0, (1 - b) / s);
+        case blend_mode::hard_light: return s <= 0.5 ? 2 * b * s : b + (2 * s - 1) - b * (2 * s - 1);
+        case blend_mode::soft_light: {
+            if (s <= 0.5) return b - (1 - 2 * s) * b * (1 - b);
+            const double d = b <= 0.25 ? ((16 * b - 12) * b + 4) * b : std::sqrt(b);
+            return b + (2 * s - 1) * (d - b);
+        }
+        default: return s;  // the non-separable modes: mix_rgb
     }
-    return s;
+}
+
+// The W3C non-separable helpers, in double
+double lum(const double c[3]) { return 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]; }
+double sat(const double c[3]) { return STB_MAX(c[0], STB_MAX(c[1], c[2])) - STB_MIN(c[0], STB_MIN(c[1], c[2])); }
+void set_lum(double c[3], double l) {
+    const double d = l - lum(c);
+    for (int k = 0; k < 3; ++k) c[k] += d;
+    const double ll = lum(c), n = STB_MIN(c[0], STB_MIN(c[1], c[2])), x = STB_MAX(c[0], STB_MAX(c[1], c[2]));
+    if (n < 0)
+        for (int k = 0; k < 3; ++k) c[k] = ll + (c[k] - ll) * ll / (ll - n);
+    if (x > 1)
+        for (int k = 0; k < 3; ++k) c[k] = ll + (c[k] - ll) * (1 - ll) / (x - ll);
+}
+void set_sat(double c[3], double s) {
+    int imax = 0, imin = 0;
+    for (int k = 1; k < 3; ++k) {
+        if (c[k] > c[imax]) imax = k;
+        if (c[k] < c[imin]) imin = k;
+    }
+    if (c[imax] <= c[imin]) {
+        c[0] = c[1] = c[2] = 0;
+        return;
+    }
+    const int imid = 3 - imax - imin;
+    const double mn = c[imin], mx = c[imax];
+    c[imid] = (c[imid] - mn) * s / (mx - mn);
+    c[imax] = s;
+    c[imin] = 0;
+}
+
+// B(Cb, Cs) of a mode for a whole colour (red, green, blue each 0..1)
+void mix_rgb(blend_mode m, const double b[3], const double s[3], double out[3]) {
+    if (m < blend_mode::hue) {
+        for (int k = 0; k < 3; ++k) out[k] = mix_channel(m, b[k], s[k]);
+        return;
+    }
+    const double *from = (m == blend_mode::hue || m == blend_mode::color) ? s : b;
+    for (int k = 0; k < 3; ++k) out[k] = from[k];
+    if (m == blend_mode::hue) set_sat(out, sat(b));
+    if (m == blend_mode::saturation) set_sat(out, sat(s));
+    set_lum(out, m == blend_mode::luminosity ? lum(s) : lum(b));
 }
 
 void factors(composite_op op, double sa, double ab, double& fa, double& fb) {
@@ -69,6 +123,14 @@ void reference(composite_op op, blend_mode mode, u32 d, u32 s, int ca, double ou
     const double sa = channel(s, 24) / 255.0, ab = channel(d, 24) / 255.0, c = ca / 255.0;
     double fa, fb;
     factors(op, sa, ab, fa, fb);
+    // the blend of the unpremultiplied colours, as (red, green, blue); channel i (shift 8 i) is blue, green, red
+    double us3[3], ub3[3], mixed[3];
+    for (int k = 0; k < 3; ++k) {
+        const int shift = 16 - 8 * k;
+        us3[k] = sa > 0 ? channel(s, shift) / 255.0 / sa : 0;
+        ub3[k] = ab > 0 ? channel(d, shift) / 255.0 / ab : 0;
+    }
+    mix_rgb(mode, ub3, us3, mixed);
     for (int i = 0; i < 4; ++i) {
         const int shift = 8 * i;
         const double cs = channel(s, shift) / 255.0, cb = channel(d, shift) / 255.0;
@@ -76,8 +138,7 @@ void reference(composite_op op, blend_mode mode, u32 d, u32 s, int ca, double ou
         if (i == 3) {
             full = fa * sa + fb * ab;
         } else {
-            const double us = sa > 0 ? cs / sa : 0, ub = ab > 0 ? cb / ab : 0;
-            const double blended = cs * (1 - ab) + sa * ab * mix_channel(mode, ub, us);
+            const double blended = cs * (1 - ab) + sa * ab * mixed[2 - i];
             full = fa * blended + fb * cb;
         }
         full = STB_MIN(1.0, full);
@@ -237,7 +298,7 @@ UTEST(libstb_composite_row_tests, test_bad_arguments) {
     ASSERT_THROWS(stb::composite_row(d.data(), nullptr, 4, composite_op::source_over, blend_mode::normal, 255), std::invalid_argument);
     ASSERT_THROWS(stb::composite_solid_row(nullptr, 0u, 4, composite_op::source_over, blend_mode::normal, 255), std::invalid_argument);
     ASSERT_THROWS(stb::composite_row(d.data(), s.data(), 4, composite_op(13), blend_mode::normal, 255), std::invalid_argument);
-    ASSERT_THROWS(stb::composite_row(d.data(), s.data(), 4, composite_op::source_over, blend_mode(9), 255), std::invalid_argument);
+    ASSERT_THROWS(stb::composite_row(d.data(), s.data(), 4, composite_op::source_over, blend_mode(17), 255), std::invalid_argument);
     // an empty row needs no pointers
     stb::composite_row(nullptr, nullptr, 0, composite_op::source_over, blend_mode::normal, 255);
     stb::composite_solid_row(nullptr, 0u, 0, composite_op::source_over, blend_mode::normal, 255);
@@ -328,4 +389,36 @@ UTEST(libstb_composite_row_tests, test_every_simd_backend_gives_the_same_integer
             }
         }
     }
+}
+
+// Hand-worked W3C values on opaque pixels (red/green/blue in the low 24 bits, alpha 255).
+UTEST(libstb_composite_row_tests, test_the_newer_blend_modes_give_the_w3c_values) {
+    const auto mix = [](blend_mode m, u32 below, u32 over) {
+        u32 px = below;
+        stb::composite_solid_row(&px, over, 1, composite_op::source_over, m, 255);
+        return px;
+    };
+    const auto gray = [](int v) { return 0xFF000000u | u32(v) << 16 | u32(v) << 8 | u32(v); };
+    const auto near = [](u32 got, int r, int g, int b) {
+        return std::abs(channel(got, 16) - r) <= 2 && std::abs(channel(got, 8) - g) <= 2 && std::abs(channel(got, 0) - b) <= 2;
+    };
+    // separable: b / (1 - s), 1 - (1 - b) / s, screen(b, 2 s - 1), b - (1 - 2 s) b (1 - b)
+    ASSERT_TRUE(near(mix(blend_mode::color_dodge, gray(100), gray(50)), 124, 124, 124));
+    ASSERT_TRUE(near(mix(blend_mode::color_burn, gray(200), gray(100)), 115, 115, 115));
+    ASSERT_TRUE(near(mix(blend_mode::hard_light, gray(100), gray(200)), 188, 188, 188));
+    ASSERT_TRUE(near(mix(blend_mode::soft_light, gray(100), gray(50)), 63, 63, 63));
+    // the special cases: black stays black under dodge, white stays white under burn, white dodges to white
+    ASSERT_TRUE(near(mix(blend_mode::color_dodge, gray(0), gray(200)), 0, 0, 0));
+    ASSERT_TRUE(near(mix(blend_mode::color_burn, gray(255), gray(20)), 255, 255, 255));
+    ASSERT_TRUE(near(mix(blend_mode::color_dodge, gray(10), gray(255)), 255, 255, 255));
+    ASSERT_TRUE(near(mix(blend_mode::color_burn, gray(250), gray(0)), 0, 0, 0));
+    // non-separable, on a gray backdrop: the hue and saturation of a colour change nothing, luminosity takes its Lum
+    const u32 colour = 0xFF3C78B4u;
+    ASSERT_TRUE(near(mix(blend_mode::hue, gray(100), colour), 100, 100, 100));
+    ASSERT_TRUE(near(mix(blend_mode::saturation, colour, gray(30)), 109, 109, 109));  // Lum(colour) = 0.3 60 + 0.59 120 + 0.11 180
+    // a red backdrop under a mid gray: color keeps red's luminosity (0.3 -> 77), luminosity takes the gray's (128) and clips
+    ASSERT_TRUE(near(mix(blend_mode::color, 0xFFFF0000u, gray(128)), 77, 77, 77));
+    ASSERT_TRUE(near(mix(blend_mode::luminosity, 0xFFFF0000u, gray(128)), 255, 74, 74));
+    // hue of a green over a red backdrop at full saturation: green hue, red's saturation and luminosity (0.3 * 255)
+    ASSERT_TRUE(near(mix(blend_mode::hue, 0xFFFF0000u, 0xFF00FF00u), 0, 130, 0));
 }

@@ -34,6 +34,22 @@ def px(image, x=0, y=0):
         ("lighten", 200, 100, 200),
         ("add", 200, 100, 255),
         ("difference", 100, 200, 100),
+        ("exclusion", 200, 128, 127),
+        ("color_dodge", 100, 50, 124),
+        ("color_dodge", 0, 200, 0),
+        ("color_dodge", 10, 255, 255),
+        ("color_burn", 200, 100, 115),
+        ("color_burn", 255, 20, 255),
+        ("color_burn", 250, 0, 0),
+        ("hard_light", 100, 200, 188),
+        ("hard_light", 100, 50, 39),
+        ("soft_light", 100, 50, 63),
+        ("soft_light", 100, 200, 134),
+        # the non-separable modes on a gray image: only luminosity changes what is below
+        ("hue", 100, 200, 100),
+        ("saturation", 100, 200, 100),
+        ("color", 100, 200, 100),
+        ("luminosity", 100, 200, 200),
     ],
 )
 def test_blend_modes_give_their_formula(mode, base, over, want):
@@ -49,6 +65,13 @@ def test_blend_takes_the_enum_or_its_name():
             base.blend(over, mode=bad)
     with pytest.raises(TypeError):
         base.blend(over, mode=3)
+
+
+def test_blend_mode_names_are_the_enum_names_in_lower_case():
+    base, over = solid(1, 1, 3, 100), solid(1, 1, 3, 50)
+    for member in ("COLOR_DODGE", "COLOR_BURN", "HARD_LIGHT", "SOFT_LIGHT", "HUE", "SATURATION", "COLOR", "LUMINOSITY"):
+        enum = getattr(stb.BlendMode, member)
+        assert px(base.blend(over, mode=enum)) == px(base.blend(over, mode=member.lower()))
 
 
 def test_blend_opacity_and_errors():

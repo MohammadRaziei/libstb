@@ -147,6 +147,10 @@
 - [x] **`font::codepoints()`**: همه‌ی code point هایی که فونت براشون glyph واقعی داره (glyph 0 حساب نمی‌شه)، صعودی؛ دقیقاً
       همون مجموعه‌ی `has_glyph`، از range های خود cmap (فرمت 0، 4، 6، 12، 13) نه با پرسیدن 1.1 میلیون مقدار. تست با
       sweep ی `has_glyph` روی ۵ فونت.
+- [x] **هشت blend mode ی دیگه**: `color_dodge`، `color_burn`، `hard_light`، `soft_light` و non-separable ها (`hue`، `saturation`،
+      `color`، `luminosity`) بعد از `exclusion` (عدد mode های قبلی عوض نشد). هم در `image::blend` (float، پایتون با
+      `BlendMode.COLOR_DODGE` و ...) و هم در `composite_row` (integer، روی رنگ unpremultiplied ی 8 بیتی؛ non-separable ها با ۶۴ بیت و وزن
+      دقیق ۰٫۳/۰٫۵۹/۰٫۱۱ تا همه‌ی backend ها بیت‌به‌بیت یکی باشن). تست با فرمول double روی هر ۱۷ mode (بیشترین خطا ۱٫۹۶ سطح).
 
 ## قبل از هر چیز دیگه
 

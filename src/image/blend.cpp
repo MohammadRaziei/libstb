@@ -22,7 +22,7 @@ using detail::fill_run;
 using detail::need_pixels;
 using detail::pixel_of;
 
-// The colour of mode m for one channel: b is the pixel below, s the overlay's, both in 0..1.
+// The separable modes: the colour of mode m for one channel, b the pixel below, s the overlay's, both in 0..1.
 float mix(blend_mode m, float b, float s) {
     switch (m) {
         case blend_mode::normal: return s;
@@ -34,8 +34,84 @@ float mix(blend_mode m, float b, float s) {
         case blend_mode::add: return std::min(1.0f, b + s);
         case blend_mode::difference: return std::fabs(b - s);
         case blend_mode::exclusion: return b + s - 2.0f * b * s;
+        case blend_mode::color_dodge: return b <= 0.0f ? 0.0f : s >= 1.0f ? 1.0f : std::min(1.0f, b / (1.0f - s));
+        case blend_mode::color_burn: return b >= 1.0f ? 1.0f : s <= 0.0f ? 0.0f : 1.0f - std::min(1.0f, (1.0f - b) / s);
+        case blend_mode::hard_light: return s <= 0.5f ? 2.0f * b * s : b + (2.0f * s - 1.0f) - b * (2.0f * s - 1.0f);
+        case blend_mode::soft_light: {
+            if (s <= 0.5f) return b - (1.0f - 2.0f * s) * b * (1.0f - b);
+            const float d = b <= 0.25f ? ((16.0f * b - 12.0f) * b + 4.0f) * b : std::sqrt(b);
+            return b + (2.0f * s - 1.0f) * (d - b);
+        }
+        default: return s;  // the non-separable modes are mix_pixel's
     }
-    return s;
+}
+
+// The non-separable modes work on whole colours (the W3C spec's Lum, Sat, SetLum, SetSat and ClipColor).
+float lum(const float c[3]) { return 0.3f * c[0] + 0.59f * c[1] + 0.11f * c[2]; }
+float sat(const float c[3]) { return std::max({c[0], c[1], c[2]}) - std::min({c[0], c[1], c[2]}); }
+
+void clip_color(float c[3]) {
+    const float l = lum(c), n = std::min({c[0], c[1], c[2]}), x = std::max({c[0], c[1], c[2]});
+    if (n < 0.0f)
+        for (int k = 0; k < 3; ++k) c[k] = l + (c[k] - l) * l / (l - n);
+    if (x > 1.0f)
+        for (int k = 0; k < 3; ++k) c[k] = l + (c[k] - l) * (1.0f - l) / (x - l);
+}
+
+void set_lum(float c[3], float l) {
+    const float d = l - lum(c);
+    for (int k = 0; k < 3; ++k) c[k] += d;
+    clip_color(c);
+}
+
+void set_sat(float c[3], float s) {
+    int imax = 0, imin = 0;
+    for (int k = 1; k < 3; ++k) {
+        if (c[k] > c[imax]) imax = k;
+        if (c[k] < c[imin]) imin = k;
+    }
+    if (c[imax] <= c[imin]) {
+        c[0] = c[1] = c[2] = 0.0f;
+        return;
+    }
+    const int imid = 3 - imax - imin;
+    const float mn = c[imin], mx = c[imax];
+    c[imid] = (c[imid] - mn) * s / (mx - mn);
+    c[imax] = s;
+    c[imin] = 0.0f;
+}
+
+// The colour of mode m for a whole pixel: b below, s the overlay's (0..1 each), `colours` of them in use (a gray image
+// uses its one value as all three). Writes `out`.
+void mix_pixel(blend_mode m, const float b[3], const float s[3], int colours, float out[3]) {
+    if (m < blend_mode::hue) {
+        for (int k = 0; k < colours; ++k) out[k] = mix(m, b[k], s[k]);
+        return;
+    }
+    const float bb[3] = {b[0], colours == 1 ? b[0] : b[1], colours == 1 ? b[0] : b[2]};
+    const float ss[3] = {s[0], colours == 1 ? s[0] : s[1], colours == 1 ? s[0] : s[2]};
+    float c[3];
+    switch (m) {
+        case blend_mode::hue:
+            std::copy(ss, ss + 3, c);
+            set_sat(c, sat(bb));
+            set_lum(c, lum(bb));
+            break;
+        case blend_mode::saturation:
+            std::copy(bb, bb + 3, c);
+            set_sat(c, sat(ss));
+            set_lum(c, lum(bb));
+            break;
+        case blend_mode::color:
+            std::copy(ss, ss + 3, c);
+            set_lum(c, lum(bb));
+            break;
+        default:  // luminosity
+            std::copy(bb, bb + 3, c);
+            set_lum(c, lum(ss));
+            break;
+    }
+    for (int k = 0; k < colours; ++k) out[k] = c[k];
 }
 
 std::uint8_t to_byte(float v) { return std::uint8_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); }
@@ -53,19 +129,28 @@ std::string_view blend_mode_name(blend_mode m) noexcept {
         case blend_mode::add: return "add";
         case blend_mode::difference: return "difference";
         case blend_mode::exclusion: return "exclusion";
+        case blend_mode::color_dodge: return "color_dodge";
+        case blend_mode::color_burn: return "color_burn";
+        case blend_mode::hard_light: return "hard_light";
+        case blend_mode::soft_light: return "soft_light";
+        case blend_mode::hue: return "hue";
+        case blend_mode::saturation: return "saturation";
+        case blend_mode::color: return "color";
+        case blend_mode::luminosity: return "luminosity";
     }
     return {};
 }
 
 blend_mode blend_mode_from_name(std::string_view name) {
-    for (const blend_mode m : {blend_mode::normal, blend_mode::multiply, blend_mode::screen, blend_mode::overlay,
-                               blend_mode::darken, blend_mode::lighten, blend_mode::add, blend_mode::difference,
-                               blend_mode::exclusion}) {
+    for (int i = 0; i <= int(blend_mode::luminosity); ++i) {
+        const blend_mode m = static_cast<blend_mode>(i);
         if (blend_mode_name(m) == name) return m;
     }
     throw std::invalid_argument("unknown blend mode '" + std::string(name) +
-                                "' (normal, multiply, screen, overlay, darken, lighten, add, difference, exclusion)");
+                                "' (normal, multiply, screen, overlay, darken, lighten, add, difference, exclusion, "
+                                "color_dodge, color_burn, hard_light, soft_light, hue, saturation, color, luminosity)");
 }
+
 
 namespace {
 constexpr composite_op all_composite_ops[] = {
@@ -154,9 +239,12 @@ void blend_row(const std::uint8_t* src, int sc, std::uint8_t* dst, int dc, std::
             float fa, fb;
             porter_duff(op, sa, ab, fa, fb);
             const float ao = std::min(1.0f, sa * fa + ab * fb);
+            float below[3], mixed[3];
+            for (int k = 0; k < colours; ++k) below[k] = float(dst[k]) / 255.0f;
+            mix_pixel(mode, below, rgb, colours, mixed);
             for (int k = 0; k < colours; ++k) {
-                const float cb = float(dst[k]) / 255.0f, cs = rgb[k];
-                const float cs2 = (1.0f - ab) * cs + ab * mix(mode, cb, cs);
+                const float cb = below[k], cs = rgb[k];
+                const float cs2 = (1.0f - ab) * cs + ab * mixed[k];
                 const float co = std::min(1.0f, sa * fa * cs2 + ab * fb * cb);
                 dst[k] = to_byte(!dst_alpha ? co : ao > 0.0f ? co / ao : 0.0f);
             }
@@ -164,9 +252,12 @@ void blend_row(const std::uint8_t* src, int sc, std::uint8_t* dst, int dc, std::
             continue;
         }
         const float out_a = sa + ab * (1.0f - sa);
+        float below[3], mixed[3];
+        for (int k = 0; k < colours; ++k) below[k] = float(dst[k]) / 255.0f;
+        mix_pixel(mode, below, rgb, colours, mixed);
         for (int k = 0; k < colours; ++k) {
-            const float cb = float(dst[k]) / 255.0f, cs = rgb[k];
-            const float b = mix(mode, cb, cs);
+            const float cb = below[k], cs = rgb[k];
+            const float b = mixed[k];
             float out;
             if (!dst_alpha) out = (1.0f - sa) * cb + sa * b;
             else if (out_a > 0.0f) out = ((1.0f - sa) * ab * cb + sa * (1.0f - ab) * cs + sa * ab * b) / out_a;

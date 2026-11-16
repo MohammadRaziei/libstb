@@ -151,6 +151,150 @@ inline int mode_value(int cs, int cb, int as, int ab) {
     }
 }
 
+// The modes without a closed form on premultiplied channels (color_dodge .. luminosity) are computed the W3C way: the
+// two pixels are unpremultiplied to 8 bits, mixed, and put back with
+//   Cs (1 - ab) + Cb (1 - as) + as ab B(Cb, Cs).
+// Integer arithmetic only, so every backend and every compiler gives the same bits. The unpremultiplying costs little:
+// the mixed colour is weighted by as * ab, which is small exactly where the 8-bit colour is coarse.
+constexpr bool general_mode(blend_mode m) { return m >= blend_mode::color_dodge; }
+
+// a / b rounded to nearest, b > 0, either sign of a
+inline int rdiv(int a, int b) { return a >= 0 ? (2 * a + b) / (2 * b) : -((-2 * a + b) / (2 * b)); }
+
+inline int unpremultiply(int c, int a) { return a >= 255 ? c : a <= 0 ? 0 : STB_MIN(255, (c * 255 + a / 2) / a); }
+
+inline int sep_color_dodge(int b, int s) {
+    if (b == 0) return 0;
+    if (s == 255) return 255;
+    return STB_MIN(255, rdiv(b * 255, 255 - s));
+}
+
+inline int sep_color_burn(int b, int s) {
+    if (b == 255) return 255;
+    if (s == 0) return 0;
+    return 255 - STB_MIN(255, rdiv((255 - b) * 255, s));
+}
+
+inline int sep_hard_light(int b, int s) {
+    if (2 * s <= 255) return mul255(b, 2 * s);
+    const int s2 = 2 * s - 255;
+    return b + s2 - mul255(b, s2);
+}
+
+inline int sep_soft_light(int b, int s) {
+    if (2 * s <= 255) return b - rdiv((255 - 2 * s) * b * (255 - b), 255 * 255);
+    int d;
+    if (4 * b <= 255) {  // ((16 x - 12) x + 4) x with x = b / 255
+        d = rdiv(((16 * b - 12 * 255) * b + 4 * 255 * 255) * b, 255 * 255);
+    } else {  // sqrt(x): floor(sqrt(255 b)) rounded to nearest
+        int r = 0;
+        while ((r + 1) * (r + 1) <= 255 * b) ++r;
+        d = (255 * b - r * r > (r + 1) * (r + 1) - 255 * b) ? r + 1 : r;
+    }
+    return b + rdiv((2 * s - 255) * (d - b), 255);
+}
+
+// Lum, Sat, SetLum, SetSat and ClipColor of the W3C spec. The channels are 8-bit values times 256 (so 255 is kOne), in
+// 64 bits: the clip divides by small differences and the rounding of whole levels would show, and so would weights that
+// are only near the spec's 0.3, 0.59 and 0.11 (so they are 300, 590, 110 over 1000). The channels may leave 0..kOne in
+// between.
+using i64 = std::int64_t;
+constexpr i64 kOne = 255 * 256;
+
+inline i64 rdiv64(i64 a, i64 b) { return a >= 0 ? (2 * a + b) / (2 * b) : -((-2 * a + b) / (2 * b)); }
+inline i64 lum(const i64 c[3]) { return (300 * c[0] + 590 * c[1] + 110 * c[2] + 500) / 1000; }
+inline i64 min3(const i64 c[3]) { return STB_MIN(c[0], STB_MIN(c[1], c[2])); }
+inline i64 max3(const i64 c[3]) { return STB_MAX(c[0], STB_MAX(c[1], c[2])); }
+inline i64 sat(const i64 c[3]) { return max3(c) - min3(c); }
+
+inline void clip_color(i64 c[3]) {
+    const i64 l = lum(c), n = min3(c), x = max3(c);
+    if (n < 0)
+        for (int k = 0; k < 3; ++k) c[k] = l + rdiv64((c[k] - l) * l, l - n);
+    if (x > kOne)
+        for (int k = 0; k < 3; ++k) c[k] = l + rdiv64((c[k] - l) * (kOne - l), x - l);
+}
+
+inline void set_lum(i64 c[3], i64 l) {
+    const i64 d = l - lum(c);
+    for (int k = 0; k < 3; ++k) c[k] += d;
+    clip_color(c);
+}
+
+inline void set_sat(i64 c[3], i64 s) {
+    int imax = 0, imin = 0;
+    for (int k = 1; k < 3; ++k) {
+        if (c[k] > c[imax]) imax = k;
+        if (c[k] < c[imin]) imin = k;
+    }
+    if (c[imax] <= c[imin]) {
+        c[0] = c[1] = c[2] = 0;
+        return;
+    }
+    const int imid = 3 - imax - imin;
+    const i64 mn = c[imin], mx = c[imax];
+    c[imid] = rdiv64((c[imid] - mn) * s, mx - mn);
+    c[imax] = s;
+    c[imin] = 0;
+}
+
+// B(Cb, Cs) on unpremultiplied 8-bit colours; b the backdrop's, s the source's.
+template <blend_mode M>
+inline void mix3(const int b[3], const int s[3], int out[3]) {
+    if constexpr (M >= blend_mode::hue) {
+        i64 bb[3], ss[3], c[3];
+        for (int k = 0; k < 3; ++k) bb[k] = i64(b[k]) << 8, ss[k] = i64(s[k]) << 8;
+        if constexpr (M == blend_mode::hue) {
+            for (int k = 0; k < 3; ++k) c[k] = ss[k];
+            set_sat(c, sat(bb));
+            set_lum(c, lum(bb));
+        } else if constexpr (M == blend_mode::saturation) {
+            for (int k = 0; k < 3; ++k) c[k] = bb[k];
+            set_sat(c, sat(ss));
+            set_lum(c, lum(bb));
+        } else if constexpr (M == blend_mode::color) {
+            for (int k = 0; k < 3; ++k) c[k] = ss[k];
+            set_lum(c, lum(bb));
+        } else {  // luminosity
+            for (int k = 0; k < 3; ++k) c[k] = bb[k];
+            set_lum(c, lum(ss));
+        }
+        for (int k = 0; k < 3; ++k) out[k] = int((std::clamp<i64>(c[k], 0, kOne) + 128) >> 8);
+    } else {
+        for (int k = 0; k < 3; ++k) {
+            if constexpr (M == blend_mode::color_dodge) out[k] = sep_color_dodge(b[k], s[k]);
+            else if constexpr (M == blend_mode::color_burn) out[k] = sep_color_burn(b[k], s[k]);
+            else if constexpr (M == blend_mode::hard_light) out[k] = sep_hard_light(b[k], s[k]);
+            else out[k] = sep_soft_light(b[k], s[k]);  // soft_light
+        }
+    }
+}
+
+// The three colour channels (red, green, blue) that mode_value gives for the closed-form modes, and the general formula
+// for the others, before the clamp to the alpha.
+template <blend_mode M>
+inline void mode_channels(u32 d, u32 s, int as, int ab, int out[3]) {
+    if constexpr (general_mode(M)) {
+        int cs[3], cb[3], us[3], ub[3], mixed[3];
+        for (int k = 0; k < 3; ++k) {
+            const int shift = 16 - 8 * k;
+            cs[k] = int((s >> shift) & 255);
+            cb[k] = int((d >> shift) & 255);
+            us[k] = unpremultiply(cs[k], as);
+            ub[k] = unpremultiply(cb[k], ab);
+        }
+        mix3<M>(ub, us, mixed);
+        const int w = mul255(as, ab);
+        for (int k = 0; k < 3; ++k)
+            out[k] = mul255(cs[k], 255 - ab) + mul255(cb[k], 255 - as) + mul255(w, std::clamp(mixed[k], 0, 255));
+    } else {
+        for (int k = 0; k < 3; ++k) {
+            const int shift = 16 - 8 * k;
+            out[k] = mode_value<M>(int((s >> shift) & 255), int((d >> shift) & 255), as, ab);
+        }
+    }
+}
+
 // S over D with mode M (what the destination keeps is included): the result of operator source_over.
 template <blend_mode M>
 inline u32 mode_over(u32 d, u32 s) {
@@ -158,10 +302,10 @@ inline u32 mode_over(u32 d, u32 s) {
     const int as = int(alpha_of(s)), ab = int(alpha_of(d));
     const int ar = as + ab - mul255(as, ab);
     u32 r = u32(ar) << 24;
-    for (int shift = 16; shift >= 0; shift -= 8) {
-        const int c = mode_value<M>(int((s >> shift) & 255), int((d >> shift) & 255), as, ab);
-        r |= u32(std::clamp(c, 0, ar)) << shift;  // a premultiplied channel never exceeds the alpha
-    }
+    int c[3];
+    mode_channels<M>(d, s, as, ab, c);
+    for (int k = 0; k < 3; ++k)
+        r |= u32(std::clamp(c[k], 0, ar)) << (16 - 8 * k);  // a premultiplied channel never exceeds the alpha
     return r;
 }
 
@@ -172,10 +316,12 @@ inline u32 mode_source(u32 d, u32 s) {
     if (s == 0) return 0;
     const int as = int(alpha_of(s)), ab = int(alpha_of(d));
     u32 r = u32(as) << 24;
-    for (int shift = 16; shift >= 0; shift -= 8) {
+    int c[3];
+    mode_channels<M>(d, s, as, ab, c);
+    for (int k = 0; k < 3; ++k) {
+        const int shift = 16 - 8 * k;
         const int cb = int((d >> shift) & 255);
-        const int c = mode_value<M>(int((s >> shift) & 255), cb, as, ab) - mul255(cb, 255 - as);
-        r |= u32(std::clamp(c, 0, as)) << shift;
+        r |= u32(std::clamp(c[k] - mul255(cb, 255 - as), 0, as)) << shift;
     }
     return r;
 }
@@ -191,6 +337,14 @@ u32 mode_source_any(blend_mode m, u32 d, u32 s) {
         case blend_mode::add: return mode_source<blend_mode::add>(d, s);
         case blend_mode::difference: return mode_source<blend_mode::difference>(d, s);
         case blend_mode::exclusion: return mode_source<blend_mode::exclusion>(d, s);
+        case blend_mode::color_dodge: return mode_source<blend_mode::color_dodge>(d, s);
+        case blend_mode::color_burn: return mode_source<blend_mode::color_burn>(d, s);
+        case blend_mode::hard_light: return mode_source<blend_mode::hard_light>(d, s);
+        case blend_mode::soft_light: return mode_source<blend_mode::soft_light>(d, s);
+        case blend_mode::hue: return mode_source<blend_mode::hue>(d, s);
+        case blend_mode::saturation: return mode_source<blend_mode::saturation>(d, s);
+        case blend_mode::color: return mode_source<blend_mode::color>(d, s);
+        case blend_mode::luminosity: return mode_source<blend_mode::luminosity>(d, s);
     }
     return s;
 }
@@ -307,8 +461,16 @@ void loop_op(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
 
 template <bool Solid, blend_mode M>
 void loop_mode(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
-    // source_over: scaling the source by the coverage is the same as taking that share of the result
-    loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) { return mode_over<M>(d, ca == 255 ? s : byte_mul(s, ca)); });
+    if constexpr (general_mode(M)) {
+        // the mix is not linear in the source: take the share of the full result, not the result of a scaled source
+        loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) {
+            const u32 r = mode_over<M>(d, s);
+            return ca == 255 ? r : mix255(r, ca, d, 255 - ca);
+        });
+    } else {
+        // source_over: scaling the source by the coverage is the same as taking that share of the result
+        loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) { return mode_over<M>(d, ca == 255 ? s : byte_mul(s, ca)); });
+    }
 }
 
 template <bool Solid>
@@ -344,6 +506,14 @@ void run(u32* dest, const u32* src, u32 color, std::size_t n, composite_op op, b
             case blend_mode::add: return loop_mode<Solid, blend_mode::add>(dest, src, color, n, ca);
             case blend_mode::difference: return loop_mode<Solid, blend_mode::difference>(dest, src, color, n, ca);
             case blend_mode::exclusion: return loop_mode<Solid, blend_mode::exclusion>(dest, src, color, n, ca);
+            case blend_mode::color_dodge: return loop_mode<Solid, blend_mode::color_dodge>(dest, src, color, n, ca);
+            case blend_mode::color_burn: return loop_mode<Solid, blend_mode::color_burn>(dest, src, color, n, ca);
+            case blend_mode::hard_light: return loop_mode<Solid, blend_mode::hard_light>(dest, src, color, n, ca);
+            case blend_mode::soft_light: return loop_mode<Solid, blend_mode::soft_light>(dest, src, color, n, ca);
+            case blend_mode::hue: return loop_mode<Solid, blend_mode::hue>(dest, src, color, n, ca);
+            case blend_mode::saturation: return loop_mode<Solid, blend_mode::saturation>(dest, src, color, n, ca);
+            case blend_mode::color: return loop_mode<Solid, blend_mode::color>(dest, src, color, n, ca);
+            case blend_mode::luminosity: return loop_mode<Solid, blend_mode::luminosity>(dest, src, color, n, ca);
         }
         return;
     }
@@ -361,7 +531,7 @@ void run(u32* dest, const u32* src, u32 color, std::size_t n, composite_op op, b
 // Cheap enough for a span of one pixel: three compares, the throwing code out of line.
 inline void check(const void* dest, std::size_t count, composite_op op, blend_mode mode) {
     if (static_cast<unsigned>(op) > static_cast<unsigned>(composite_op::plus_lighter)) fail("composite_row: unknown composite_op");
-    if (static_cast<unsigned>(mode) > static_cast<unsigned>(blend_mode::exclusion)) fail("composite_row: unknown blend_mode");
+    if (static_cast<unsigned>(mode) > static_cast<unsigned>(blend_mode::luminosity)) fail("composite_row: unknown blend_mode");
     if (count > 0 && !dest) fail("composite_row: null destination");
 }
 

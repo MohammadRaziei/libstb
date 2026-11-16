@@ -25,9 +25,11 @@
 
 namespace stb {
 
-// How image::blend mixes an overlay pixel (s) into the pixel below it (b), per colour channel,
-// before the overlay's alpha and opacity decide how much of the result shows. These are the
-// separable modes of the W3C compositing spec, i.e. the ones Photoshop and CSS call by the same names.
+// How image::blend mixes an overlay pixel (s) into the pixel below it (b), before the overlay's alpha and opacity decide
+// how much of the result shows. These are the blend modes of the W3C compositing spec, i.e. the ones Photoshop and CSS
+// call by the same names (CSS writes color-dodge, hard-light and so on with a hyphen; here the names use underscores).
+// The first nine are separable: they mix each colour channel on its own. The last four (hue, saturation, color,
+// luminosity) mix the three channels together, so for a gray image they use the gray value as all three.
 enum class blend_mode : std::uint8_t {
     normal,      // s: the overlay replaces what is below (the usual "over" operator)
     multiply,    // b * s: darkens; white changes nothing
@@ -38,8 +40,17 @@ enum class blend_mode : std::uint8_t {
     add,         // min(1, b + s)
     difference,  // |b - s|
     exclusion,   // b + s - 2 b s: like difference with less contrast; mid gray stays mid gray
+    color_dodge, // b / (1 - s), at most 1: brightens b by s (b = 0 stays 0, s = 1 gives 1)
+    color_burn,  // 1 - (1 - b) / s, at least 0: darkens b by s (b = 1 stays 1, s = 0 gives 0)
+    hard_light,  // overlay with the roles swapped: multiply where s is dark, screen where s is light
+    soft_light,  // a gentler hard_light (the W3C formula, with its square-root curve for the lights)
+    hue,         // the hue of s with the saturation and luminosity of b
+    saturation,  // the saturation of s with the hue and luminosity of b
+    color,       // the hue and saturation of s with the luminosity of b
+    luminosity,  // the luminosity of s with the hue and saturation of b
 };
-// "normal", "multiply", "screen", "overlay", "darken", "lighten", "add", "difference" or "exclusion".
+// "normal", "multiply", "screen", "overlay", "darken", "lighten", "add", "difference", "exclusion", "color_dodge",
+// "color_burn", "hard_light", "soft_light", "hue", "saturation", "color" or "luminosity".
 STB_API std::string_view blend_mode_name(blend_mode m) noexcept;
 // The inverse of blend_mode_name (lower case only). Throws invalid_argument for any other text.
 STB_API blend_mode blend_mode_from_name(std::string_view name);
