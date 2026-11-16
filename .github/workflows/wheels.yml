@@ -120,6 +120,15 @@ jobs:
         assert libstb.simd_name() == "sse2", libstb.simd_name()
         PY
 
+    # Runs only when the step above crashed: names the guilty function (a wide instruction outside the AVX2
+    # kernels) and the Python line that was running (faulthandler prints it when the CPU raises SIGILL).
+    - name: Diagnose a crash on the CPU without AVX
+      if: failure()
+      run: |
+        pkg=$(venv/bin/python -c "import importlib.util, os; print(os.path.dirname(importlib.util.find_spec('libstb').origin))")
+        python tests/tools/find_wide_instructions.py "$pkg" || true
+        qemu-x86_64 -cpu Nehalem venv/bin/python -X faulthandler -c "import libstb; print(libstb.simd_backends())" || true
+
     - name: No AVX (Nehalem) - the whole test suite (covers the sse2 and scalar backends)
       working-directory: ${{ runner.temp }}
       run: qemu-x86_64 -cpu Nehalem ${{ github.workspace }}/venv/bin/python -m pytest ${{ github.workspace }}/tests/python -q -p no:cacheprovider

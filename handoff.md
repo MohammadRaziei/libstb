@@ -18,6 +18,7 @@
 ## باز
 
 - **CI ویندوز (LNK2019 برای 16 `*_inplace<T>`)**: علت پیدا شد و رفع شد: instantiation صریح قالب‌ها (`template void f<T>(...)` آخر `tone.cpp`، `filter.cpp`، `colorspace.cpp`) `STB_API` نداشت؛ MSVC روی instantiation صریح dllexport را از declaration به ارث نمی‌برد، پس نماد از `stb.dll` صادر نمی‌شد و ماژول Python لینک نمی‌شد. حالا `template STB_API void f<T>(...)`. (احتمالاً همین علت شکست #165 هم بود: tone از قبل همین الگو را داشت.) هر قالب `*_inplace` جدید باید همین را داشته باشد.
+- **CI `wheel / emulate` (اجرای #168)**: `import libstb` زیر `qemu -cpu Nehalem` با `Illegal instruction` می‌میرد. با GCC 13 و GCC 14 (Ubuntu 24.04) زیر همان qemu بازتولید نشد (`simd_backends()` درست `['sse2','scalar']` بود) و در `libstb.so` ساخت من هیچ دستور VEX بیرون از توابع `*avx2*` نیست. علت هنوز نامعلوم است. `tests/tools/find_wide_instructions.py` و گام `if: failure()` در `wheels.yml` اضافه شدند تا اجرای بعدی CI تابع خاطی (و خط Python از faulthandler) را چاپ کند؛ خروجی آن را بیاور.
 - دور ۱ تمام است. گام بعد طبق برنامه: دور ۲ (`bilateral_filter`، `guided_filter`، Scharr، Canny، آستانه‌گذاری، morphology، connected components عمومی، warp، CLAHE). هر API اول پیشنهاد و منتظر تأیید.
 - `checklist.md` هنوز بخش پردازش تصویر ندارد (سؤال بی‌پاسخ)، تغییرش نداده‌ام.
 - هنوز بنچمارک ندارند (`median_filter` روی float برای radius بزرگ کند است: O(r^2) برای هر مقدار؛ اگر لازم شد روی float هم به الگوریتم هیستوگرام/مرتب‌شده‌ی لغزان برو).
