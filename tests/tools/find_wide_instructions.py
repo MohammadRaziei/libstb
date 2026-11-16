@@ -39,12 +39,22 @@ def scan(path):
     return found
 
 
+def is_stripped(path):
+    """True if the library has no symbol table: objdump then names an instruction after the nearest exported symbol
+    before it, which can be an unrelated function (the local functions have no name left)."""
+    result = subprocess.run(["nm", str(path)], capture_output=True, text=True)
+    return "no symbols" in result.stderr or not result.stdout.strip()
+
+
 def main():
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     bad = 0
     for path in sorted(p for p in root.rglob("*") if p.is_file() and (".so" in p.name or p.suffix == ".pyd")):
         found = scan(path)
         print(f"{path}: {len(found)} function(s) with wide instructions outside the AVX2 kernels")
+        if found and is_stripped(path):
+            print("    (stripped library: a name below is only the nearest exported symbol before the instruction, the"
+                  " local functions have no name left; most likely these are the AVX2 kernels, which are local)")
         for function, mnemonics in sorted(found.items()):
             print(f"    {function[:200]}  [{', '.join(sorted(mnemonics))}]")
         bad += len(found)

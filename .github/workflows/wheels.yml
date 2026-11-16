@@ -81,7 +81,11 @@ jobs:
   emulate:
     name: emulate
     needs: build_wheels
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moves to Ubuntu 26.04 between 2026-10-19 and 2026-11-19, whose system libraries (and the
+    # amd64v3 packages it installs) need an x86-64-v3 CPU, so even `python -c pass` died with SIGILL under
+    # `qemu -cpu Nehalem` before libstb was loaded. The wheel itself is built in a manylinux container and does not
+    # care about the runner; only this emulated run needs a userland that a Nehalem can execute.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       # pytest-memray (installed by the [test] extra) does not run under QEMU user mode.
@@ -120,11 +124,16 @@ jobs:
         assert libstb.simd_name() == "sse2", libstb.simd_name()
         PY
 
-    # Runs only when the step above crashed: names the guilty function (a wide instruction outside the AVX2
-    # kernels) and the Python line that was running (faulthandler prints it when the CPU raises SIGILL).
+    # Runs only when the step above crashed. First it tells whether libstb is to blame at all: if a program that
+    # does not use libstb (/bin/true, python -c pass) already dies under Nehalem, the runner's system libraries need
+    # more than Nehalem. Then it names any function with a wide instruction outside the AVX2 kernels and the
+    # Python line that was running (faulthandler prints it when the CPU raises SIGILL).
     - name: Diagnose a crash on the CPU without AVX
       if: failure()
       run: |
+        echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
+        qemu-x86_64 -cpu Nehalem /bin/true && echo "/bin/true: ok" || echo "/bin/true CRASHED: the system libraries need more than Nehalem"
+        qemu-x86_64 -cpu Nehalem venv/bin/python -c "pass" && echo "python -c pass: ok" || echo "python -c pass CRASHED: not libstb"
         pkg=$(venv/bin/python -c "import importlib.util, os; print(os.path.dirname(importlib.util.find_spec('libstb').origin))")
         python tests/tools/find_wide_instructions.py "$pkg" || true
         qemu-x86_64 -cpu Nehalem venv/bin/python -X faulthandler -c "import libstb; print(libstb.simd_backends())" || true
