@@ -66,6 +66,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ### Changed
 
+- **The wheel is stripped on purpose**: `pyproject.toml` sets `install.strip = true` (scikit-build-core 1.x already strips by default, older versions did not, and the requirement is `>=0.10`). The stripped `libstb.so` is 1.66 MB and the whole wheel about 1.1 MB.
 - **`font::outline` caches the commands per glyph** (per font object, thread-safe, one entry per glyph asked for): parsing a glyph was the costly part of drawing text and the same few glyphs are asked for again and again. The result is the same commands as before; `test_font_outline.cpp` checks that against a fresh font from four threads.
 - **Left-to-right text is shaped** (`font::shape`, and with it `draw_text`, `measure`, `render` and the canvas): a line without a
   right-to-left letter used to be one glyph per character; it now runs the font's GSUB (`ccmp`, `locl`, `rlig`, `calt`, `liga`,
