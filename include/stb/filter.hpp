@@ -99,6 +99,21 @@ STB_API image8u median_filter(const mat8u& src, int radius, edge_mode edge = edg
 STB_API mat32f bilateral_filter(const mat32f& src, int radius, float sigma_space, float sigma_range, edge_mode edge = edge_mode::clamp);
 STB_API image8u bilateral_filter(const mat8u& src, int radius, float sigma_space, float sigma_range, edge_mode edge = edge_mode::clamp);
 
+// ---- guided_filter: smooths like a bilateral filter, keeping the edges of a guide, at a cost that does not depend on
+// the radius (box means only). In every (2 * radius + 1)-square the output is a linear function of the guide that fits
+// the image as well as it can, a penalty `eps` keeping the slope down, and the lines of the squares that cover a pixel are
+// averaged. Where the guide is flat the output is the mean of the window means (a blur about twice as wide as a box blur
+// of the same radius); where the guide has an edge larger than sqrt(eps) the edge stays. eps is in units of the full range squared (0 to 1
+// on 8 bits and on floats: 1e-3 is a gentle value). The guide is the image itself, or `guide`: as wide and as high as the
+// image, gray (1 or 2 channels, the second is alpha and ignored) or colour (3 or 4 channels); a colour guide uses its
+// 3 x 3 covariance. Every colour channel of src is filtered, alpha is copied. radius 0 changes nothing; radius must be
+// 0 to 1000 and eps positive and finite, else invalid_argument, as for a guide of another size or more than 4 channels.
+// NaN is not handled: it spreads through the squares that cover it.
+STB_API mat32f guided_filter(const mat32f& src, int radius, float eps, edge_mode edge = edge_mode::clamp);
+STB_API mat32f guided_filter(const mat32f& src, const mat32f& guide, int radius, float eps, edge_mode edge = edge_mode::clamp);
+STB_API image8u guided_filter(const mat8u& src, int radius, float eps, edge_mode edge = edge_mode::clamp);
+STB_API image8u guided_filter(const mat8u& src, const mat8u& guide, int radius, float eps, edge_mode edge = edge_mode::clamp);
+
 // The functions below take an image (1 to 4 channels: gray, gray + alpha, RGB, RGBA) and give back what they were
 // given (see tone.hpp for the three forms and the rules). The alpha channel is never changed. Floats are read as 0 to 1.
 // The work is done by the *_inplace templates, which libstb has built for std::uint8_t and for float.

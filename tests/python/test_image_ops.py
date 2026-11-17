@@ -264,3 +264,77 @@ def test_bilateral_filter_image_method_radius_zero_and_errors():
             stb.bilateral_filter(img, *args)
     with pytest.raises(ValueError):
         stb.bilateral_filter(img, 1, 1.0, 0.2, edge="nope")
+
+
+# ------------------------------------------------------------------------------------------------ guided_filter
+
+SCIPY_MODES = {"clamp": "nearest", "reflect": "reflect", "mirror": "mirror", "wrap": "wrap", "zero": "constant"}
+
+
+def guided_reference(p, guide, radius, eps, edge):
+    """The guided filter of He et al. with scipy box means (doubles). p is (H, W, K), guide (H, W, 1 or 3), values in 0..1."""
+    from scipy.ndimage import uniform_filter
+    size = 2 * radius + 1
+
+    def box(x):
+        return uniform_filter(x, size=size, mode=SCIPY_MODES[edge], cval=0.0)
+
+    h, w, cg = guide.shape
+    mi = [box(guide[..., j]) for j in range(cg)]
+    sigma = np.zeros((h, w, cg, cg))
+    for i in range(cg):
+        for j in range(cg):
+            sigma[..., i, j] = box(guide[..., i] * guide[..., j]) - mi[i] * mi[j] + (eps if i == j else 0.0)
+    out = np.zeros(p.shape)
+    for k in range(p.shape[2]):
+        pk = p[..., k]
+        mp = box(pk)
+        cov = np.stack([box(guide[..., j] * pk) - mi[j] * mp for j in range(cg)], axis=-1)
+        a = np.linalg.solve(sigma, cov[..., None])[..., 0]
+        b = mp - sum(a[..., j] * mi[j] for j in range(cg))
+        out[..., k] = sum(box(a[..., j]) * guide[..., j] for j in range(cg)) + box(b)
+    return out
+
+
+@pytest.mark.parametrize("edge", sorted(SCIPY_MODES))
+@pytest.mark.parametrize("guide_channels", [0, 1, 3])
+def test_guided_filter_matches_a_numpy_version_of_the_algorithm(edge, guide_channels):
+    pytest.importorskip("scipy")
+    f = randf(17, 21, 3, seed=41)
+    guide = None if guide_channels == 0 else randf(17, 21, guide_channels, seed=42)
+    got = stb.guided_filter(f, 2, 0.02, guide, edge=edge)
+    g = f if guide is None else guide
+    want = guided_reference(f, g, 2, 0.02, edge)
+    assert got.dtype == np.float32 and got.shape == f.shape
+    assert np.abs(got - want).max() < 3e-4
+    # the same on 8 bits (alpha copied): through float, rounded
+    a = rand8(17, 21, 4, seed=43)
+    out8 = np.asarray(stb.guided_filter(stb.Image(a), 2, 0.02, edge=edge)).astype(np.float64)
+    want8 = guided_reference(a[..., :3] / 255.0, a[..., :3] / 255.0, 2, 0.02, edge) * 255.0
+    assert np.abs(out8[..., :3] - np.clip(want8, 0, 255)).max() <= 1.0
+    assert np.array_equal(out8[..., 3], a[..., 3])
+
+
+def test_guided_filter_follows_the_edge_of_its_guide_and_not_the_noise():
+    clean = np.full((16, 32, 1), 0.2, dtype=np.float32)  # away from 0 and 1, so the noise is not clipped
+    clean[:, 16:] = 0.8
+    rng = np.random.default_rng(44)
+    noisy = (clean + rng.normal(0, 0.05, clean.shape)).astype(np.float32)
+    out = stb.guided_filter(noisy, 3, 1e-3, clean)
+    assert np.abs(out[:, :12] - clean[:, :12]).mean() < np.abs(noisy[:, :12] - clean[:, :12]).mean() / 2  # the noise is gone
+    assert out[:, 15].mean() < 0.4 and out[:, 17].mean() > 0.6  # and the step is where the guide has it
+
+
+def test_guided_filter_image_forms_radius_zero_and_errors():
+    img = stb.Image(rand8(12, 14, 3, seed=45))
+    gray = stb.Image(rand8(12, 14, 1, seed=46))
+    assert np.array_equal(np.asarray(img.guided_filter(2, 0.01)), np.asarray(stb.guided_filter(img, 2, 0.01)))
+    assert np.array_equal(np.asarray(img.guided_filter(2, 0.01, gray)), np.asarray(stb.guided_filter(img, 2, 0.01, gray)))
+    assert np.array_equal(np.asarray(stb.guided_filter(img, 0, 0.01)), np.asarray(img))
+    for args in [(-1, 0.01), (1001, 0.01), (1, 0.0), (1, -1.0), (1, float("nan")), (1, float("inf"))]:
+        with pytest.raises(ValueError):
+            stb.guided_filter(img, *args)
+    with pytest.raises(ValueError):  # a guide of another size
+        stb.guided_filter(img, 1, 0.01, stb.Image(rand8(12, 15, 1, seed=47)))
+    with pytest.raises(ValueError):  # a guide that is not an Image
+        stb.guided_filter(img, 1, 0.01, np.zeros((12, 14), dtype=np.float32))

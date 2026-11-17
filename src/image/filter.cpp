@@ -589,6 +589,223 @@ image8u bilateral_filter(const mat8u& src, int radius, float sigma_space, float 
     return out;
 }
 
+// ============================================================================================ guided
+
+namespace {
+
+constexpr double guided_ns = 2.0;  // one step of the per-pixel algebra, per value
+
+void check_guided(int radius, float eps) {
+    if (radius < 0 || radius > 1000) throw std::invalid_argument("radius must be in 0..1000");
+    if (!(eps > 0.0f) || !std::isfinite(eps)) throw std::invalid_argument("eps must be a positive finite number");
+}
+
+int guided_colour(int channels) {  // the colour channels of an image: all but the alpha of gray + alpha and RGBA
+    if (channels < 1 || channels > 4) throw std::invalid_argument("expected an image of 1 to 4 channels (gray, gray + alpha, RGB, RGBA)");
+    return (channels == 2 || channels == 4) ? channels - 1 : channels;
+}
+
+template <class F>
+void guided_each(std::size_t n, F&& f) {
+    parallel_for(n, guided_ns, [&](std::size_t b, std::size_t e) {
+        for (std::size_t i = b; i < e; ++i) f(i);
+    });
+}
+
+// The guided filter of He, Sun and Tang: in every (2 r + 1)-square the output is a linear function of the guide,
+// q = a . I + b, with a and b the least squares fit of the input p by the guide plus a penalty eps on a; the a and b
+// of the squares that cover a pixel are averaged. Every plane is filtered with the same guide (1 or 3 colour channels).
+mat32f guided_run(const mat32f& src, const mat32f& guide, int r, float eps, edge_mode edge) {
+    const int w = src.width(), h = src.height(), c = src.channels();
+    const int ck = guided_colour(c), cg = guided_colour(guide.channels());
+    const std::size_t n = std::size_t(w) * std::size_t(h);
+    const auto plane_of = [&](const mat32f& m, int k) {
+        mat32f p(w, h, 1);
+        const float* in = m.data();
+        float* d = p.data();
+        const std::size_t mc = std::size_t(m.channels());
+        guided_each(n, [&](std::size_t i) { d[i] = in[i * mc + std::size_t(k)]; });
+        return p;
+    };
+    const auto box = [&](const mat32f& m) { return box_blur(m, r, edge); };
+    const auto prod = [&](const mat32f& x, const mat32f& y) {
+        mat32f p(w, h, 1);
+        const float *a = x.data(), *b = y.data();
+        float* d = p.data();
+        guided_each(n, [&](std::size_t i) { d[i] = a[i] * b[i]; });
+        return p;
+    };
+
+    mat32f out(w, h, c);
+    if (ck < c) {  // alpha is copied
+        const float* in = src.data();
+        float* o = out.data();
+        guided_each(n, [&](std::size_t i) { o[i * std::size_t(c) + std::size_t(c - 1)] = in[i * std::size_t(c) + std::size_t(c - 1)]; });
+    }
+    const auto put = [&](const mat32f& q, int k) {
+        const float* in = q.data();
+        float* o = out.data();
+        guided_each(n, [&](std::size_t i) { o[i * std::size_t(c) + std::size_t(k)] = in[i]; });
+    };
+
+    std::vector<mat32f> g, mg;  // the guide's planes and their means
+    for (int j = 0; j < cg; ++j) {
+        g.push_back(plane_of(guide, j));
+        mg.push_back(box(g.back()));
+    }
+
+    if (cg == 1) {
+        const mat32f mgg = box(prod(g[0], g[0]));
+        mat32f den(w, h, 1);  // the variance of the guide, plus eps
+        {
+            const float *m2 = mgg.data(), *m1 = mg[0].data();
+            float* d = den.data();
+            guided_each(n, [&](std::size_t i) { d[i] = m2[i] - m1[i] * m1[i] + eps; });
+        }
+        for (int k = 0; k < ck; ++k) {
+            const mat32f p = plane_of(src, k);
+            const mat32f mp = box(p), mgp = box(prod(g[0], p));
+            mat32f a(w, h, 1), b(w, h, 1);
+            {
+                const float *mgp_ = mgp.data(), *mg_ = mg[0].data(), *mp_ = mp.data(), *dn = den.data();
+                float *ad = a.data(), *bd = b.data();
+                guided_each(n, [&](std::size_t i) {
+                    ad[i] = (mgp_[i] - mg_[i] * mp_[i]) / dn[i];
+                    bd[i] = mp_[i] - ad[i] * mg_[i];
+                });
+            }
+            const mat32f ma = box(a), mb = box(b);
+            mat32f q(w, h, 1);
+            {
+                const float *ma_ = ma.data(), *mb_ = mb.data(), *g_ = g[0].data();
+                float* qd = q.data();
+                guided_each(n, [&](std::size_t i) { qd[i] = ma_[i] * g_[i] + mb_[i]; });
+            }
+            put(q, k);
+        }
+        return out;
+    }
+
+    // three guide channels: the covariance matrix of the guide plus eps on the diagonal, inverted at every pixel
+    // (entries 00 01 02 11 12 22; the matrix is symmetric)
+    mat32f cov[6];
+    {
+        const int pi[6] = {0, 0, 0, 1, 1, 2}, pj[6] = {0, 1, 2, 1, 2, 2};
+        for (int e = 0; e < 6; ++e) {
+            cov[e] = box(prod(g[std::size_t(pi[e])], g[std::size_t(pj[e])]));
+            const float *m1 = mg[std::size_t(pi[e])].data(), *m2 = mg[std::size_t(pj[e])].data();
+            float* d = cov[e].data();
+            const float add = pi[e] == pj[e] ? eps : 0.0f;
+            guided_each(n, [&](std::size_t i) { d[i] = d[i] - m1[i] * m2[i] + add; });
+        }
+    }
+    mat32f inv[6];
+    for (mat32f& m : inv) m = mat32f(w, h, 1);
+    {
+        const float *sa = cov[0].data(), *sb = cov[1].data(), *sc = cov[2].data(), *sd = cov[3].data(), *se = cov[4].data(), *sf = cov[5].data();
+        float *i00 = inv[0].data(), *i01 = inv[1].data(), *i02 = inv[2].data(), *i11 = inv[3].data(), *i12 = inv[4].data(), *i22 = inv[5].data();
+        guided_each(n, [&](std::size_t i) {
+            const float a = sa[i], b = sb[i], cc = sc[i], d = sd[i], e = se[i], f = sf[i];
+            const float c00 = d * f - e * e, c01 = cc * e - b * f, c02 = b * e - cc * d;
+            const float c11 = a * f - cc * cc, c12 = b * cc - a * e, c22 = a * d - b * b;
+            const float det = a * c00 + b * c01 + cc * c02;  // > 0: the matrix is positive definite thanks to eps
+            const float idet = 1.0f / det;
+            i00[i] = c00 * idet;
+            i01[i] = c01 * idet;
+            i02[i] = c02 * idet;
+            i11[i] = c11 * idet;
+            i12[i] = c12 * idet;
+            i22[i] = c22 * idet;
+        });
+    }
+    for (int k = 0; k < ck; ++k) {
+        const mat32f p = plane_of(src, k);
+        const mat32f mp = box(p);
+        mat32f cp[3];
+        for (int j = 0; j < 3; ++j) {
+            cp[j] = box(prod(g[std::size_t(j)], p));
+            const float *m1 = mg[std::size_t(j)].data(), *m2 = mp.data();
+            float* d = cp[j].data();
+            guided_each(n, [&](std::size_t i) { d[i] -= m1[i] * m2[i]; });
+        }
+        mat32f a[3], b(w, h, 1);
+        for (mat32f& m : a) m = mat32f(w, h, 1);
+        {
+            const float *i00 = inv[0].data(), *i01 = inv[1].data(), *i02 = inv[2].data(), *i11 = inv[3].data(), *i12 = inv[4].data(), *i22 = inv[5].data();
+            const float *c0 = cp[0].data(), *c1 = cp[1].data(), *c2 = cp[2].data(), *mp_ = mp.data();
+            const float *m0 = mg[0].data(), *m1 = mg[1].data(), *m2 = mg[2].data();
+            float *a0 = a[0].data(), *a1 = a[1].data(), *a2 = a[2].data(), *bd = b.data();
+            guided_each(n, [&](std::size_t i) {
+                a0[i] = i00[i] * c0[i] + i01[i] * c1[i] + i02[i] * c2[i];
+                a1[i] = i01[i] * c0[i] + i11[i] * c1[i] + i12[i] * c2[i];
+                a2[i] = i02[i] * c0[i] + i12[i] * c1[i] + i22[i] * c2[i];
+                bd[i] = mp_[i] - a0[i] * m0[i] - a1[i] * m1[i] - a2[i] * m2[i];
+            });
+        }
+        const mat32f ma0 = box(a[0]), ma1 = box(a[1]), ma2 = box(a[2]), mb = box(b);
+        mat32f q(w, h, 1);
+        {
+            const float *x0 = ma0.data(), *x1 = ma1.data(), *x2 = ma2.data(), *y = mb.data();
+            const float *g0 = g[0].data(), *g1 = g[1].data(), *g2 = g[2].data();
+            float* qd = q.data();
+            guided_each(n, [&](std::size_t i) { qd[i] = x0[i] * g0[i] + x1[i] * g1[i] + x2[i] * g2[i] + y[i]; });
+        }
+        put(q, k);
+    }
+    return out;
+}
+
+void check_guided_pair(const mat32f& src, const mat32f& guide) {
+    if (guide.width() != src.width() || guide.height() != src.height())
+        throw std::invalid_argument("the guide must be as wide and as high as the image");
+    guided_colour(guide.channels());
+}
+
+}  // namespace
+
+mat32f guided_filter(const mat32f& src, int radius, float eps, edge_mode edge) {
+    check_guided(radius, eps);
+    if (src.empty()) return mat32f();
+    guided_colour(src.channels());
+    if (radius == 0) return src.copy();
+    return guided_run(src, src, radius, eps, edge);
+}
+
+mat32f guided_filter(const mat32f& src, const mat32f& guide, int radius, float eps, edge_mode edge) {
+    check_guided(radius, eps);
+    if (src.empty()) {
+        if (!guide.empty()) throw std::invalid_argument("the guide must be as wide and as high as the image");
+        return mat32f();
+    }
+    guided_colour(src.channels());
+    check_guided_pair(src, guide);
+    if (radius == 0) return src.copy();
+    return guided_run(src, guide, radius, eps, edge);
+}
+
+image8u guided_filter(const mat8u& src, int radius, float eps, edge_mode edge) {
+    check_guided(radius, eps);
+    if (src.empty()) return image8u();
+    guided_colour(src.channels());
+    if (radius == 0) return image8u(src.copy());
+    const mat32f f = to_f32(src);
+    return to_8u(guided_run(f, f, radius, eps, edge));
+}
+
+image8u guided_filter(const mat8u& src, const mat8u& guide, int radius, float eps, edge_mode edge) {
+    check_guided(radius, eps);
+    if (src.empty()) {
+        if (!guide.empty()) throw std::invalid_argument("the guide must be as wide and as high as the image");
+        return image8u();
+    }
+    guided_colour(src.channels());
+    if (guide.width() != src.width() || guide.height() != src.height())
+        throw std::invalid_argument("the guide must be as wide and as high as the image");
+    guided_colour(guide.channels());
+    if (radius == 0) return image8u(src.copy());
+    return to_8u(guided_run(to_f32(src), to_f32(guide), radius, eps, edge));
+}
+
 // ============================================================================================ unsharp mask, pixelize
 
 namespace {

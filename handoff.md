@@ -55,7 +55,7 @@ Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_im
 
 ## ۶. بعدی و سؤال‌های باز
 
-- **دور ۲ب**: CLAHE و `bilateral_filter` تموم شدن (`clahe` در `stb/tone.hpp`، `bilateral_filter` در `stb/filter.hpp`، هر دو در Python؛ C++ 714 تست و Python 1819 تست پاس). مونده: `guided_filter`، `warp_affine` و `warp_perspective`، بعد superpixel (بخش «پردازش تصویر: ترتیب کارها تا superpixel» در `checklist.md`). هر کدام: اول API پیشنهادی و منتظر تأیید. کاربر آخر کار فقط **یک** فایل patch می‌خواد (نه چندتا).
+- **دور ۲ب**: CLAHE، `bilateral_filter` و `guided_filter` تموم شدن (`stb/tone.hpp` و `stb/filter.hpp`، هر سه در Python؛ C++ 719 تست و Python 1836 تست پاس). مونده: `warp_affine` و `warp_perspective`، بعد superpixel (بخش «پردازش تصویر: ترتیب کارها تا superpixel» در `checklist.md`). هر کدام: اول API پیشنهادی و منتظر تأیید. کاربر آخر کار فقط **یک** فایل patch می‌خواد (نه چندتا) و آخرین commit خودش رو می‌گه که patch روش ساخته بشه.
 - بنچمارک نداریم (ثابت‌های ns اندازه‌گیری نشده؛ `median_filter` روی float برای radius بزرگ O(r^2) است). اندازه‌ی wheel بعد از این دورها اندازه‌گیری نشده.
 - `docs/guide.md` و `README.md` درباره‌ی این قابلیت‌ها چیزی ندارند (CHANGELOG و handoff به‌روزند).
 - `Components` را با `SuperpixelMap` ترکیب نکرده‌ام. ویندوز، macOS و ARM را خودم اجرا نکرده‌ام.
@@ -90,7 +90,7 @@ Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_im
 
 ## باز
 
-- دور ۲ب: CLAHE و `bilateral_filter` تمام شد؛ مونده `guided_filter`، `warp_affine`/`warp_perspective` (هر API اول پیشنهاد و منتظر تأیید).
+- دور ۲ب: CLAHE، `bilateral_filter` و `guided_filter` تمام شد؛ مونده `warp_affine`/`warp_perspective` (API اول پیشنهاد و منتظر تأیید).
 - شیء `Components` را با `SuperpixelMap` ترکیب نکرده‌ام (`connected_components` فقط Image و آرایه‌ی int32 می‌گیرد).
 - ثابت‌های ns جدید (`member_ns`، `compare_ns`، `thin_ns`) کف‌اند و اندازه‌گیری نشده‌اند. بنچمارک ندارند.
 

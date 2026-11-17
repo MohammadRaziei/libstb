@@ -703,3 +703,175 @@ UTEST(libstb_filter_tests, test_bilateral_floats_leave_nan_out_and_the_result_is
     ASSERT_TRUE(same_bytes(one, many));
     ASSERT_TRUE(same_bits(one_f, many_f));
 }
+
+// ------------------------------------------------------------------------------------------------ guided
+
+namespace {
+
+// The guided filter written out in doubles, window by window, for one colour channel `k` of src (guide: `cg` colour
+// channels, taken from the first channels of `guide`). The mean over a window includes the zeros of edge_mode::zero.
+std::vector<double> brute_guided(const stb::mat32f& src, const stb::mat32f& guide, int k, int cg, int r, double eps, edge_mode mode) {
+    const int w = src.width(), h = src.height();
+    auto at = [&](const stb::mat32f& m, int x, int y, int ch) {
+        const int sx = testutil::edge_index(x, w, mode), sy = testutil::edge_index(y, h, mode);
+        return sx < 0 || sy < 0 ? 0.0 : double(m(sx, sy, ch));
+    };
+    const double count = double((2 * r + 1) * (2 * r + 1));
+    // a (cg values) and b of the window around every pixel
+    std::vector<double> a(std::size_t(w) * std::size_t(h) * 3, 0.0), b(std::size_t(w) * std::size_t(h), 0.0);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            double mI[3] = {0, 0, 0}, mp = 0, S[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, cip[3] = {0, 0, 0};
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx) {
+                    double I[3] = {0, 0, 0};
+                    for (int j = 0; j < cg; ++j) I[j] = at(guide, x + dx, y + dy, j);
+                    const double p = at(src, x + dx, y + dy, k);
+                    mp += p / count;
+                    for (int i = 0; i < cg; ++i) {
+                        mI[i] += I[i] / count;
+                        cip[i] += I[i] * p / count;
+                        for (int j = 0; j < cg; ++j) S[i][j] += I[i] * I[j] / count;
+                    }
+                }
+            double M[3][3], cov[3];
+            for (int i = 0; i < cg; ++i) {
+                cov[i] = cip[i] - mI[i] * mp;
+                for (int j = 0; j < cg; ++j) M[i][j] = S[i][j] - mI[i] * mI[j] + (i == j ? eps : 0.0);
+            }
+            double sol[3] = {0, 0, 0};
+            if (cg == 1) {
+                sol[0] = cov[0] / M[0][0];
+            } else {
+                const double det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+                                   M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+                const double inv[3][3] = {{(M[1][1] * M[2][2] - M[1][2] * M[2][1]) / det, (M[0][2] * M[2][1] - M[0][1] * M[2][2]) / det, (M[0][1] * M[1][2] - M[0][2] * M[1][1]) / det},
+                                          {(M[1][2] * M[2][0] - M[1][0] * M[2][2]) / det, (M[0][0] * M[2][2] - M[0][2] * M[2][0]) / det, (M[0][2] * M[1][0] - M[0][0] * M[1][2]) / det},
+                                          {(M[1][0] * M[2][1] - M[1][1] * M[2][0]) / det, (M[0][1] * M[2][0] - M[0][0] * M[2][1]) / det, (M[0][0] * M[1][1] - M[0][1] * M[1][0]) / det}};
+                for (int i = 0; i < 3; ++i)
+                    for (int j = 0; j < 3; ++j) sol[i] += inv[i][j] * cov[j];
+            }
+            double bb = mp;
+            for (int i = 0; i < cg; ++i) {
+                a[(std::size_t(y) * std::size_t(w) + std::size_t(x)) * 3 + std::size_t(i)] = sol[i];
+                bb -= sol[i] * mI[i];
+            }
+            b[std::size_t(y) * std::size_t(w) + std::size_t(x)] = bb;
+        }
+    std::vector<double> q(std::size_t(w) * std::size_t(h), 0.0);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            double ma[3] = {0, 0, 0}, mb = 0;
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx) {
+                    const int sx = testutil::edge_index(x + dx, w, mode), sy = testutil::edge_index(y + dy, h, mode);
+                    if (sx < 0 || sy < 0) continue;  // the zeros of edge_mode::zero
+                    for (int i = 0; i < cg; ++i) ma[i] += a[(std::size_t(sy) * std::size_t(w) + std::size_t(sx)) * 3 + std::size_t(i)] / count;
+                    mb += b[std::size_t(sy) * std::size_t(w) + std::size_t(sx)] / count;
+                }
+            double v = mb;
+            for (int i = 0; i < cg; ++i) v += ma[i] * double(guide(x, y, i));
+            q[std::size_t(y) * std::size_t(w) + std::size_t(x)] = v;
+        }
+    return q;
+}
+
+}  // namespace
+
+UTEST(libstb_filter_tests, test_guided_with_a_flat_guide_is_the_mean_of_the_window_means_as_computed_by_hand) {
+    // a guide with no variance has a = 0 in every window, so b is the mean of the window and the output is the mean, over
+    // the windows that cover a pixel, of those means. 3 x 1 gray [0, 0, 255], radius 1, edge clamp (the three rows of a
+    // window are one row): the window means are (0, 85, 170); the output is
+    //   pixel 0: (0 + 0 + 85) / 3 = 28.3, pixel 1: (0 + 85 + 170) / 3 = 85, pixel 2: (85 + 170 + 170) / 3 = 141.7
+    const stb::image8u img(3, 1, stb::pixel_format::gray, std::vector<std::uint8_t>{0, 0, 255});
+    const stb::image8u flat(3, 1, stb::pixel_format::gray, std::vector<std::uint8_t>{100, 100, 100});
+    const stb::image8u out = stb::guided_filter(img, flat, 1, 0.01f);
+    ASSERT_EQ(int(out(0, 0, 0)), 28);
+    ASSERT_EQ(int(out(1, 0, 0)), 85);
+    ASSERT_EQ(int(out(2, 0, 0)), 142);
+}
+
+UTEST(libstb_filter_tests, test_guided_matches_the_formula_in_doubles_with_gray_and_colour_guides_for_every_edge_mode) {
+    const stb::mat32f src = patterned(13, 11, 3);
+    const stb::mat32f rgb_guide = patterned(13, 11, 3), gray_guide = patterned(13, 11, 1);
+    for (edge_mode mode : all_modes)
+        for (int r : {1, 2}) {
+            const stb::mat32f self = stb::guided_filter(src, r, 0.02f, mode);  // the image is its own guide: 3 colour channels
+            const stb::mat32f with_gray = stb::guided_filter(src, gray_guide, r, 0.02f, mode);
+            const stb::mat32f with_rgb = stb::guided_filter(src, rgb_guide, r, 0.02f, mode);
+            for (int k = 0; k < 3; ++k) {
+                const std::vector<double> want_self = brute_guided(src, src, k, 3, r, 0.02, mode);
+                const std::vector<double> want_gray = brute_guided(src, gray_guide, k, 1, r, 0.02, mode);
+                const std::vector<double> want_rgb = brute_guided(src, rgb_guide, k, 3, r, 0.02, mode);
+                for (int y = 0; y < 11; ++y)
+                    for (int x = 0; x < 13; ++x) {
+                        const std::size_t i = std::size_t(y) * 13 + std::size_t(x);
+                        ASSERT_TRUE(std::fabs(double(self(x, y, k)) - want_self[i]) < 3e-4);
+                        ASSERT_TRUE(std::fabs(double(with_gray(x, y, k)) - want_gray[i]) < 3e-4);
+                        ASSERT_TRUE(std::fabs(double(with_rgb(x, y, k)) - want_rgb[i]) < 3e-4);
+                    }
+            }
+        }
+}
+
+UTEST(libstb_filter_tests, test_guided_alpha_is_copied_the_alpha_of_a_guide_is_ignored_and_8_bits_follow_the_float_path) {
+    const stb::image8u rgba = patterned8(15, 12, stb::pixel_format::rgba);
+    const stb::image8u out = stb::guided_filter(rgba, 2, 0.01f);
+    for (int y = 0; y < 12; ++y)
+        for (int x = 0; x < 15; ++x) ASSERT_EQ(int(out(x, y, 3)), int(rgba(x, y, 3)));
+    ASSERT_TRUE(same_bytes(out, stb::to_8u(stb::guided_filter(stb::to_f32(rgba), 2, 0.01f))));
+    // a guide of gray + alpha is the gray guide; RGBA is the RGB guide
+    const stb::mat32f ga = patterned(15, 12, 2), g = patterned(15, 12, 1);
+    stb::mat32f g_only(15, 12, 1);
+    for (int y = 0; y < 12; ++y)
+        for (int x = 0; x < 15; ++x) {
+            g_only(x, y, 0) = ga(x, y, 0);
+        }
+    const stb::mat32f src = patterned(15, 12, 3);
+    ASSERT_TRUE(same_bits(stb::guided_filter(src, ga, 2, 0.01f), stb::guided_filter(src, g_only, 2, 0.01f)));
+    (void)g;
+}
+
+UTEST(libstb_filter_tests, test_guided_radius_zero_is_a_copy_and_bad_arguments_throw) {
+    const stb::image8u u = patterned8(9, 7, stb::pixel_format::rgb);
+    ASSERT_TRUE(same_bytes(stb::guided_filter(u, 0, 0.01f), u));
+    const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
+    ASSERT_THROWS(stb::guided_filter(u, -1, 0.01f), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(u, 1001, 0.01f), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(u, 1, 0.0f), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(u, 1, -1.0f), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(u, 1, nan), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(u, 1, inf), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(stb::mat8u(4, 4, 5), 1, 0.01f), std::invalid_argument);
+    ASSERT_THROWS(stb::guided_filter(u, patterned8(9, 8, stb::pixel_format::gray), 1, 0.01f), std::invalid_argument);  // another size
+    ASSERT_THROWS(stb::guided_filter(patterned(9, 7, 3), stb::mat32f(9, 7, 5), 1, 0.01f), std::invalid_argument);       // 5 channels
+    ASSERT_TRUE(stb::guided_filter(stb::mat8u(), 1, 0.01f).empty());
+    ASSERT_TRUE(stb::guided_filter(stb::mat32f(), 1, 0.01f).empty());
+    ASSERT_THROWS(stb::guided_filter(stb::mat32f(), patterned(2, 2, 1), 1, 0.01f), std::invalid_argument);
+}
+
+UTEST(libstb_filter_tests, test_guided_keeps_the_edge_of_its_guide_and_is_the_same_on_any_number_of_threads) {
+    // the image is a noisy step; the guide is the clean step: the output follows the guide's edge
+    stb::mat32f clean(24, 10, 1), noisy(24, 10, 1);
+    for (int y = 0; y < 10; ++y)
+        for (int x = 0; x < 24; ++x) {
+            clean(x, y, 0) = x < 12 ? 0.1f : 0.9f;
+            noisy(x, y, 0) = clean(x, y, 0) + (((x * 7 + y * 13) % 5) - 2) * 0.03f;
+        }
+    const stb::mat32f out = stb::guided_filter(noisy, clean, 3, 1.0e-3f);
+    for (int y = 0; y < 10; ++y) {
+        ASSERT_TRUE(std::fabs(out(10, y, 0) - 0.1f) < 0.05f);  // two pixels short of the step: still dark
+        ASSERT_TRUE(std::fabs(out(13, y, 0) - 0.9f) < 0.05f);  // one past it: bright
+    }
+    const stb::mat32f src = patterned(120, 90, 3);
+    stb::mat32f one, many;
+    {
+        stb::thread_scope scope(1);
+        one = stb::guided_filter(src, 3, 0.01f);
+    }
+    {
+        stb::thread_scope scope(4);
+        many = stb::guided_filter(src, 3, 0.01f);
+    }
+    ASSERT_TRUE(same_bits(one, many));
+}

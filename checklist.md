@@ -200,7 +200,8 @@
       (تا یک سطح)، و scikit-image (`equalize_adapthist`) فقط برای شباهت تقریبی، چون حد کِلیپش کمیت دیگریه.
 - [x] **۲ب-۲ `bilateral_filter`** (`stb/filter.hpp`). انجام شد (C++ 714 تست، Python 1819 تست پاس). `bilateral_filter(src, radius, sigma_space, sigma_range, edge)`؛
       فاصله‌ی رنگ مشترک بین کانال‌های رنگ و بر حسب کسری از کل بازه؛ آلفا کپی می‌شه؛ مرجع تست: نسخه‌ی numpy همین فرمول (OpenCV نصب نیست).
-- [ ] **۲ب-۳ `guided_filter`** (`stb/filter.hpp`): با box filter موجود، هزینه مستقل از radius؛ API اول پیشنهاد می‌شه.
+- [x] **۲ب-۳ `guided_filter`** (`stb/filter.hpp`). انجام شد (C++ 719 تست، Python 1836 تست پاس). دو فرم: خودراهنما و با `guide` جدا (۱ یا ۳ کانال رنگ، کوواریانس 3x3)؛
+      `eps` بر حسب مربع بازه‌ی ۰ تا ۱؛ آلفا کپی می‌شه؛ با راهنمای تخت نتیجه میانگینِ میانگین‌هاست؛ مرجع تست: numpy و scipy.
 - [ ] **۲ب-۴ `warp_affine` و `warp_perspective`**: بزرگ‌ترین بخش؛ interpolation و مدیریت مرز، احتمالاً مشترک با `resize`؛
       API اول پیشنهاد می‌شه.
 - [ ] **۲ب-۵ superpixel (DISF/SICLE).** پیش از هر کد: بررسی لایسنس و پتنت هر دو الگوریتم (نتیجه توی همین فایل نوشته

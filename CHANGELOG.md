@@ -8,6 +8,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **`guided_filter`** (`stb/filter.hpp`, `libstb.guided_filter`; round 2b): `guided_filter(src, [guide,] radius, eps, edge)` for `mat8u` (gives an `image8u`) and `mat32f`, 1 to 4 channels. In
+  every (2 * radius + 1)-square the output is the linear function of the guide that fits the image best (`eps`, in units of the full range squared, keeps the slope down); the lines of the
+  squares that cover a pixel are averaged, so the cost is a handful of box means and does not depend on the radius. The guide is the image itself or another picture of the same size, gray
+  (1 channel, or gray + alpha) or colour (3 channels, or RGBA), a colour guide using its 3 x 3 covariance (inverted per pixel). Alpha of the image is copied; radius 0 is a copy; every `edge_mode`.
+  With a flat guide the result is the mean of the window means. `invalid_argument` (`ValueError`) for a radius outside 0..1000, an `eps` that is not positive and finite, a guide of another size,
+  or more than 4 channels. NaN is not handled (it spreads through the squares that cover it). Same bits on every number of threads. Tests: `test_filter.cpp` (a flat guide by hand, the
+  formula in doubles for gray and colour guides and every edge mode, alpha, 8 bits against the float path, bad arguments, a noisy step, threads) and `tests/python/test_image_ops.py` (a numpy and
+  scipy version of the algorithm for every edge mode and guide kind, a guide's edge kept, errors).
 - **`bilateral_filter`** (`stb/filter.hpp`, `libstb.bilateral_filter`; round 2b): `bilateral_filter(src, radius, sigma_space, sigma_range, edge)` for `mat8u` (gives an
   `image8u`) and `mat32f`, 1 to 4 channels. Each colour channel becomes the mean of the (2 * radius + 1)-square around it, a neighbour weighing
   `exp(-r^2 / (2 sigma_space^2)) * exp(-d^2 / (2 sigma_range^2))` where `d` is the colour distance taken over all colour channels together, in units of the full range

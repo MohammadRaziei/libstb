@@ -528,6 +528,48 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
         },
         "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the bilateral filter of this one.");
 
+    // ---- guided_filter
+    const std::string guided_doc =
+        std::string("Smooths keeping the edges of a guide, at a cost that does not depend on the radius. In every (2 * radius + 1)-square the\n"
+                    "output is the linear function of the guide that fits the image best, `eps` (in units of the full range squared, 1e-3 is\n"
+                    "gentle) keeping the slope down. The guide is the image itself (guide=None) or another Image / float32 array of the same\n"
+                    "size, gray or colour (3 or 4 channels: a colour guide uses its 3 x 3 covariance). Alpha is copied. radius 0 changes\n"
+                    "nothing. Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array).\n") +
+        edge_doc;
+    m.def(
+        "guided_filter",
+        [](const stb::image& img, int radius, float eps, nb::handle guide, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            const stb::image* g = nullptr;
+            if (!guide.is_none() && !nb::try_cast(guide, g, /*convert=*/false)) throw std::invalid_argument("guide must be an Image (or None)");
+            nb::gil_scoped_release release;
+            return g != nullptr ? stb::guided_filter(img, *g, radius, eps, e) : stb::guided_filter(img, radius, eps, e);
+        },
+        "src"_a, "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp", guided_doc.c_str());
+    m.def(
+        "guided_filter",
+        [](const f32_array& src, int radius, float eps, nb::handle guide, nb::handle edge) -> f32_result {
+            const stb::edge_mode e = edge_of(edge);
+            f32_array garr;
+            const bool has_guide = !guide.is_none();
+            if (has_guide && !nb::try_cast(guide, garr, /*convert=*/false)) throw std::invalid_argument("guide must be a float32 array like src (or None)");
+            const stb::mat32f gm = has_guide ? view_of(garr) : stb::mat32f();
+            return run_f32(src, [&](const stb::mat32f& in) {
+                return has_guide ? stb::guided_filter(in, gm, radius, eps, e) : stb::guided_filter(in, radius, eps, e);
+            });
+        },
+        "src"_a, "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp");
+    image_cls.def(
+        "guided_filter",
+        [](const stb::image& img, int radius, float eps, nb::handle guide, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            const stb::image* g = nullptr;
+            if (!guide.is_none() && !nb::try_cast(guide, g, /*convert=*/false)) throw std::invalid_argument("guide must be an Image (or None)");
+            nb::gil_scoped_release release;
+            return g != nullptr ? stb::guided_filter(img, *g, radius, eps, e) : stb::guided_filter(img, radius, eps, e);
+        },
+        "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp", "A new Image: the guided filter of this one.");
+
     // ---- unsharp_mask
     const std::string unsharp_doc =
         std::string("out = src + amount * (src - gaussian_blur(src, sigma)), clamped to 0..1; a value whose difference from the blur is\n"
