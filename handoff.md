@@ -1,3 +1,67 @@
+# handoff.md: libstb (از اینجا شروع کن)
+
+تاریخ: 2026-11-17. این بخش خلاصه‌ی خودکفا برای چت بعدی است؛ زیرش جزئیات هر دور (جدیدترین اول) و تاریخچه‌ی قدیمی‌تر است.
+
+## ۱. وضعیت ریپو
+
+- ریپو `mohammadraziei/libstb`، شاخه‌ی `master` (public: `git clone https://github.com/mohammadraziei/libstb`). در این چت دور ۱ (median، unsharp، pixelize، تبدیل رنگ، معیارها) و دور ۲الف (threshold، morphology، components، canny، scharr) ساخته شد.
+- دور ۱ و رفع‌های CI از طریق `git am` به origin رفتند (commitهای `feat(image): median_filter...`، `fix(windows): export the explicit instantiations...`، `ci(emulate)...`). **دور ۲الف** روی origin هست (commit `628d77e`، محتوای کد با commit محلی من یکی بود) و بعد از آن commit هشت blend mode جدید (`3c95a7c`). در این چت origin در شاخه‌ی محلی merge شد (commit `Merge origin/master into master`؛ فقط `CHANGELOG.md` و `handoff.md` conflict داشتند) و 702 تست C++ با CMake پاس شد. قبل از هر کار جدید دوباره `git fetch origin && git log --oneline origin/master -5` بزن.
+- کاربر **merge** می‌خواهد (نه rebase) و قبل از هر کار جدید از origin به‌روز می‌شود. هرگز `git add -A` نزن؛ فقط مسیرهای مشخص (`include src tests CMakeLists.txt CHANGELOG.md handoff.md ...`). در sandbox build را بیرون از ریپو بگیر (`/home/claude/build`، `/home/claude/build_py`) تا zip تمیز بماند.
+- `checklist.md` هیچ بخشی برای پردازش تصویر ندارد (بخشی که قبلاً نوشتم حذف شد؛ عمدی بود یا نه را نمی‌دانم): قبل از اضافه کردن بپرس.
+
+## ۲. قاعده‌های کاربر (حتماً رعایت شود)
+
+- پاسخ فارسی. **em dash (U+2014) ممنوع** (کد، متن، commit، مستندات): دونقطه، ویرگول، پرانتز یا `-`.
+- فقط **CMake** برای build و تست، هرگز `g++` مستقیم.
+- **قبل از پیاده‌سازی هر API جدید، API پیشنهادی را بنویس و منتظر تأیید بمان.** کاربر نظر می‌دهد (مثلاً نام `threshold` ماند، نه `scaled_step`؛ توابع قالبی با instantiation در `.cpp` و trait پروژه `traits::if_image_t`، نه `mat<T>` خالی).
+- warning (gcc و MSVC) از ریشه رفع شود، نه با pragma یا flag. CI باید بدون warning تمام شود.
+- تحویل: **zip کل پروژه** با `present_files` (قاعده‌ی دائمی). کاربر گاهی صریح «patch am بده» می‌خواهد: `git format-patch -1 --stdout` روی `origin/master` (یک commit، بدون merge commit)، و در یک clone تمیز با `git am` امتحانش کن.
+- وقتی CI شکست می‌خورد کاربر لاگ را می‌چسباند (اغلب ناقص: بدون traceback). دنبال علت واقعی بگرد، حدس را با آزمایش بسنج (این چت: خطای ویندوز، و `emulate`).
+- در API عمومی `std::shared_ptr` نباشد. کاربر `stb::format` و `stb::file::path` را نخواست. ویندوز: `near`، `far`، `small`، `min`، `max` را اسم نگذار. `scipy` و `scikit-image` در تست‌ها اختیاری‌اند (`pytest.importorskip`).
+
+## ۳. نقشه‌ی پردازش تصویر (همه در namespace `stb`)
+
+| هدر | چه دارد |
+|---|---|
+| `mat.hpp`، `image.hpp` | `mat<T>` (`mat8u`، `mat32f`، `mat32i`)، `image8u`، traits: `if_image_t<M>`، `if_image_rvalue_t<M>`، `mat_value_t<M>`، `to_f32`، `to_8u` |
+| `tone.hpp` | histogram، equalize، auto_contrast، match_histogram، gamma، levels، LUT |
+| `filter.hpp` | convolve، gaussian/box blur، sobel، **scharr**، magnitude، **median_filter**، **unsharp_mask**، **pixelize**، **canny** |
+| `colorspace.hpp` | `convert_color` (rgb، hsv، hsl، ycbcr) |
+| `metrics.hpp` | mae، mse، psnr، ssim، ssim_map |
+| `threshold.hpp` | threshold، otsu_threshold، adaptive_threshold |
+| `morphology.hpp` | structuring_element، erode، dilate، morph_open، morph_close، morph_gradient، top_hat، black_hat |
+| `components.hpp` | connected_components (ماسک یا نقشه‌ی برچسب) |
+| `superpixel.hpp` | SNIC و غیره (از components استفاده می‌کند) |
+| `src/image/plane.hpp` | داخلی: `resolve`، `padded_plane` |
+
+قرارداد (همه‌جا یکسان): `template <class T> STB_API ... *_inplace<T>` صادرشده، instantiation در `.cpp` برای `std::uint8_t` و `float` با **`template STB_API ...`** (MSVC بدون `STB_API` روی instantiation صریح نماد را صادر نمی‌کند: LNK2019). بسته‌های هدر inline (copy و rvalue). کار موازی با `utils::parallel_for` و ثابت‌های ns به‌عنوان کف؛ نتیجه به تعداد thread بستگی ندارد (جمع‌ها به ترتیب ثابت). cppهای عددی در لیست بدون FMA در `CMakeLists.txt` (`-ffp-contract=off`). NaN و بازه: float خوانده‌شده 0 تا 1، 8 بیت تقسیم بر 255.
+
+Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_image_ops`، `bind_segmentation`؛ کمک‌ها `image_form`، `run_f32`، `view_of`، `edge_of`، `to_enum`، `mask_image`)؛ نام‌ها در `src/bindings/python/libstb/__init__.py` صادر می‌شوند. ماسک‌ها `Image` خاکستری برمی‌گردند. اسم‌های Python و C++ یکی‌اند (`libstb.open` پر است، پس `morph_open` و `morph_close`).
+
+## ۴. build و تست در sandbox
+
+- `apt-get install -y cmake g++ ninja-build qemu-user` (pip: `pip install --break-system-packages nanobind pytest`؛ numpy، scipy، scikit-image، pillow از قبل هست؛ `g++-14` هم از apt).
+- C++: `cmake -S libstb -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=OFF`، بعد `timeout 280 cmake --build build --target stb_test_cpp` (هم می‌سازد و هم اجرا می‌کند؛ بیلد کامل بیش از یک فراخوانی طول می‌کشد: همان دستور را تکرار کن). اجرای مستقیم: `./build/tests/cpp/test_stb_cpp --filter=libstb_canny_tests.*`.
+- Python: `cmake -S libstb -B build_py -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTB_BUILD_PYTHON=ON -DSTB_BUILD_TESTS=ON`، `--target build_python`، تست: `cd build_py/python/install && python3 -m pytest /home/claude/libstb/tests/python -p no:cacheprovider -q`.
+- شبیه‌سازی CPU بدون AVX: در همان پوشه‌ی install، `qemu-x86_64 -cpu Nehalem $(which python3) -c "import libstb; print(libstb.simd_backends())"` باید `['sse2', 'scalar']` بدهد.
+- دام‌ها: `touch a/{b,c}.cpp` زیر `sh` فایل brace می‌سازد (`bash -c` بزن)؛ `std::vector<T> v(std::size_t(n));` most vexing parse است (مقدار را اول در یک `const std::size_t` بریز)؛ utest: `ASSERT_EQ` روی string کار نمی‌کند، `EXPECT_NEAR/LT/LE/GT` هست. فقط `grep` روی خروجی با نام‌های تست که شامل `error` است را با `-A` کوتاه کن.
+
+## ۵. CI
+
+- `.github/workflows/wheels.yml`: job `emulate` به `ubuntu-24.04` پین شد (دلیل: `ubuntu-latest` بین 2026-10-19 و 2026-11-19 به Ubuntu 26.04 می‌رود و userland آن CPU نسل x86-64-v3 می‌خواهد؛ حتی `python -c pass` زیر `qemu -cpu Nehalem` می‌مرد). گام تشخیصی `if: failure()` و `tests/tools/find_wide_instructions.py` (روی wheel strip شده اسم توابع محلی گم است، نتیجه‌اش را قطعی نگیر).
+- ویندوز: خطای LNK2019 برای `*_inplace<T>` با `STB_API` روی instantiationها رفع شد. کد دور ۲الف روی MSVC هنوز دیده نشده: اگر CI warning یا خطا داد، لاگ را کاربر می‌آورد.
+- مسئله‌ی جدا و بررسی‌نشده: ریپوی دیگر `httpp`، job macOS، تست `test_file_browser.py::test_zip_of_a_folder_and_of_chosen_names_reads_back_with_zipfile` شکست خورد (لاگ فقط خط `FAILED` داشت). کاربر گفت «فعلاً نه».
+- تست‌های مقایسه‌ای scipy و scikit-image در CI skip می‌شوند (در extra تست نیستند): تصمیمی گرفته نشده.
+
+## ۶. بعدی و سؤال‌های باز
+
+- **دور ۲ب** (طبق برنامه): `bilateral_filter`، `guided_filter`، `warp_affine` و `warp_perspective`، CLAHE. هر کدام: اول API پیشنهادی (قالبی، سه شکل، `edge_mode`، Python هم‌نام) و منتظر تأیید.
+- بنچمارک نداریم (ثابت‌های ns اندازه‌گیری نشده؛ `median_filter` روی float برای radius بزرگ O(r^2) است). اندازه‌ی wheel بعد از این دورها اندازه‌گیری نشده.
+- `docs/guide.md` و `README.md` درباره‌ی این قابلیت‌ها چیزی ندارند (CHANGELOG و handoff به‌روزند).
+- `Components` را با `SuperpixelMap` ترکیب نکرده‌ام. ویندوز، macOS و ARM را خودم اجرا نکرده‌ام.
+
+---
+
 # handoff: دور ۲الف تمام شد (threshold، morphology، components، canny، scharr)، 2026-11-17
 
 **این بخش را اول بخوان؛ زیرش handoff دور ۱ و قبل از آن است و معتبر است.**
