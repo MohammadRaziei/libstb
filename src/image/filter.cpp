@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 #include <stdexcept>
 #include <string>
@@ -464,6 +465,127 @@ image8u median_filter(const mat8u& src, int radius, edge_mode edge) {
     if (src.empty()) return image8u();
     image8u out(src.width(), src.height(), pixel_format_from_channels(src.channels()));
     median_into(src, radius, edge, out.data());
+    return out;
+}
+
+// ============================================================================================ bilateral
+
+namespace {
+
+constexpr double bilateral_ns = 1.2;  // one tap of the window (weights, difference, sums), per colour channel and tap
+
+void check_bilateral(int radius, float sigma_space, float sigma_range) {
+    if (radius < 0 || radius > 1000) throw std::invalid_argument("radius must be in 0..1000");
+    if (!(sigma_space > 0.0f) || !std::isfinite(sigma_space)) throw std::invalid_argument("sigma_space must be a positive finite number");
+    if (!(sigma_range > 0.0f) || !std::isfinite(sigma_range)) throw std::invalid_argument("sigma_range must be a positive finite number");
+}
+
+// The weight of each tap of the window by its distance: exp(-(dx^2 + dy^2) / (2 sigma^2)), row by row.
+std::vector<float> bilateral_space_weights(int r, float sigma) {
+    const int side = 2 * r + 1;
+    const double inv = 1.0 / (2.0 * double(sigma) * double(sigma));
+    std::vector<float> ws(std::size_t(side) * std::size_t(side));
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx) ws[std::size_t(dy + r) * std::size_t(side) + std::size_t(dx + r)] = float(std::exp(-double(dx * dx + dy * dy) * inv));
+    return ws;
+}
+
+// Every colour channel of a pixel is changed by the weighted mean of the window, where a tap weighs
+// exp(-distance^2 / (2 sigma_space^2)) * exp(-d^2 / (2 sigma_range^2)) and d is the distance of the two pixels as colours
+// (all colour channels together, in units of the full range). The alpha channel is copied. On floats a tap with a NaN is
+// left out and a NaN pixel stays NaN.
+template <class T>
+void bilateral_run(const mat<T>& src, mat<T>& out, int r, float sigma_space, float sigma_range, edge_mode edge) {
+    constexpr bool u8 = std::is_same_v<T, std::uint8_t>;
+    const int w = src.width(), h = src.height(), c = src.channels();
+    const int colour = (c == 2 || c == 4) ? c - 1 : c;
+    const int side = 2 * r + 1;
+    const std::size_t pw = std::size_t(w) + 2 * std::size_t(r);
+    const std::vector<float> ws = bilateral_space_weights(r, sigma_space);
+    const double inv_range = 1.0 / (2.0 * double(sigma_range) * double(sigma_range));
+
+    std::vector<float> lut;  // 8 bits: the range weight of every possible squared distance (in levels squared)
+    if (u8) {
+        lut.resize(std::size_t(colour) * 255u * 255u + 1u);
+        for (std::size_t d = 0; d < lut.size(); ++d) lut[d] = float(std::exp(-(double(d) / 65025.0) * inv_range));
+    }
+    const float inv_range_f = float(inv_range);
+
+    std::vector<std::vector<T>> planes;
+    planes.reserve(std::size_t(colour));
+    for (int k = 0; k < colour; ++k) planes.push_back(detail_plane::padded_plane(src, k, r, r, edge));
+
+    parallel_for(std::size_t(h), double(w) * double(side) * double(side) * double(colour + 1) * bilateral_ns, [&](std::size_t b, std::size_t e) {
+        for (std::size_t y = b; y < e; ++y) {
+            const T* in = src.row(int(y));
+            T* o = out.row(int(y));
+            for (int x = 0; x < w; ++x) {
+                T* px = o + std::size_t(x) * std::size_t(c);
+                for (int k = colour; k < c; ++k) px[k] = in[std::size_t(x) * std::size_t(c) + std::size_t(k)];  // alpha
+                const std::size_t mid = (y + std::size_t(r)) * pw + std::size_t(x) + std::size_t(r);
+                T centre[4];
+                bool centre_nan = false;
+                for (int k = 0; k < colour; ++k) {
+                    centre[k] = planes[std::size_t(k)][mid];
+                    if constexpr (!u8) centre_nan = centre_nan || centre[k] != centre[k];
+                }
+                if (centre_nan) {
+                    for (int k = 0; k < colour; ++k) px[k] = std::numeric_limits<T>::quiet_NaN();
+                    continue;
+                }
+                float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                float wsum = 0.0f;
+                for (int dy = 0; dy < side; ++dy) {
+                    const std::size_t row = (y + std::size_t(dy)) * pw + std::size_t(x);
+                    for (int dx = 0; dx < side; ++dx) {
+                        const std::size_t idx = row + std::size_t(dx);
+                        T v[4];
+                        std::conditional_t<u8, int, float> d2 = 0;
+                        bool skip = false;
+                        for (int k = 0; k < colour; ++k) {
+                            v[k] = planes[std::size_t(k)][idx];
+                            if constexpr (!u8) skip = skip || v[k] != v[k];
+                            const auto d = v[k] - centre[k];
+                            d2 += d * d;
+                        }
+                        if (skip) continue;
+                        float rw;
+                        if constexpr (u8) rw = lut[std::size_t(d2)];
+                        else rw = std::exp(-d2 * inv_range_f);
+                        const float wgt = ws[std::size_t(dy) * std::size_t(side) + std::size_t(dx)] * rw;
+                        wsum += wgt;
+                        for (int k = 0; k < colour; ++k) acc[k] += wgt * float(v[k]);
+                    }
+                }
+                for (int k = 0; k < colour; ++k) {
+                    const float val = acc[k] / wsum;  // the middle tap alone weighs 1, so wsum >= 1
+                    if constexpr (u8) px[k] = std::uint8_t(val < 0.0f ? 0 : (val > 255.0f ? 255 : int(val + 0.5f)));
+                    else px[k] = val;
+                }
+            }
+        }
+    });
+}
+
+}  // namespace
+
+mat32f bilateral_filter(const mat32f& src, int radius, float sigma_space, float sigma_range, edge_mode edge) {
+    check_bilateral(radius, sigma_space, sigma_range);
+    if (src.empty()) return mat32f();
+    if (src.channels() > 4) throw std::invalid_argument("expected an image of 1 to 4 channels (gray, gray + alpha, RGB, RGBA)");
+    if (radius == 0) return src.copy();
+    mat32f out(src.width(), src.height(), src.channels());
+    bilateral_run(src, out, radius, sigma_space, sigma_range, edge);
+    return out;
+}
+
+image8u bilateral_filter(const mat8u& src, int radius, float sigma_space, float sigma_range, edge_mode edge) {
+    check_bilateral(radius, sigma_space, sigma_range);
+    if (src.empty()) return image8u();
+    if (src.channels() > 4) throw std::invalid_argument("expected an image of 1 to 4 channels (gray, gray + alpha, RGB, RGBA)");
+    if (radius == 0) return image8u(src.copy());
+    image8u out(src.width(), src.height(), pixel_format_from_channels(src.channels()));
+    bilateral_run<std::uint8_t>(src, out, radius, sigma_space, sigma_range, edge);
     return out;
 }
 

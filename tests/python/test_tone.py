@@ -149,3 +149,115 @@ def test_the_result_does_not_depend_on_the_number_of_threads():
     with stb.threads(4):
         b = (np.asarray(stb.equalize(img)).copy(), stb.levels(f, 0.1, 0.9, 1.4).copy())
     assert np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1])
+
+
+# ------------------------------------------------------------------------------------------------------- clahe
+
+def clahe_reference(a, clip_limit, tx, ty):
+    """The algorithm of stb::clahe for a gray uint8 picture, written again with numpy (doubles; ties may differ by one level)."""
+    h, w = a.shape
+
+    def edge(t, n, tiles):
+        return -(-t * n // tiles)  # ceil(t * n / tiles)
+
+    tables = np.zeros((ty, tx, 256))
+    for j in range(ty):
+        for i in range(tx):
+            tile = a[edge(j, h, ty):edge(j + 1, h, ty), edge(i, w, tx):edge(i + 1, w, tx)]
+            hist = np.bincount(tile.ravel(), minlength=256).astype(np.int64)
+            n = hist.sum()
+            if (hist != 0).sum() < 2:
+                tables[j, i] = np.arange(256) / 255.0
+                continue
+            clip = max(1, int(clip_limit * n / 256))
+            excess = int(np.maximum(hist - clip, 0).sum())
+            hist = np.minimum(hist, clip) + excess // 256
+            residual = excess % 256
+            if residual:
+                step = max(256 // residual, 1)
+                for k in range(0, 256, step):
+                    if residual == 0:
+                        break
+                    hist[k] += 1
+                    residual -= 1
+            tables[j, i] = np.cumsum(hist) / n
+
+    def axis(n, tiles):
+        u = (np.arange(n) + 0.5) * tiles / n - 0.5
+        a0 = np.zeros(n, dtype=int)
+        b0 = np.zeros(n, dtype=int)
+        f = np.zeros(n)
+        for q in range(n):
+            if u[q] <= 0:
+                continue
+            k = int(u[q])
+            if k >= tiles - 1:
+                a0[q] = b0[q] = tiles - 1
+            else:
+                a0[q], b0[q], f[q] = k, k + 1, u[q] - k
+        return a0, b0, f
+
+    xa, xb, fx = axis(w, tx)
+    ya, yb, fy = axis(h, ty)
+    out = np.zeros((h, w))
+    yy, xx = np.mgrid[0:h, 0:w]
+    lv = a.astype(int)
+
+    def at(j, i):
+        return tables[j[:, None], i[None, :], lv]
+
+    top = (1 - fx)[None, :] * at(ya, xa) + fx[None, :] * at(ya, xb)
+    bottom = (1 - fx)[None, :] * at(yb, xa) + fx[None, :] * at(yb, xb)
+    out = (1 - fy)[:, None] * top + fy[:, None] * bottom
+    return np.clip((out * 255 + 0.5).astype(int), 0, 255).astype(np.uint8)
+
+
+@pytest.mark.parametrize("clip_limit,tx,ty", [(1.0, 1, 1), (2.0, 4, 3), (4.0, 5, 2), (1.0e6, 3, 3)])
+def test_clahe_matches_a_numpy_version_of_the_algorithm(clip_limit, tx, ty):
+    a = rand8(37, 44, 1, seed=21)[..., 0]
+    a[:, :20] //= 4  # darker on the left, so the tiles differ
+    got = np.asarray(stb.clahe(stb.Image(a[..., None]), clip_limit, tx, ty))[..., 0]
+    want = clahe_reference(a, clip_limit, tx, ty)
+    assert np.abs(got.astype(int) - want.astype(int)).max() <= 1
+
+
+def test_clahe_is_close_to_scikit_images_adaptive_equalisation():
+    skimage = pytest.importorskip("skimage")
+    from skimage import data, exposure
+    a = data.camera()[::4, ::4].copy()
+    got = np.asarray(stb.clahe(stb.Image(a[..., None]), 2.0, 8, 8))[..., 0].astype(float)
+    # the clip limits are not the same quantity (skimage's is a fraction), so only the look is compared, not the numbers
+    want = exposure.equalize_adapthist(a, kernel_size=(16, 16), clip_limit=0.01) * 255
+    assert np.corrcoef(got.ravel(), want.ravel())[0, 1] > 0.95
+    assert got.std() > a.std()  # it did raise the local contrast
+
+
+def test_clahe_forms_strings_and_inplace():
+    img = stb.Image(rand8(24, 30, 3, seed=22))
+    new = img.clahe(2.0, 3, 2)
+    assert new is not img and np.asarray(new).shape == (24, 30, 3)
+    assert np.array_equal(np.asarray(new), np.asarray(stb.clahe(img, 2.0, 3, 2)))
+    assert np.array_equal(np.asarray(img.clahe(2.0, 3, 2, "per_channel")), np.asarray(stb.clahe(img, 2.0, 3, 2, stb.ToneMode.PER_CHANNEL)))
+    before = np.asarray(img).copy()
+    again = img.clahe(2.0, 3, 2, inplace=True)
+    assert again is img and np.array_equal(np.asarray(img), np.asarray(new)) and not np.array_equal(np.asarray(img), before)
+    # defaults: clip_limit 2, 8 x 8 tiles (tiles_y 0 is the same as tiles_x)
+    big = stb.Image(rand8(32, 40, 1, seed=23))
+    assert np.array_equal(np.asarray(stb.clahe(big)), np.asarray(stb.clahe(big, 2.0, 8, 8)))
+
+
+def test_clahe_on_float_arrays():
+    f = randf(20, 26, 3, seed=24)
+    out = stb.clahe(f, 3.0, 2, 2)
+    assert out.dtype == np.float32 and out.shape == f.shape and out.min() >= 0.0 and out.max() <= 1.0
+    g = randf(20, 26, seed=25)  # (H, W)
+    assert stb.clahe(g, 3.0, 2).shape == g.shape
+    flat = np.full((9, 9), 0.4, dtype=np.float32)
+    assert np.array_equal(stb.clahe(flat, 2.0, 3), flat)
+
+
+def test_clahe_rejects_bad_arguments():
+    img = stb.Image(rand8(10, 8, 1, seed=26))
+    for args in [(0.5,), (float("nan"),), (2.0, 0), (2.0, 4, -1), (2.0, 9, 1), (2.0, 2, 11)]:
+        with pytest.raises(ValueError):
+            stb.clahe(img, *args)

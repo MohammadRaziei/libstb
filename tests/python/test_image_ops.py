@@ -203,3 +203,64 @@ def test_the_number_of_threads_does_not_change_the_results():
     assert one[0] == many[0] and one[1] == many[1]
     for x, y in zip(one[2:], many[2:]):
         assert np.array_equal(x, y)
+
+
+# ------------------------------------------------------------------------------------------------ bilateral_filter
+
+NUMPY_PADS = {"clamp": "edge", "reflect": "symmetric", "mirror": "reflect", "wrap": "wrap", "zero": "constant"}
+
+
+def bilateral_reference(a, radius, sigma_space, sigma_range, edge, scale):
+    """The formula of stb::bilateral_filter with numpy (doubles). a is (H, W, colour); scale turns its values into 0..1."""
+    h, w, c = a.shape
+    kw = {"constant_values": 0} if edge == "zero" else {}
+    p = np.pad(a.astype(np.float64), ((radius, radius), (radius, radius), (0, 0)), mode=NUMPY_PADS[edge], **kw)
+    acc = np.zeros((h, w, c))
+    wsum = np.zeros((h, w, 1))
+    centre = a.astype(np.float64)
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            nb = p[radius + dy:radius + dy + h, radius + dx:radius + dx + w]
+            d2 = (((nb - centre) * scale) ** 2).sum(axis=2, keepdims=True)
+            wgt = math.exp(-(dx * dx + dy * dy) / (2 * sigma_space ** 2)) * np.exp(-d2 / (2 * sigma_range ** 2))
+            acc += wgt * nb
+            wsum += wgt
+    return acc / wsum
+
+
+@pytest.mark.parametrize("edge", sorted(NUMPY_PADS))
+@pytest.mark.parametrize("radius", [1, 3])
+def test_bilateral_filter_matches_a_numpy_version_of_the_formula(edge, radius):
+    a = rand8(19, 23, 4, seed=31)
+    got = np.asarray(stb.bilateral_filter(stb.Image(a), radius, 2.0, 0.3, edge=edge)).astype(np.float64)
+    want = bilateral_reference(a[..., :3], radius, 2.0, 0.3, edge, 1 / 255.0)
+    assert np.abs(got[..., :3] - want).max() <= 0.5 + 1e-3
+    assert np.array_equal(got[..., 3], a[..., 3])  # alpha is copied
+    f = randf(14, 17, 3, seed=32)
+    gotf = stb.bilateral_filter(f, radius, 2.0, 0.3, edge=edge)
+    assert gotf.dtype == np.float32 and gotf.shape == f.shape
+    assert np.abs(gotf - bilateral_reference(f, radius, 2.0, 0.3, edge, 1.0)).max() < 1e-4
+
+
+def test_bilateral_filter_keeps_edges_that_a_blur_smears():
+    a = np.zeros((20, 20, 1), dtype=np.uint8)
+    a[:, 10:] = 200
+    rng = np.random.default_rng(33)
+    noisy = np.clip(a.astype(int) + rng.integers(-8, 9, a.shape), 0, 255).astype(np.uint8)
+    img = stb.Image(noisy)
+    bil = np.asarray(stb.bilateral_filter(img, 3, 3.0, 0.1)).astype(int)
+    gau = np.asarray(stb.gaussian_blur(img, 2.0)).astype(int)
+    assert abs(bil[:, 9, 0] - noisy[:, 9, 0]).mean() < 12  # the dark side next to the step stays dark
+    assert gau[:, 9, 0].mean() > bil[:, 9, 0].mean() + 20  # the blur pulled bright values across the step
+    assert bil[:, :6, 0].std() < noisy[:, :6, 0].std()  # and the noise inside a flat area went down
+
+
+def test_bilateral_filter_image_method_radius_zero_and_errors():
+    img = stb.Image(rand8(12, 14, 3, seed=34))
+    assert np.array_equal(np.asarray(img.bilateral_filter(2, 1.5, 0.2)), np.asarray(stb.bilateral_filter(img, 2, 1.5, 0.2)))
+    assert np.array_equal(np.asarray(stb.bilateral_filter(img, 0, 1.0, 0.2)), np.asarray(img))
+    for args in [(-1, 1.0, 0.2), (1001, 1.0, 0.2), (1, 0.0, 0.2), (1, 1.0, -1.0), (1, float("nan"), 0.2), (1, 1.0, float("inf"))]:
+        with pytest.raises(ValueError):
+            stb.bilateral_filter(img, *args)
+    with pytest.raises(ValueError):
+        stb.bilateral_filter(img, 1, 1.0, 0.2, edge="nope")

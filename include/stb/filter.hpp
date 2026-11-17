@@ -88,6 +88,17 @@ STB_API mat32f magnitude(const gradients& g);
 STB_API mat32f median_filter(const mat32f& src, int radius, edge_mode edge = edge_mode::clamp);
 STB_API image8u median_filter(const mat8u& src, int radius, edge_mode edge = edge_mode::clamp);
 
+// ---- bilateral_filter: smooths without blurring edges. Every colour channel becomes the weighted mean of the
+// (2 * radius + 1)-square around it, where a neighbour weighs exp(-r^2 / (2 sigma_space^2)) (r its distance in pixels)
+// times exp(-d^2 / (2 sigma_range^2)); d is how different its colour is from the middle pixel's, taken over all the
+// colour channels together, in units of the full range (0 to 1: the same on 8 bits and on floats). So a neighbour across
+// an edge, whose colour is far, hardly counts. The alpha channel is copied (1 to 4 channels: gray, gray + alpha, RGB,
+// RGBA; more throw invalid_argument). radius 0 changes nothing; radius must be 0 to 1000 and both sigmas positive and
+// finite, else invalid_argument. The cost grows with radius^2 per value. On floats a neighbour that is NaN is left out
+// and a NaN pixel stays NaN.
+STB_API mat32f bilateral_filter(const mat32f& src, int radius, float sigma_space, float sigma_range, edge_mode edge = edge_mode::clamp);
+STB_API image8u bilateral_filter(const mat8u& src, int radius, float sigma_space, float sigma_range, edge_mode edge = edge_mode::clamp);
+
 // The functions below take an image (1 to 4 channels: gray, gray + alpha, RGB, RGBA) and give back what they were
 // given (see tone.hpp for the three forms and the rules). The alpha channel is never changed. Floats are read as 0 to 1.
 // The work is done by the *_inplace templates, which libstb has built for std::uint8_t and for float.

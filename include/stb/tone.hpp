@@ -1,7 +1,7 @@
 #pragma once
 
 // Tone: histograms and the adjustments of brightness and contrast built on them (equalize, auto_contrast,
-// match_histogram), and gamma, levels and look-up tables. They work on 8-bit data (mat8u, so image8u too)
+// match_histogram, clahe), and gamma, levels and look-up tables. They work on 8-bit data (mat8u, so image8u too)
 // and on floats (mat32f, which is image32f).
 //
 // The functions that know what a channel means take an image: 1 to 4 channels, which are gray, gray + alpha,
@@ -134,6 +134,29 @@ template <class M>
 traits::if_image_t<M> match_histogram(const M& src, const mat<traits::mat_value_t<M>>& reference,
                                       tone_mode mode = tone_mode::luma) {
     return match_histogram(src.copy(), reference, mode);
+}
+
+// ---- clahe: contrast-limited adaptive histogram equalisation. The picture is cut into tiles_x x tiles_y tiles (tiles_y 0
+// means the same as tiles_x); each tile gets its own equalisation whose histogram is cut at `clip_limit` times the mean
+// count of a bin (the excess is shared out again), and every pixel is mapped by the mappings of its four nearest tiles,
+// mixed bilinearly, so no tile edge shows. clip_limit 1 spreads nothing, 2 to 4 is usual; a bigger one is closer to
+// equalize. A tile that has a single value is left as it is, so a picture of one value is returned unchanged. Throws
+// invalid_argument for a clip_limit that is not finite and >= 1, tiles_x < 1, tiles_y < 0, or more tiles than pixels
+// along an axis. On floats the mapping is interpolated between 256 bins, as in equalize.
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> clahe_inplace(mat<T>& img, float clip_limit = 2.0f, int tiles_x = 8,
+                                                       int tiles_y = 0, tone_mode mode = tone_mode::luma);
+
+template <class M>
+traits::if_image_rvalue_t<M> clahe(M&& img, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
+                                   tone_mode mode = tone_mode::luma) {
+    clahe_inplace(img, clip_limit, tiles_x, tiles_y, mode);
+    return std::move(img);
+}
+template <class M>
+traits::if_image_t<M> clahe(const M& src, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
+                            tone_mode mode = tone_mode::luma) {
+    return clahe(src.copy(), clip_limit, tiles_x, tiles_y, mode);
 }
 
 // ---- gamma: every colour channel c becomes c ^ (1 / g) (0 to 1): g above 1 brightens, below 1 darkens. Alpha is

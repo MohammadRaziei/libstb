@@ -593,3 +593,113 @@ UTEST(libstb_filter_tests, test_scharr_of_8_bits_is_the_scharr_of_the_floats_and
     EXPECT_TRUE(same_bits(a.dy, b.dy));
     EXPECT_TRUE(stb::scharr(stb::mat8u()).dx.empty());
 }
+
+// ------------------------------------------------------------------------------------------------ bilateral
+
+namespace {
+
+// The bilateral filter of one value, straight from the formula and in doubles. `colour` is the number of colour channels
+// (the rest is alpha, copied). Units of the full range: levels / 255 on 8 bits.
+template <class M>
+double brute_bilateral(const M& m, int x, int y, int k, int colour, int r, double ss, double sr, edge_mode mode) {
+    using T = typename M::value_type;
+    const double scale = std::is_same_v<T, std::uint8_t> ? 1.0 / 255.0 : 1.0;
+    auto value = [&](int sx, int sy, int ch) { return sx < 0 || sy < 0 ? 0.0 : double(m(sx, sy, ch)); };
+    double acc = 0.0, wsum = 0.0;
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx) {
+            const int sx = testutil::edge_index(x + dx, m.width(), mode), sy = testutil::edge_index(y + dy, m.height(), mode);
+            double d2 = 0.0;
+            for (int q = 0; q < colour; ++q) {
+                const double d = (value(sx, sy, q) - double(m(x, y, q))) * scale;
+                d2 += d * d;
+            }
+            const double wgt = std::exp(-double(dx * dx + dy * dy) / (2 * ss * ss)) * std::exp(-d2 / (2 * sr * sr));
+            wsum += wgt;
+            acc += wgt * value(sx, sy, k);
+        }
+    return acc / wsum;
+}
+
+}  // namespace
+
+UTEST(libstb_filter_tests, test_bilateral_keeps_a_step_and_with_huge_sigmas_is_the_mean_as_computed_by_hand) {
+    // 3 x 1 gray [0, 0, 255], radius 1, edge clamp: the three rows of the window are the same row.
+    // A tiny sigma_range gives the neighbours across the step a weight of exp(-5000) = 0, so every value keeps its own side.
+    const stb::image8u img(3, 1, stb::pixel_format::gray, std::vector<std::uint8_t>{0, 0, 255});
+    const stb::image8u sharp = stb::bilateral_filter(img, 1, 1.0e6f, 0.01f);
+    ASSERT_EQ(int(sharp(0, 0, 0)), 0);
+    ASSERT_EQ(int(sharp(1, 0, 0)), 0);
+    ASSERT_EQ(int(sharp(2, 0, 0)), 255);
+    // Huge sigmas weigh every tap 1: the mean of the 3 x 3 window. Pixel 1 sees (0, 0, 255) three times: 255 / 3 = 85;
+    // pixel 2 sees (0, 255, 255): 170; pixel 0 sees (0, 0, 0): 0.
+    const stb::image8u mean = stb::bilateral_filter(img, 1, 1.0e6f, 1.0e6f);
+    ASSERT_EQ(int(mean(0, 0, 0)), 0);
+    ASSERT_EQ(int(mean(1, 0, 0)), 85);
+    ASSERT_EQ(int(mean(2, 0, 0)), 170);
+}
+
+UTEST(libstb_filter_tests, test_bilateral_matches_the_formula_for_every_edge_mode) {
+    const stb::image8u u = patterned8(17, 13, stb::pixel_format::rgba);
+    const stb::mat32f f = patterned(15, 11, 3);
+    for (edge_mode mode : all_modes)
+        for (int r : {1, 2}) {
+            const stb::image8u gu = stb::bilateral_filter(u, r, 1.5f, 0.25f, mode);
+            const stb::mat32f gf = stb::bilateral_filter(f, r, 1.5f, 0.25f, mode);
+            for (int y = 0; y < u.height(); ++y)
+                for (int x = 0; x < u.width(); ++x) {
+                    for (int k = 0; k < 3; ++k) {
+                        const double want = brute_bilateral(u, x, y, k, 3, r, 1.5, 0.25, mode);
+                        ASSERT_TRUE(std::fabs(double(gu(x, y, k)) - want) <= 0.5 + 1e-3);
+                    }
+                    ASSERT_EQ(int(gu(x, y, 3)), int(u(x, y, 3)));  // alpha is copied
+                }
+            for (int y = 0; y < f.height(); ++y)
+                for (int x = 0; x < f.width(); ++x)
+                    for (int k = 0; k < 3; ++k) {
+                        const double want = brute_bilateral(f, x, y, k, 3, r, 1.5, 0.25, mode);
+                        ASSERT_TRUE(std::fabs(double(gf(x, y, k)) - want) < 1e-4);
+                    }
+        }
+}
+
+UTEST(libstb_filter_tests, test_bilateral_radius_zero_is_a_copy_and_bad_arguments_throw) {
+    const stb::image8u u = patterned8(9, 7, stb::pixel_format::rgb);
+    const stb::image8u same = stb::bilateral_filter(u, 0, 1.0f, 0.1f);
+    ASSERT_TRUE(same_bytes(same, u));
+    const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
+    ASSERT_THROWS(stb::bilateral_filter(u, -1, 1.0f, 0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(u, 1001, 1.0f, 0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(u, 1, 0.0f, 0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(u, 1, 1.0f, -0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(u, 1, nan, 0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(u, 1, 1.0f, inf), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(stb::mat8u(4, 4, 5), 1, 1.0f, 0.1f), std::invalid_argument);
+    ASSERT_THROWS(stb::bilateral_filter(stb::mat32f(4, 4, 5), 1, 1.0f, 0.1f), std::invalid_argument);
+    ASSERT_TRUE(stb::bilateral_filter(stb::mat8u(), 1, 1.0f, 0.1f).empty());
+    ASSERT_TRUE(stb::bilateral_filter(stb::mat32f(), 1, 1.0f, 0.1f).empty());
+}
+
+UTEST(libstb_filter_tests, test_bilateral_floats_leave_nan_out_and_the_result_is_the_same_on_any_number_of_threads) {
+    stb::mat32f f = patterned(12, 10, 1);
+    f(5, 5, 0) = std::numeric_limits<float>::quiet_NaN();
+    const stb::mat32f g = stb::bilateral_filter(f, 1, 1.0f, 0.5f);
+    ASSERT_TRUE(std::isnan(g(5, 5, 0)));
+    ASSERT_TRUE(!std::isnan(g(4, 5, 0)) && !std::isnan(g(6, 5, 0)));  // the neighbours skip the NaN, so they stay numbers
+    const stb::image8u src = patterned8(300, 200, stb::pixel_format::rgb);
+    const stb::mat32f srcf = patterned(150, 120, 3);
+    stb::image8u one, many;
+    stb::mat32f one_f, many_f;
+    {
+        stb::thread_scope scope(1);
+        one = stb::bilateral_filter(src, 2, 2.0f, 0.2f);
+        one_f = stb::bilateral_filter(srcf, 2, 2.0f, 0.2f);
+    }
+    {
+        stb::thread_scope scope(4);
+        many = stb::bilateral_filter(src, 2, 2.0f, 0.2f);
+        many_f = stb::bilateral_filter(srcf, 2, 2.0f, 0.2f);
+    }
+    ASSERT_TRUE(same_bytes(one, many));
+    ASSERT_TRUE(same_bits(one_f, many_f));
+}

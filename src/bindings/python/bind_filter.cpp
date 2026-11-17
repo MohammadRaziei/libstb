@@ -308,6 +308,38 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
         "cutoff"_a = 0.0f, "mode"_a = "luma", nb::kw_only(), "inplace"_a = false,
         "Stretches the contrast: a new Image, or this one changed (and returned) with inplace=True.");
 
+    // ---- clahe
+    const std::string clahe_doc =
+        std::string("Contrast-limited adaptive histogram equalisation: every one of tiles_x x tiles_y tiles (tiles_y 0 means the same as\\n"
+                    "tiles_x) is equalised on its own with its histogram cut at `clip_limit` times the mean count of a bin (at least 1; 1\\n"
+                    "spreads nothing, 2 to 4 is usual), and each pixel mixes the mappings of its four nearest tiles. A tile of one value is\\n"
+                    "left as it is. ValueError for a bad clip_limit or tile count, or more tiles than pixels along an axis.\\n") + tone_doc + "\\n" + mode_doc;
+    m.def(
+        "clahe",
+        [](const stb::image& img, float clip_limit, int tiles_x, int tiles_y, nb::handle mode) -> stb::image {
+            const stb::tone_mode t = tone_mode_of(mode);
+            nb::gil_scoped_release release;
+            return stb::clahe(img, clip_limit, tiles_x, tiles_y, t);
+        },
+        "src"_a, "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma", clahe_doc.c_str());
+    m.def(
+        "clahe",
+        [](const f32_array& src, float clip_limit, int tiles_x, int tiles_y, nb::handle mode) -> f32_result {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::clahe(in, clip_limit, tiles_x, tiles_y, t); });
+        },
+        "src"_a, "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma");
+    image_cls.def(
+        "clahe",
+        [](nb::handle self, float clip_limit, int tiles_x, int tiles_y, nb::handle mode, bool inplace) {
+            const stb::tone_mode t = tone_mode_of(mode);
+            return image_form(
+                self, inplace, [&](const stb::image& i) { return stb::clahe(i, clip_limit, tiles_x, tiles_y, t); },
+                [&](stb::image& i) { stb::clahe_inplace(i, clip_limit, tiles_x, tiles_y, t); });
+        },
+        "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma", nb::kw_only(), "inplace"_a = false,
+        "Contrast-limited adaptive equalisation: a new Image, or this one changed (and returned) with inplace=True.");
+
     // ---- match_histogram
     const std::string match_doc =
         std::string("Moves the levels so that the histogram follows the one of `reference` (an Image, or a float32 array for a\n"
@@ -464,6 +496,37 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
             return stb::median_filter(img, radius, e);
         },
         "radius"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the median filter of this one.");
+
+    // ---- bilateral_filter
+    const std::string bilateral_doc =
+        std::string("Smooths without blurring edges: each colour channel becomes the mean of the (2 * radius + 1)-square around it\n"
+                    "(radius 0 to 1000; 0 changes nothing), weighted by distance in pixels (sigma_space) and by how different the colour is\n"
+                    "from the middle pixel's (sigma_range, in units of the full range 0 to 1; all colour channels together). Alpha is copied.\n"
+                    "Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array); 1 to 4 channels.\n") +
+        edge_doc;
+    m.def(
+        "bilateral_filter",
+        [](const stb::image& img, int radius, float sigma_space, float sigma_range, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return stb::bilateral_filter(img, radius, sigma_space, sigma_range, e);
+        },
+        "src"_a, "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp", bilateral_doc.c_str());
+    m.def(
+        "bilateral_filter",
+        [](const f32_array& src, int radius, float sigma_space, float sigma_range, nb::handle edge) -> f32_result {
+            const stb::edge_mode e = edge_of(edge);
+            return run_f32(src, [&](const stb::mat32f& in) { return stb::bilateral_filter(in, radius, sigma_space, sigma_range, e); });
+        },
+        "src"_a, "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp");
+    image_cls.def(
+        "bilateral_filter",
+        [](const stb::image& img, int radius, float sigma_space, float sigma_range, nb::handle edge) -> stb::image {
+            const stb::edge_mode e = edge_of(edge);
+            nb::gil_scoped_release release;
+            return stb::bilateral_filter(img, radius, sigma_space, sigma_range, e);
+        },
+        "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the bilateral filter of this one.");
 
     // ---- unsharp_mask
     const std::string unsharp_doc =

@@ -187,6 +187,27 @@
 - [ ] تصمیم: دو نسخه‌ی `Color` (novasvg با CamelCase، libstb با snake_case). ببین `checklist.md`
       توی novasvg (بخش «Color مشترک با libstb»).
 
+## پردازش تصویر: ترتیب کارها تا superpixel
+
+> دور ۱ و ۲الف تموم شدن (اسمشون توی `CHANGELOG.md` هست). این بخش ترتیب بقیه‌ست؛ هر مرحله یه commit جدا و یه patch
+> جدا داره. قاعده‌ها برای همه‌ی مرحله‌ها: API جدید اول توضیح داده می‌شه و با تأیید کاربر پیاده می‌شه؛ بیلد و تست فقط با
+> CMake؛ هر warning (gcc، MSVC) از ریشه درست می‌شه (بدون pragma و فلگ) و CI بدون warning تموم می‌شه؛ بعد از مرحله
+> `CHANGELOG.md`، `handoff.md` و همین فایل به‌روز می‌شن و patch تحویل داده می‌شه.
+
+- [x] **۲ب-۱ CLAHE** (`stb/tone.hpp`). انجام شد (C++ 710 تست، Python 1807 تست پاس). API تأییدشده: `clahe_inplace(mat<T>&, float clip_limit = 2, int tiles_x = 8,
+      int tiles_y = 0, tone_mode mode = luma)` و دو شکل `clahe(M&&, ...)` و `clahe(const M&, ...)`؛ `tiles_y = 0` یعنی همان
+      `tiles_x`؛ `uint8_t` و `float`، ۱ تا ۴ کانال، آلفا دست‌نخورده؛ Python `img.clahe(...)`. مرجع تست: نسخه‌ی numpy همین الگوریتم
+      (تا یک سطح)، و scikit-image (`equalize_adapthist`) فقط برای شباهت تقریبی، چون حد کِلیپش کمیت دیگریه.
+- [x] **۲ب-۲ `bilateral_filter`** (`stb/filter.hpp`). انجام شد (C++ 714 تست، Python 1819 تست پاس). `bilateral_filter(src, radius, sigma_space, sigma_range, edge)`؛
+      فاصله‌ی رنگ مشترک بین کانال‌های رنگ و بر حسب کسری از کل بازه؛ آلفا کپی می‌شه؛ مرجع تست: نسخه‌ی numpy همین فرمول (OpenCV نصب نیست).
+- [ ] **۲ب-۳ `guided_filter`** (`stb/filter.hpp`): با box filter موجود، هزینه مستقل از radius؛ API اول پیشنهاد می‌شه.
+- [ ] **۲ب-۴ `warp_affine` و `warp_perspective`**: بزرگ‌ترین بخش؛ interpolation و مدیریت مرز، احتمالاً مشترک با `resize`؛
+      API اول پیشنهاد می‌شه.
+- [ ] **۲ب-۵ superpixel (DISF/SICLE).** پیش از هر کد: بررسی لایسنس و پتنت هر دو الگوریتم (نتیجه توی همین فایل نوشته
+      می‌شه). بعد API پیشنهادی و تأیید. `src/image/superpixel.cpp` الان از `connected_components` عمومی استفاده می‌کنه؛
+      الگوریتم جدید باید همون و `stb/morphology.hpp`/`stb/filter.hpp` رو بدون کپی دوباره‌کاری به کار ببره.
+- [ ] بعد از superpixel (دور ۳، ترتیب اولیه): دیترینگ و پالت، QOI/GIF، ردیابی مرز به `stb::outline`، QR؛ WebP جدا و آخر.
+
 ## سایت و مستندات
 
 - [x] دارک تم: هیرو landing توی دارک سبز برنده (توکن `--hero-bg` توی هر دو تم یکیه) و Sphinx و Doxygen توکن‌های

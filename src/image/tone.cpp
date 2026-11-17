@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 #include "stb/parallel.hpp"
@@ -452,6 +453,199 @@ void remap_from_histogram(mat<T>& img, tone_mode mode, MakeMap&& make_map) {
     kernel::apply(img, p, maps);
 }
 
+
+// ------------------------------------------------------------------------------------------------ CLAHE
+
+// One tile's mapping, 257 floats in [0, 1]. On 8 bits entry v (0..255) is the new value of level v; on floats entry k
+// is the new value at the bin edge k / 256 and the values in between are interpolated linearly (as fmap does).
+constexpr int clahe_size = fbins + 1;
+using clahe_table = std::array<float, clahe_size>;
+
+// The level a pixel has in plane `k`, or -1 for a NaN (floats only).
+inline int clahe_level(const std::uint8_t* s, const plan& p, int k) noexcept {
+    return p.luma_plane ? luma8(s[0], s[1], s[2]) : int(s[k]);
+}
+inline int clahe_level(const float* s, const plan& p, int k) noexcept {
+    float v;
+    if (p.luma_plane) {
+        if (is_nan(s[0]) || is_nan(s[1]) || is_nan(s[2])) return -1;
+        v = clamp01(luma_f(clamp01(s[0]), clamp01(s[1]), clamp01(s[2])));
+    } else {
+        if (is_nan(s[k])) return -1;
+        v = clamp01(s[k]);
+    }
+    const int b = int(v * float(fbins));
+    return b > fbins - 1 ? fbins - 1 : b;
+}
+
+// The mapping of one tile from its histogram: the bins are cut at `clip_limit` times the mean count, what was cut is
+// shared out evenly (the remainder, one count at a time, at evenly spaced bins) and the cumulative histogram is the
+// mapping. A tile of at most one occupied bin (a flat patch, or no values) maps every value to itself: there is
+// nothing to spread, and spreading it would invent contrast out of noise. Returns true for that identity.
+bool clahe_table_of(hist8 h, double clip_limit, bool knots, clahe_table& t) {
+    std::uint64_t n = total(h);
+    int occupied = 0;
+    for (std::uint64_t v : h) occupied += v != 0;
+    if (occupied < 2) {
+        for (int k = 0; k < clahe_size; ++k) t[std::size_t(k)] = knots ? float(k) / float(fbins) : float(k) / 255.0f;
+        return true;
+    }
+    const std::uint64_t clip = std::max<std::uint64_t>(1, std::uint64_t(clip_limit * double(n) / double(fbins)));
+    std::uint64_t excess = 0;
+    for (std::uint64_t& v : h)
+        if (v > clip) {
+            excess += v - clip;
+            v = clip;
+        }
+    const std::uint64_t batch = excess / fbins;
+    std::uint64_t residual = excess % fbins;
+    for (std::uint64_t& v : h) v += batch;
+    if (residual > 0) {
+        const std::uint64_t step = std::max<std::uint64_t>(fbins / residual, 1);
+        for (std::uint64_t i = 0; i < fbins && residual > 0; i += step, --residual) ++h[std::size_t(i)];
+    }
+    n = total(h);  // the same count as before: what was cut was given back
+    std::uint64_t cum = 0;
+    if (knots) {
+        t[0] = 0.0f;
+        for (int k = 0; k < fbins; ++k) {
+            cum += h[std::size_t(k)];
+            t[std::size_t(k) + 1] = float(double(cum) / double(n));
+        }
+    } else {
+        for (int k = 0; k < fbins; ++k) {
+            cum += h[std::size_t(k)];
+            t[std::size_t(k)] = float(double(cum) / double(n));
+        }
+        t[fbins] = t[fbins - 1];
+    }
+    return false;
+}
+
+inline float clahe_at(const clahe_table& t, int level) noexcept { return t[std::size_t(level)]; }
+inline float clahe_at(const clahe_table& t, float v) noexcept {  // v in [0, 1]
+    const float x = v * float(fbins);
+    int k = int(x);
+    if (k > fbins - 1) k = fbins - 1;
+    return t[std::size_t(k)] + (x - float(k)) * (t[std::size_t(k) + 1] - t[std::size_t(k)]);
+}
+
+// Where a pixel sits among the tiles along one axis: the two tiles whose centres are nearest and the weight of the
+// second. Before the first centre and after the last one a single tile counts.
+struct clahe_axis {
+    int a = 0, b = 0;
+    float f = 0.0f;
+};
+
+std::vector<clahe_axis> clahe_axis_of(int len, int tiles) {
+    std::vector<clahe_axis> ax;
+    ax.resize(std::size_t(len));
+    for (int i = 0; i < len; ++i) {
+        const double u = (double(i) + 0.5) * double(tiles) / double(len) - 0.5;
+        clahe_axis& r = ax[std::size_t(i)];
+        if (u <= 0.0) continue;
+        const int a = int(u);
+        if (a >= tiles - 1) {
+            r.a = r.b = tiles - 1;
+        } else {
+            r.a = a;
+            r.b = a + 1;
+            r.f = float(u - double(a));
+        }
+    }
+    return ax;
+}
+
+// The first value of tile t of `tiles` along an axis of `len` values: a value i belongs to tile i * tiles / len.
+inline int clahe_edge(int t, int len, int tiles) noexcept {
+    return int((std::uint64_t(t) * std::uint64_t(len) + std::uint64_t(tiles) - 1) / std::uint64_t(tiles));
+}
+
+template <class T>
+void clahe_run(mat<T>& img, double clip_limit, int tx, int ty, tone_mode mode) {
+    constexpr bool knots = std::is_same_v<T, float>;
+    const plan p = make_plan(img.channels(), mode);
+    const int w = img.width(), h = img.height(), c = p.channels;
+    const std::size_t tiles = std::size_t(tx) * std::size_t(ty), planes = std::size_t(p.planes);
+
+    std::vector<clahe_table> tables(planes * tiles);
+    std::vector<char> identity(planes * tiles, 0);
+    const double tile_cost = double(w) * double(h) / double(tiles) * double(p.planes) * float_ns;
+    parallel_for(tiles, tile_cost, [&](std::size_t t0, std::size_t t1) {
+        std::vector<hist8> hist(planes);
+        for (std::size_t t = t0; t < t1; ++t) {
+            const int i = int(t % std::size_t(tx)), j = int(t / std::size_t(tx));
+            for (hist8& hk : hist) hk.fill(0);
+            const int x0 = clahe_edge(i, w, tx), x1 = clahe_edge(i + 1, w, tx);
+            const int y0 = clahe_edge(j, h, ty), y1 = clahe_edge(j + 1, h, ty);
+            for (int y = y0; y < y1; ++y) {
+                const T* s = img.row(y) + std::size_t(x0) * std::size_t(c);
+                for (int x = x0; x < x1; ++x, s += c)
+                    for (int k = 0; k < p.planes; ++k) {
+                        const int lv = clahe_level(s, p, k);
+                        if (lv >= 0) ++hist[std::size_t(k)][std::size_t(lv)];
+                    }
+            }
+            for (std::size_t k = 0; k < planes; ++k)
+                identity[k * tiles + t] = clahe_table_of(hist[k], clip_limit, knots, tables[k * tiles + t]) ? 1 : 0;
+        }
+    });
+    bool all_identity = true;
+    for (char v : identity) all_identity = all_identity && v;
+    if (all_identity) return;  // nothing to change (a flat picture): the bytes stay as they are
+
+    const std::vector<clahe_axis> xs = clahe_axis_of(w, tx), ys = clahe_axis_of(h, ty);
+    parallel_for(std::size_t(h), double(w) * double(c) * float_ns * 4.0, [&](std::size_t y0, std::size_t y1) {
+        for (std::size_t y = y0; y < y1; ++y) {
+            const clahe_axis& ay = ys[y];
+            T* s = img.row(int(y));
+            for (int x = 0; x < w; ++x, s += c) {
+                const clahe_axis& ax = xs[std::size_t(x)];
+                // The new value of this pixel's level in plane k: its four nearest tiles' mappings, mixed.
+                const auto mapped = [&](std::size_t k, auto level) {
+                    const clahe_table* base = tables.data() + k * tiles;
+                    const float top = (1.0f - ax.f) * clahe_at(base[std::size_t(ay.a * tx + ax.a)], level) +
+                                      ax.f * clahe_at(base[std::size_t(ay.a * tx + ax.b)], level);
+                    const float bottom = (1.0f - ax.f) * clahe_at(base[std::size_t(ay.b * tx + ax.a)], level) +
+                                         ax.f * clahe_at(base[std::size_t(ay.b * tx + ax.b)], level);
+                    return (1.0f - ay.f) * top + ay.f * bottom;
+                };
+                if constexpr (std::is_same_v<T, std::uint8_t>) {
+                    const auto to8 = [](float v) { return clamp255(int(v * 255.0f + 0.5f)); };
+                    if (p.luma_plane) {
+                        const int yy = luma8(s[0], s[1], s[2]);
+                        const int d = to8(mapped(0, yy)) - yy;
+                        s[0] = std::uint8_t(clamp255(s[0] + d));
+                        s[1] = std::uint8_t(clamp255(s[1] + d));
+                        s[2] = std::uint8_t(clamp255(s[2] + d));
+                    } else {
+                        for (int k = 0; k < p.colour; ++k) s[k] = std::uint8_t(to8(mapped(std::size_t(k), int(s[k]))));
+                    }
+                } else {
+                    if (p.luma_plane) {
+                        if (is_nan(s[0]) || is_nan(s[1]) || is_nan(s[2])) continue;
+                        const float r = clamp01(s[0]), g = clamp01(s[1]), b = clamp01(s[2]);
+                        const float yy = clamp01(luma_f(r, g, b));
+                        const float d = clamp01(mapped(0, yy)) - yy;
+                        s[0] = clamp01(r + d);
+                        s[1] = clamp01(g + d);
+                        s[2] = clamp01(b + d);
+                    } else {
+                        for (int k = 0; k < p.colour; ++k)
+                            if (!is_nan(s[k])) s[k] = clamp01(mapped(std::size_t(k), clamp01(s[k])));
+                    }
+                }
+            }
+        }
+    });
+}
+
+void check_clahe(float clip_limit, int tiles_x, int tiles_y) {
+    if (!(clip_limit >= 1.0f) || !std::isfinite(clip_limit)) throw std::invalid_argument("clip_limit must be a finite number of at least 1");
+    if (tiles_x < 1) throw std::invalid_argument("tiles_x must be at least 1");
+    if (tiles_y < 0) throw std::invalid_argument("tiles_y must be at least 1 (or 0, the same as tiles_x)");
+}
+
 }  // namespace
 
 // ============================================================================================ histograms
@@ -548,6 +742,17 @@ traits::if_image_t<mat<T>, void> match_histogram_inplace(mat<T>& img, const mat<
 }
 
 template <class T>
+traits::if_image_t<mat<T>, void> clahe_inplace(mat<T>& img, float clip_limit, int tiles_x, int tiles_y, tone_mode mode) {
+    check_clahe(clip_limit, tiles_x, tiles_y);
+    if (tiles_y == 0) tiles_y = tiles_x;
+    if (img.empty()) return;
+    make_plan(img.channels(), mode);  // throws for 5 or more channels
+    if (tiles_x > img.width() || tiles_y > img.height())
+        throw std::invalid_argument("there cannot be more tiles than pixels along an axis");
+    clahe_run(img, double(clip_limit), tiles_x, tiles_y, mode);
+}
+
+template <class T>
 traits::if_image_t<mat<T>, void> gamma_inplace(mat<T>& img, float g) {
     check_gamma(g);
     tone_kernel<T>::gamma(img, g);
@@ -568,6 +773,8 @@ template STB_API void auto_contrast_inplace<std::uint8_t>(mat<std::uint8_t>&, fl
 template STB_API void auto_contrast_inplace<float>(mat<float>&, float, tone_mode);
 template STB_API void match_histogram_inplace<std::uint8_t>(mat<std::uint8_t>&, const mat<std::uint8_t>&, tone_mode);
 template STB_API void match_histogram_inplace<float>(mat<float>&, const mat<float>&, tone_mode);
+template STB_API void clahe_inplace<std::uint8_t>(mat<std::uint8_t>&, float, int, int, tone_mode);
+template STB_API void clahe_inplace<float>(mat<float>&, float, int, int, tone_mode);
 template STB_API void gamma_inplace<std::uint8_t>(mat<std::uint8_t>&, float);
 template STB_API void gamma_inplace<float>(mat<float>&, float);
 template STB_API void levels_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, float, float);

@@ -78,6 +78,10 @@ static_assert(std::is_same_v<decltype(stb::equalize(std::declval<const mat32f&>(
 static_assert(std::is_same_v<decltype(stb::equalize(std::declval<image8u>())), image8u>);
 static_assert(std::is_same_v<decltype(stb::gamma(std::declval<mat32f>(), 2.0f)), mat32f>);
 static_assert(std::is_same_v<decltype(stb::equalize_inplace(std::declval<image8u&>())), void>);
+static_assert(std::is_same_v<decltype(stb::clahe_inplace(std::declval<image8u&>())), void>);
+static_assert(std::is_same_v<decltype(stb::clahe(std::declval<const image8u&>())), image8u>);
+static_assert(std::is_same_v<decltype(stb::clahe(std::declval<const mat32f&>(), 3.0f, 4, 2)), mat32f>);
+static_assert(std::is_same_v<decltype(stb::clahe(std::declval<image8u>())), image8u>);
 
 // The *_inplace functions are built for mat8u (so image8u) and mat32f only, and never for a const.
 template <class M, class = void>
@@ -486,6 +490,141 @@ UTEST(libstb_tone_tests, test_float_forms_agree_with_each_other) {
         for (int x = 0; x < 33; ++x) ASSERT_EQ(in_place(x, y, 3), src(x, y, 3));  // alpha of a float RGBA image
 }
 
+// ------------------------------------------------------------------------------------------------- clahe
+
+namespace {
+std::uint8_t at8(const mat8u& m, int x, int y, int k = 0) { return m.row(y)[std::size_t(x) * std::size_t(m.channels()) + std::size_t(k)]; }
+}  // namespace
+
+UTEST(libstb_tone_tests, test_clahe_cuts_the_histogram_and_shares_the_excess_as_computed_by_hand) {
+    // 8 x 1 gray: seven 0 and one 255, one tile, clip_limit 1: clip = max(1, int(1 * 8 / 256)) = 1.
+    // bin 0 has 7: 6 are cut. 6 / 256 = 0 for every bin and the 6 left go to bins 0, 42, 84, 126, 168, 210
+    // (step 256 / 6 = 42). So bin 0 holds 2 and 255 holds 1: the cumulative share at 0 is 2 / 8 = 0.25 and at 255 it is 1.
+    // 0.25 * 255 = 63.75 and the result is rounded: 64; 255 stays 255.
+    const image8u img = gray_row({0, 0, 0, 0, 0, 0, 0, 255});
+    const image8u out = stb::clahe(img, 1.0f, 1);
+    for (int x = 0; x < 7; ++x) ASSERT_EQ(int(at8(out, x, 0)), 64);
+    ASSERT_EQ(int(at8(out, 7, 0)), 255);
+}
+
+UTEST(libstb_tone_tests, test_clahe_of_one_tile_without_a_cut_is_the_cumulative_histogram) {
+    const image8u img = patterned8(16, 12, stb::pixel_format::gray, 41u);
+    const image8u out = stb::clahe(img, 1.0e6f, 1);  // a limit nobody reaches: plain equalisation by the cumulative share
+    std::vector<double> cum(256, 0.0);
+    for (int y = 0; y < 12; ++y)
+        for (int x = 0; x < 16; ++x) cum[at8(img, x, y)] += 1.0;
+    for (int v = 1; v < 256; ++v) cum[std::size_t(v)] += cum[std::size_t(v) - 1];
+    for (int y = 0; y < 12; ++y)
+        for (int x = 0; x < 16; ++x) {
+            const double want = 255.0 * cum[at8(img, x, y)] / 192.0;
+            ASSERT_TRUE(std::fabs(double(at8(out, x, y)) - want) <= 0.5 + 1e-3);
+        }
+}
+
+UTEST(libstb_tone_tests, test_clahe_tiles_are_local) {
+    // the left half is dark, the right half bright; with two tiles each half is spread on its own
+    std::vector<std::uint8_t> v;
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 8; ++x) v.push_back(std::uint8_t(x < 4 ? 10 * (x + 1) : 200 + 10 * (x - 3)));
+    const image8u img(8, 4, stb::pixel_format::gray, v);
+    const image8u global = stb::clahe(img, 1.0e6f, 1);
+    const image8u local = stb::clahe(img, 1.0e6f, 2, 1);
+    ASSERT_EQ(int(at8(img, 3, 0)), 40);
+    ASSERT_TRUE(at8(global, 3, 0) < 200);  // the brightest of the dark half is only half way up in the whole picture
+    ASSERT_EQ(int(at8(local, 0, 0)), 64);  // column 0 is before the first centre: the left tile alone, 10 is a quarter up
+    ASSERT_EQ(int(at8(local, 7, 0)), 255);
+}
+
+UTEST(libstb_tone_tests, test_clahe_leaves_a_flat_picture_and_an_empty_one_alone) {
+    image8u flat(9, 7, stb::pixel_format::rgb);
+    for (std::uint8_t& v : flat) v = 77;
+    ASSERT_TRUE(same_bytes(stb::clahe(flat, 2.0f, 3), flat));
+    mat32f flat_f(9, 7, 3);
+    for (float& v : flat_f) v = 0.37f;
+    ASSERT_TRUE(same_bits(stb::clahe(flat_f, 2.0f, 3), flat_f));
+    // as many tiles as pixels: every tile has one value
+    const image8u img = patterned8(4, 4, stb::pixel_format::gray, 5u);
+    ASSERT_TRUE(same_bytes(stb::clahe(img, 2.0f, 4, 4), img));
+    ASSERT_TRUE(stb::clahe(image8u(), 2.0f, 3).empty());
+}
+
+UTEST(libstb_tone_tests, test_clahe_bad_arguments_throw_and_change_nothing) {
+    image8u img = patterned8(10, 8, stb::pixel_format::rgb, 6u);
+    const image8u before(img.copy());
+    const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
+    ASSERT_THROWS(stb::clahe_inplace(img, 0.5f), std::invalid_argument);
+    ASSERT_THROWS(stb::clahe_inplace(img, nan), std::invalid_argument);
+    ASSERT_THROWS(stb::clahe_inplace(img, inf), std::invalid_argument);
+    ASSERT_THROWS(stb::clahe_inplace(img, 2.0f, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::clahe_inplace(img, 2.0f, 4, -1), std::invalid_argument);
+    ASSERT_THROWS(stb::clahe_inplace(img, 2.0f, 11, 1), std::invalid_argument);  // wider than the picture
+    ASSERT_THROWS(stb::clahe_inplace(img, 2.0f, 2, 9), std::invalid_argument);   // taller than the picture
+    ASSERT_TRUE(same_bytes(img, before));
+    mat8u five(4, 4, 5);
+    ASSERT_THROWS(stb::clahe_inplace(five, 2.0f, 2), std::invalid_argument);
+}
+
+UTEST(libstb_tone_tests, test_clahe_never_touches_alpha_and_luma_of_gray_rgb_equals_the_gray_result) {
+    const image8u rgba = patterned8(21, 13, stb::pixel_format::rgba, 8u);
+    const image8u out = stb::clahe(rgba, 3.0f, 3, 2);
+    for (int y = 0; y < 13; ++y)
+        for (int x = 0; x < 21; ++x) ASSERT_EQ(int(at8(out, x, y, 3)), int(at8(rgba, x, y, 3)));
+    const image8u gray = patterned8(21, 13, stb::pixel_format::gray, 9u);
+    image8u grey_rgb(21, 13, stb::pixel_format::rgb);
+    for (int y = 0; y < 13; ++y)
+        for (int x = 0; x < 21; ++x)
+            for (int k = 0; k < 3; ++k) grey_rgb.row(y)[std::size_t(x) * 3 + std::size_t(k)] = at8(gray, x, y);
+    const image8u g = stb::clahe(gray, 3.0f, 3, 2);
+    const image8u c = stb::clahe(grey_rgb, 3.0f, 3, 2);
+    for (int y = 0; y < 13; ++y)
+        for (int x = 0; x < 21; ++x)
+            for (int k = 0; k < 3; ++k) ASSERT_EQ(int(at8(c, x, y, k)), int(at8(g, x, y)));
+}
+
+UTEST(libstb_tone_tests, test_clahe_copy_rvalue_and_inplace_forms_give_the_same_bytes_and_floats_follow_the_formula) {
+    const image8u src = patterned8(33, 21, stb::pixel_format::rgb, 10u);
+    image8u a(src.copy()), b(src.copy());
+    const image8u copy = stb::clahe(src, 2.5f, 4, 3);
+    stb::clahe_inplace(a, 2.5f, 4, 3);
+    const std::uint8_t* before = b.data();
+    const image8u moved = stb::clahe(std::move(b), 2.5f, 4, 3);
+    ASSERT_TRUE(same_bytes(copy, a));
+    ASSERT_TRUE(same_bytes(copy, moved));
+    ASSERT_TRUE(moved.data() == before);  // the buffer was reused
+
+    // floats, one tile, no cut: the cumulative share interpolated between the 256 bin edges
+    const mat32f f = patterned_f(20, 15, 1, 11u);
+    const mat32f out = stb::clahe(f, 1.0e6f, 1);
+    std::vector<double> count(256, 0.0);
+    for (std::size_t i = 0; i < f.size(); ++i) {
+        int bin = int(f.data()[i] * 256.0f);
+        count[std::size_t(bin > 255 ? 255 : bin)] += 1.0;
+    }
+    std::vector<double> below(257, 0.0);
+    for (int k = 0; k < 256; ++k) below[std::size_t(k) + 1] = below[std::size_t(k)] + count[std::size_t(k)];
+    for (std::size_t i = 0; i < f.size(); ++i) {
+        const double x = double(f.data()[i]) * 256.0;
+        int k = int(x);
+        if (k > 255) k = 255;
+        const double want = (below[std::size_t(k)] + (x - k) * count[std::size_t(k)]) / 300.0;
+        ASSERT_TRUE(std::fabs(double(out.data()[i]) - want) < 2e-5);
+    }
+}
+
+UTEST(libstb_tone_tests, test_clahe_floats_clamp_and_pass_nan_through) {
+    mat32f f = patterned_f(12, 9, 3, 13u);
+    f.data()[7] = std::numeric_limits<float>::quiet_NaN();
+    f.data()[40] = 1.7f;
+    f.data()[41] = -0.4f;
+    const mat32f out = stb::clahe(f, 2.0f, 2, 2, tone_mode::per_channel);
+    ASSERT_TRUE(std::isnan(out.data()[7]));
+    for (std::size_t i = 0; i < out.size(); ++i)
+        if (i != 7) ASSERT_TRUE(out.data()[i] >= 0.0f && out.data()[i] <= 1.0f);
+    const mat32f luma = stb::clahe(f, 2.0f, 2, 2);  // a NaN in one channel leaves the whole pixel alone
+    ASSERT_TRUE(std::isnan(luma.data()[7]));
+    ASSERT_TRUE(luma.data()[6] == f.data()[6] && luma.data()[8] == f.data()[8]);
+}
+
 // ------------------------------------------------------------------------------------------------- threads
 
 UTEST(libstb_tone_tests, test_the_result_does_not_depend_on_the_number_of_threads) {
@@ -499,6 +638,8 @@ UTEST(libstb_tone_tests, test_the_result_does_not_depend_on_the_number_of_thread
         stb::gamma_inplace(one, 1.5f);
         stb::equalize_inplace(one_f);
         stb::levels_inplace(one_f, 0.1f, 0.9f, 1.4f);
+        stb::clahe_inplace(one, 3.0f, 6, 5);
+        stb::clahe_inplace(one_f, 3.0f, 6, 5);
     }
     {
         stb::thread_scope scope(4);
@@ -506,6 +647,8 @@ UTEST(libstb_tone_tests, test_the_result_does_not_depend_on_the_number_of_thread
         stb::gamma_inplace(many, 1.5f);
         stb::equalize_inplace(many_f);
         stb::levels_inplace(many_f, 0.1f, 0.9f, 1.4f);
+        stb::clahe_inplace(many, 3.0f, 6, 5);
+        stb::clahe_inplace(many_f, 3.0f, 6, 5);
     }
     ASSERT_TRUE(same_bytes(one, many));
     ASSERT_TRUE(same_bits(one_f, many_f));

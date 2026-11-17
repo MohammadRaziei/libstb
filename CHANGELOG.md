@@ -8,6 +8,23 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **`bilateral_filter`** (`stb/filter.hpp`, `libstb.bilateral_filter`; round 2b): `bilateral_filter(src, radius, sigma_space, sigma_range, edge)` for `mat8u` (gives an
+  `image8u`) and `mat32f`, 1 to 4 channels. Each colour channel becomes the mean of the (2 * radius + 1)-square around it, a neighbour weighing
+  `exp(-r^2 / (2 sigma_space^2)) * exp(-d^2 / (2 sigma_range^2))` where `d` is the colour distance taken over all colour channels together, in units of the full range
+  (0 to 1, the same on 8 bits and floats), so edges are kept. Alpha is copied; radius 0 is a copy; every `edge_mode`. On 8 bits the range weights come from a table of every
+  squared distance; on floats a NaN neighbour is left out and a NaN pixel stays NaN. `invalid_argument` (`ValueError`) for a radius outside 0..1000, a sigma that is not
+  positive and finite, or more than 4 channels. Same bits on every number of threads. Tests: `test_filter.cpp` (a step and the huge-sigma mean by hand, the formula in doubles
+  for every edge mode, bad arguments, NaN, threads) and `tests/python/test_image_ops.py` (a numpy version of the formula for every edge mode; edges kept where `gaussian_blur`
+  smears them).
+- **CLAHE** (`stb/tone.hpp`, `libstb.clahe`; round 2b of the image-processing plan): `clahe(img, clip_limit = 2, tiles_x = 8, tiles_y = 0, mode)` and
+  `clahe_inplace` (the same three forms as `equalize`, templates for `uint8_t` and `float`, 1 to 4 channels, alpha untouched, `tone_mode::luma` by
+  default). The picture is cut into `tiles_x` x `tiles_y` tiles (`tiles_y` 0 means `tiles_x`); each tile's histogram is cut at `clip_limit` times the mean
+  count of a bin, the excess is shared out again, and every pixel mixes the mappings of its four nearest tiles bilinearly, so no tile edge shows. A tile of one
+  value maps to itself, so a flat picture is returned unchanged. `invalid_argument` (`ValueError`) for a `clip_limit` that is not finite and >= 1, `tiles_x` < 1,
+  `tiles_y` < 0, or more tiles than pixels along an axis. Same bits on every number of threads (tiles are independent). Tests: the cases of `test_tone.cpp`
+  (a hand-computed cut and redistribution, the cumulative histogram, local tiles, flat and empty pictures, bad arguments, alpha, luma of gray RGB, the three
+  forms, floats against a double formula, threads) and `tests/python/test_tone.py` (a numpy version of the algorithm, exact to one level; scikit-image's
+  `equalize_adapthist` only as a loose look-alike check, because its clip limit is a different quantity).
 - **Thresholds, morphology, connected components, Canny and Scharr** (round 2a of the image-processing plan; Python names are the same,
   except that `open` and `close` are `morph_open` and `morph_close` in both languages, `libstb.open` being taken). `stb/threshold.hpp`:
   `threshold` (the step function: 255 where `src > t`), `otsu_threshold` (as scikit-image's `threshold_otsu`) and `adaptive_threshold`
