@@ -33,9 +33,7 @@ int main() {
         for (const std::string& b : stb::simd_backends()) std::cout << ' ' << b;
         std::cout << " ), threads " << stb::thread_count() << '\n';
 
-        stb::load_options rgba;
-        rgba.format = stb::pixel_format::rgba;
-        const stb::image big = stb::image::open(LIBSTB_DATA_DIR "/images/astronaut.png", rgba).resize(3000, 2000);
+        const stb::image big = stb::loader(LIBSTB_DATA_DIR "/images/astronaut.png").format(stb::pixel_format::rgba).run().resize(3000, 2000);
 
         const stb::image overlay = big.resize(2500, 1800);
 

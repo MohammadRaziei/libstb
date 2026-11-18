@@ -37,10 +37,9 @@ int main(int argc, char** argv) {
             if (i == 0) star.move_to(x, y); else star.line_to(x, y);
         }
         star.close();
-        stb::draw_options placed;
-        placed.transform = stb::matrix().translate(200, 90).rotate(0.2f);
-        stb::fill(img, star, stb::color("#f4a261"), stb::fill_rule::even_odd, placed);
-        stb::stroke(img, star, stb::color("#264653"), stb::stroke_style{2.f}, placed);
+        const stb::matrix placed = stb::matrix().translate(200, 90).rotate(0.2f);
+        stb::painter(img, star, stb::color("#f4a261")).transform(placed).fill(stb::fill_rule::even_odd);
+        stb::painter(img, star, stb::color("#264653")).transform(placed).stroke(stb::stroke_style{2.f});
 
         // Caps and joins side by side, and the same shapes with a canvas.
         stb::outline zigzag;

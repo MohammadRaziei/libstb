@@ -387,7 +387,7 @@ UTEST(stb_raster, fill_blends_the_colour_alpha_and_the_opacity) {
     stb::image img = white(10, 10);
     outline p;
     p.add_rect(0, 0, 10, 10);
-    stb::fill(img, p, stb::color(0, 0, 0, 255), fill_rule::non_zero, stb::draw_options{{}, stb::blend_mode::normal, 0.5f});
+    stb::painter(img, p, stb::color(0, 0, 0, 255)).opacity(0.5f).fill();
     const stb::color c = pixel(img, 5, 5);
     EXPECT_TRUE(c.r() >= 126 && c.r() <= 129);  // half way between white and black
 
@@ -400,10 +400,7 @@ UTEST(stb_raster, fill_uses_the_blend_mode_and_the_transform) {
     stb::image img = white(20, 20);
     outline p;
     p.add_rect(0, 0, 4, 4);
-    stb::draw_options o;
-    o.transform = matrix::translation(8, 8);
-    o.blend = stb::blend_mode::multiply;
-    stb::fill(img, p, stb::color(255, 128, 0), fill_rule::non_zero, o);
+    stb::painter(img, p, stb::color(255, 128, 0)).transform(matrix::translation(8, 8)).blend(stb::blend_mode::multiply).fill();
     EXPECT_TRUE(pixel(img, 9, 9) == stb::color(255, 128, 0, 255));  // white * colour = colour
     EXPECT_TRUE(pixel(img, 2, 2) == stb::color(255, 255, 255, 255));
 }
@@ -440,11 +437,11 @@ UTEST(stb_raster, fill_and_stroke_check_their_arguments) {
     ASSERT_THROWS(stb::stroke(empty, p, stb::color(0, 0, 0)), std::invalid_argument);
 
     stb::image img = white(8, 8);
-    stb::draw_options bad;
-    bad.opacity = 1.5f;
-    ASSERT_THROWS(stb::fill(img, p, stb::color(0, 0, 0), fill_rule::non_zero, bad), std::invalid_argument);
-    bad.opacity = -0.1f;
-    ASSERT_THROWS(stb::stroke(img, p, stb::color(0, 0, 0), stroke_style{}, bad), std::invalid_argument);
+    stb::painter painter(img, p, stb::color(0, 0, 0));
+    ASSERT_THROWS(painter.opacity(1.5f), std::invalid_argument);
+    ASSERT_THROWS(painter.opacity(-0.1f), std::invalid_argument);
+    ASSERT_THROWS(painter.opacity(std::numeric_limits<float>::quiet_NaN()), std::invalid_argument);
+    ASSERT_THROWS(stb::painter(empty, p, stb::color(0, 0, 0)), std::invalid_argument);
 }
 
 UTEST(stb_raster, a_glyph_outline_can_be_filled) {

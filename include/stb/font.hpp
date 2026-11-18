@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -132,14 +133,15 @@ enum class kerning_mode { none, kern_table, automatic };
 // the caller knows better (a Persian UI string that opens with a Latin word).
 enum class text_direction { automatic, ltr, rtl };
 
-struct shape_options {
+namespace detail {
+struct shape_params {  // the settings of a `shaping` builder; the defaults are the documented ones
     text_direction direction = text_direction::automatic;
     kerning_mode kerning = kerning_mode::automatic;
-    // false: the optional ligature features of the font (liga, clig) do not run, so ligatures such as
-    // "fi" or the Allah glyph stay as separate letters. The required ones (rlig: lam + alef) and the
-    // joining shapes always do: without them Arabic script is wrong, not plain.
     bool ligatures = true;
 };
+}  // namespace detail
+
+class shaping;  // the builder that shapes with settings; defined after font
 
 // What a shaped glyph is. `glyph == 0` alone does not say: a line break and a character the font has
 // no glyph for both have glyph 0.
@@ -307,7 +309,8 @@ public:
     //   - glyph_kind says what a glyph with glyph 0 is: a line break or a missing character.
     //
     // Throws invalid_argument on malformed UTF-8, limit_error for text over 4 GiB.
-    std::vector<shaped_glyph> shape(std::string_view utf8, const shape_options& options = {}) const;
+    // With the defaults (direction automatic, kerning automatic, ligatures on); for anything else see `shaping`.
+    std::vector<shaped_glyph> shape(std::string_view utf8) const;
 
     // The glyphs of the part [begin, end) of `utf8` (byte offsets), shaped as a part of the whole text:
     // the direction, the joining shape of a letter at the edge of the part, ligatures and kerning
@@ -319,8 +322,7 @@ public:
     // glyph of the next one.
     // Throws invalid_argument if begin > end, end > utf8.size(), or begin or end is inside a UTF-8
     // sequence (and as shape() does).
-    std::vector<shaped_glyph> shape(std::string_view utf8, std::size_t begin, std::size_t end,
-                                    const shape_options& options = {}) const;
+    std::vector<shaped_glyph> shape(std::string_view utf8, std::size_t begin, std::size_t end) const;
 
     // The glyph indices of the font that `utf8` is drawn with, in visual order ('\n' is 0 and
     // starts a new line). This is what shaping decides: joined letter shapes, ligatures, mirrored
@@ -360,8 +362,56 @@ public:
 
 private:
     explicit font(std::shared_ptr<const impl> p) noexcept : impl_(std::move(p)) {}
+    std::vector<shaped_glyph> shape_with(std::string_view utf8, std::size_t begin, std::size_t end, const detail::shape_params& options) const;
+    friend class shaping;
 
     std::shared_ptr<const impl> impl_;
+};
+
+// Shapes text with settings (see font::shape for what shaping does). The font and the text are the main parameters and go in
+// the constructor; every other setting is a call that returns the builder, so they chain in any order and run() shapes:
+//
+//     auto glyphs = stb::shaping(font, "فارسی and Latin").direction(stb::text_direction::rtl).kerning(stb::kerning_mode::none).run();
+//     auto part   = stb::shaping(font, text).range(6, 11).ligatures(false).run();
+//
+// The font and the text are not copied: both must outlive the builder (a std::string temporary is refused at compile time).
+// A bad value throws invalid_argument at the call that gives it (the part's offsets at range(); a part that starts or ends
+// inside a UTF-8 sequence, and malformed UTF-8, at run()).
+class STB_API shaping {
+public:
+    shaping(const font& f, std::string_view utf8);
+    // A std::string temporary would leave the builder with a dangling view: refused at compile time. A string literal, a
+    // named string and a string_view are fine (a template, so that a const char* is not also a candidate for std::string&&).
+    template <class S, std::enable_if_t<std::is_same_v<S, std::string>, int> = 0>
+    shaping(const font&, S&&) = delete;
+
+    // The part [begin, end) of the text (byte offsets) is shaped as a part of the whole text; see font::shape(utf8, begin, end).
+    // Default: the whole text. Throws invalid_argument if begin > end or end > the size of the text.
+    shaping& range(std::size_t begin, std::size_t end) &;
+    // The direction of the paragraph (default automatic).
+    shaping& direction(text_direction d) &;
+    // Kerning (default automatic).
+    shaping& kerning(kerning_mode k) &;
+    // false: the optional ligature features of the font (liga, clig) do not run, so ligatures such as "fi" or the Allah
+    // glyph stay as separate letters. The required ones (rlig: lam + alef) and the joining shapes always do: without them
+    // Arabic script is wrong, not plain (default true).
+    shaping& ligatures(bool on) &;
+
+    // The same on a temporary, so that a chain starting from the constructor works.
+    shaping&& range(std::size_t begin, std::size_t end) && { range(begin, end); return std::move(*this); }
+    shaping&& direction(text_direction d) && { direction(d); return std::move(*this); }
+    shaping&& kerning(kerning_mode k) && { kerning(k); return std::move(*this); }
+    shaping&& ligatures(bool on) && { ligatures(on); return std::move(*this); }
+
+    // Does the work; can be called again. Throws what font::shape throws.
+    std::vector<shaped_glyph> run() const;
+
+private:
+    const font* font_;
+    std::string_view text_;
+    std::size_t begin_ = 0;
+    std::size_t end_;
+    detail::shape_params p_;
 };
 
 // ---------------------------------------------------------------- estimates

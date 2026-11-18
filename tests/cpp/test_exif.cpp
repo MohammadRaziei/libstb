@@ -142,9 +142,7 @@ UTEST(libstb_exif_tests, test_decode_orient_makes_a_png_upright) {
     stb::image raw = stb::image::decode(file.data(), file.size());
     ASSERT_TRUE(same(src, raw));  // off by default: the stored pixels
 
-    stb::load_options o;
-    o.orient = true;
-    stb::image up = stb::image::decode(file.data(), file.size(), o);
+    stb::image up = stb::loader(file.data(), file.size()).orient().run();
     ASSERT_EQ(3, up.width());
     ASSERT_EQ(5, up.height());
     ASSERT_TRUE(same(src.orient(6), up));
@@ -152,41 +150,35 @@ UTEST(libstb_exif_tests, test_decode_orient_makes_a_png_upright) {
 
 UTEST(libstb_exif_tests, test_decode_orient_applies_every_orientation_to_a_png_and_a_jpeg) {
     const stb::image src = gradient(6, 4, 3);
-    stb::load_options o;
-    o.orient = true;
     for (unsigned k = 1; k <= 8; ++k) {
         const bytes p = png_with(src, tiff(k, k % 2 == 0));
-        ASSERT_TRUE(same(src.orient(int(k)), stb::image::decode(p.data(), p.size(), o)));
+        ASSERT_TRUE(same(src.orient(int(k)), stb::loader(p.data(), p.size()).orient().run()));
 
         const bytes j = real_jpeg_with(src, tiff(k, false));
         const stb::image plain = stb::image::decode(j.data(), j.size());
-        ASSERT_TRUE(same(plain.orient(int(k)), stb::image::decode(j.data(), j.size(), o)));
+        ASSERT_TRUE(same(plain.orient(int(k)), stb::loader(j.data(), j.size()).orient().run()));
     }
 }
 
 UTEST(libstb_exif_tests, test_decode_orient_then_flip_is_flip_of_the_oriented_image) {
     const stb::image src = gradient(5, 3, 3);
     const bytes file = png_with(src, tiff(6, false));
-    stb::load_options o;
-    o.orient = true;
-    const stb::image oriented = stb::image::decode(file.data(), file.size(), o);
-    o.flip = true;
-    ASSERT_TRUE(same(oriented.flip_vertical(), stb::image::decode(file.data(), file.size(), o)));
+    const stb::image oriented = stb::loader(file.data(), file.size()).orient().run();
+    ASSERT_TRUE(same(oriented.flip_vertical(), stb::loader(file.data(), file.size()).orient().flip().run()));
 
     // Orientation 1 with flip: stb's own flip, unchanged.
     const bytes upright = png_with(src, tiff(1, false));
-    ASSERT_TRUE(same(src.flip_vertical(), stb::image::decode(upright.data(), upright.size(), o)));
+    ASSERT_TRUE(same(src.flip_vertical(), stb::loader(upright.data(), upright.size()).orient().flip().run()));
 }
 
 UTEST(libstb_exif_tests, test_decode_orient_keeps_the_channel_conversion_and_size_limit) {
     const stb::image src = gradient(5, 3, 3);
     const bytes file = png_with(src, tiff(8, false));
-    stb::load_options o;
-    o.orient = true;
-    o.format = stb::pixel_format::rgba;
-    stb::image r = stb::image::decode(file.data(), file.size(), o);
+    stb::loader l(file.data(), file.size());
+    l.orient().format(stb::pixel_format::rgba);
+    stb::image r = l.run();
     ASSERT_EQ(4, r.channels());
     ASSERT_EQ(3, r.width());
-    o.max_bytes = 10;
-    ASSERT_THROWS(stb::image::decode(file.data(), file.size(), o), stb::limit_error);
+    l.max_bytes(10);
+    ASSERT_THROWS(l.run(), stb::limit_error);
 }

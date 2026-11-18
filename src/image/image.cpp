@@ -75,22 +75,25 @@ pixel_format pixel_format_from_name(std::string_view name) {
                                 "\": use gray, gray_alpha, rgb or rgba");
 }
 
-image image::decode(const void* data, std::size_t size, const load_options& opt) {
+namespace {
+
+// The decode of image::decode and loader::run.
+image decode_with(const void* data, std::size_t size, std::optional<pixel_format> format, bool flip, bool orient, std::size_t max_bytes) {
     // Size check from the header alone: no pixel memory is allocated for a
     // hostile "60000x60000" file. width/height are <= 1<<16 and channels <= 4,
     // so the uint64 product cannot overflow.
     const image_info hdr = image_info::read(data, size);
-    const int want = opt.format ? channel_count(*opt.format) : hdr.channels();
+    const int want = format ? channel_count(*format) : hdr.channels();
     const std::uint64_t bytes = std::uint64_t(hdr.width) * std::uint64_t(hdr.height) * std::uint64_t(want);
-    if (bytes > opt.max_bytes)
+    if (bytes > max_bytes)
         throw limit_error(sformat("image too large: %dx%dx%d exceeds max_bytes", hdr.width, hdr.height, want));
 
     // With orient, a flip is done after the orientation (a vertical flip commutes with
     // nothing else): stb flips only when no orientation has to be applied.
-    const int orientation = opt.orient ? exif_orientation(data, size) : 1;
-    const bool stb_flips = opt.flip && orientation == 1;
+    const int orientation = orient ? exif_orientation(data, size) : 1;
+    const bool stb_flips = flip && orientation == 1;
 
-    codec::decoded d = codec::decode(static_cast<const std::uint8_t*>(data), size, opt.format ? channel_count(*opt.format) : 0, stb_flips);
+    codec::decoded d = codec::decode(static_cast<const std::uint8_t*>(data), size, format ? channel_count(*format) : 0, stb_flips);
 
     // No copy: the image takes the decoder's buffer as is. The shared_ptr owns it from here on, so
     // it is freed on any later throw too.
@@ -103,12 +106,49 @@ image image::decode(const void* data, std::size_t size, const load_options& opt)
     image img = image::wrap(d.width, d.height, pixel_format_from_channels(d.channels), raw, std::shared_ptr<void>(raw, codec::free_deleter{}));
     if (orientation == 1) return img;
     img = img.orient(orientation);
-    return opt.flip ? img.flip_vertical() : std::move(img);
+    return flip ? img.flip_vertical() : std::move(img);
 }
 
-image image::open(const std::filesystem::path& path, const load_options& opt) {
+}  // namespace
+
+image image::decode(const void* data, std::size_t size) { return decode_with(data, size, std::nullopt, false, false, default_max_decode_bytes); }
+
+image image::open(const std::filesystem::path& path) {
     const auto bytes = detail::read_file(path);
-    return decode(bytes.data(), bytes.size(), opt);
+    return decode(bytes.data(), bytes.size());
+}
+
+loader::loader(const void* data, std::size_t size) : data_(data), size_(size) {}
+
+loader::loader(std::filesystem::path path) : path_(std::move(path)), from_file_(true) {}
+
+loader& loader::format(pixel_format f) & {
+    (void)pixel_format_from_channels(channel_count(f));  // throws for an enum value that is not one of the four formats
+    format_ = f;
+    return *this;
+}
+
+loader& loader::flip(bool on) & {
+    flip_ = on;
+    return *this;
+}
+
+loader& loader::orient(bool on) & {
+    orient_ = on;
+    return *this;
+}
+
+loader& loader::max_bytes(std::size_t bytes) & {
+    max_bytes_ = bytes;
+    return *this;
+}
+
+image loader::run() const {
+    if (from_file_) {
+        const auto bytes = detail::read_file(path_);
+        return decode_with(bytes.data(), bytes.size(), format_, flip_, orient_, max_bytes_);
+    }
+    return decode_with(data_, size_, format_, flip_, orient_, max_bytes_);
 }
 
 // ------------------------------------------------------------------ to_*

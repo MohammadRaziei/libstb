@@ -129,7 +129,7 @@ struct sums {  // per region: l, a, b in fixed point, x, y, count
     explicit sums(std::size_t k) : v(k * 6, 0) {}
 };
 
-mat32i run_slic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds, const superpixel_options& opt) {
+mat32i run_slic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds, const detail::superpixel_params& opt) {
     const int w = lab.width(), h = lab.height();
     const std::size_t K = seeds.size();
     const bool adaptive = opt.method == superpixel_method::slico;
@@ -252,7 +252,7 @@ mat32i run_slic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds
 
 // ----------------------------------------------------------------------------------- SNIC
 
-mat32i run_snic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds, const superpixel_options& opt) {
+mat32i run_snic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds, const detail::superpixel_params& opt) {
     const int w = lab.width(), h = lab.height();
     const std::size_t N = std::size_t(w) * std::size_t(h);
     const std::size_t K = seeds.size();
@@ -330,7 +330,7 @@ int relabel(mat32i& labels, std::size_t label_space) {
 
 // Makes every region one 4-connected piece: the connected pieces that are smaller than min_size are merged into the
 // neighbouring piece they share the longest border with (smallest first). Returns the number of regions.
-int enforce_connectivity(mat32i& labels, std::size_t min_size) {
+int join_small_pieces(mat32i& labels, std::size_t min_size) {
     const std::size_t N = labels.size(), W = std::size_t(labels.width());
     std::int32_t* L = labels.data();
 
@@ -501,14 +501,40 @@ image8u superpixel_map::mean_color(const mat8u& src) const {
 
 // ----------------------------------------------------------------------------------- the entry point
 
-superpixel_map superpixels(const mat8u& src, const superpixel_options& opt) {
-    if (src.empty()) throw std::invalid_argument("superpixels needs a non-empty image");
-    if (src.channels() > 4) throw std::invalid_argument("superpixels needs an image of 1 to 4 channels");
-    if (opt.count < 1) throw std::invalid_argument("count must be >= 1");
-    if (!(opt.compactness > 0.0f) || !std::isfinite(opt.compactness))
-        throw std::invalid_argument("compactness must be a positive finite number");
-    if (opt.iterations < 1) throw std::invalid_argument("iterations must be >= 1");
+superpixel::superpixel(const mat8u& src, int count) : src_(&src) {
+    if (src.empty()) throw std::invalid_argument("superpixel needs a non-empty image");
+    if (src.channels() > 4) throw std::invalid_argument("superpixel needs an image of 1 to 4 channels");
+    if (count < 1) throw std::invalid_argument("count must be >= 1");
+    p_.count = count;
+}
 
+superpixel& superpixel::method(superpixel_method m) & {
+    if (m != superpixel_method::slic && m != superpixel_method::slico && m != superpixel_method::snic)
+        throw std::invalid_argument("method must be slic, slico or snic");
+    p_.method = m;
+    return *this;
+}
+
+superpixel& superpixel::compactness(float c) & {
+    if (!(c > 0.0f) || !std::isfinite(c)) throw std::invalid_argument("compactness must be a positive finite number");
+    p_.compactness = c;
+    return *this;
+}
+
+superpixel& superpixel::iterations(int n) & {
+    if (n < 1) throw std::invalid_argument("iterations must be >= 1");
+    p_.iterations = n;
+    return *this;
+}
+
+superpixel& superpixel::enforce_connectivity(bool on) & {
+    p_.enforce_connectivity = on;
+    return *this;
+}
+
+superpixel_map superpixel::run() const {
+    const mat8u& src = *src_;
+    const detail::superpixel_params& opt = p_;
     const mat32f lab = to_lab(src);
     const grid g = make_grid(src.width(), src.height(), opt.count);
     const std::vector<seed> seeds = make_seeds(lab, g);
@@ -517,7 +543,7 @@ superpixel_map superpixels(const mat8u& src, const superpixel_options& opt) {
     mat32i labels = snic ? run_snic(lab, g, seeds, opt) : run_slic(lab, g, seeds, opt);
     int count;
     if (!snic && opt.enforce_connectivity)
-        count = enforce_connectivity(labels, std::max<std::size_t>(1, std::size_t(0.25f * g.area)));
+        count = join_small_pieces(labels, std::max<std::size_t>(1, std::size_t(0.25f * g.area)));
     else
         count = relabel(labels, seeds.size());
     return superpixel_map(std::move(labels), count);

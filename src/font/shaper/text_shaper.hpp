@@ -55,7 +55,7 @@ struct arabic_layout {
     otl::gsub_table gsub;
     otl::positioner gpos;  // GPOS kerning and mark attachment; independent of GSUB (usable() says if the font has any)
     otl::shaping_plan plan;
-    otl::shaping_plan plan_plain;  // the same without the optional ligatures (liga, clig): shape_options::ligatures = false
+    otl::shaping_plan plan_plain;  // the same without the optional ligatures (liga, clig): stb::shaping::ligatures(false)
     bool usable = false;       // the font has GSUB lookups for Arabic (or default) script
     bool has_forms = false;    // GSUB defines any of isol, fina, medi, init: then it decides every shape
     bool has_rlig = false;     // required ligatures (lam-alef) come from GSUB

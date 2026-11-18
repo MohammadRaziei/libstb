@@ -236,17 +236,15 @@ void bind_font(nb::module_& m) {
         .def("shape",
              [](const font& f, const std::string& text, const std::string& direction, const std::string& kerning,
                 bool ligatures, std::size_t begin, std::optional<std::size_t> end) {
-                 stb::shape_options options;
-                 options.direction = parse_direction(direction);
-                 options.kerning = parse_kerning(kerning);
-                 options.ligatures = ligatures;
                  const std::size_t stop = end.value_or(text.size());
+                 const stb::shaping shaper = std::move(
+                     stb::shaping(f, text).range(begin, stop).direction(parse_direction(direction)).kerning(parse_kerning(kerning)).ligatures(ligatures));
                  std::vector<stb::shaped_glyph> glyphs;
                  if (text.size() >= shape_without_gil_from_bytes) {
                      nb::gil_scoped_release release;
-                     glyphs = f.shape(text, begin, stop, options);
+                     glyphs = shaper.run();
                  } else {
-                     glyphs = f.shape(text, begin, stop, options);
+                     glyphs = shaper.run();
                  }
                  nb::list out;
                  for (const stb::shaped_glyph& g : glyphs)

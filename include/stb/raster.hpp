@@ -13,8 +13,11 @@
 //     stb::fill(img, p, stb::color(0, 120, 255));                       // the inside
 //     stb::stroke(img, p, stb::color(0, 0, 0), stb::stroke_style{3.f}); // the outline, 3 px wide
 //
+//     // more control: the image, outline and colour in the constructor, the rest as calls
+//     stb::painter(img, p, stb::color(0, 120, 255)).transform(stb::matrix::translation(40, 40)).opacity(0.5f).fill();
+//
 // Every function takes the outline in its own coordinates plus an optional matrix that moves it to pixel
-// positions (draw_options::transform). The edge of a stroke is computed in pixels after that, at
+// positions (painter::transform). The edge of a stroke is computed in pixels after that, at
 // 1/64 pixel precision, and its width is scaled by the matrix (the mean scale of the two axes).
 // Pixel (0, 0) covers [0, 1) x [0, 1): a coordinate is the corner of a pixel, not its centre.
 //
@@ -26,6 +29,7 @@
 #include <cstdint>
 #include <optional>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "stb/color.hpp"
@@ -159,31 +163,62 @@ STB_API void rasterize_stroke(const outline& p, const stroke_style& style, const
 
 // --- drawing on an image ----------------------------------------------------------------------------
 
-// What fill() and stroke() share.
-//   transform   moves the outline to pixel positions
-//   blend       how the colour mixes with what is below (see image::blend)
-//   opacity     0..1, scales the colour's own alpha
-//   composite   how the alpha is shared with what is below (see composite_op). The usual
-//               source_over is the plain "over". Any other operator acts only where the shape is,
-//               in proportion to its coverage: a pixel half covered gets the middle between what
-//               was there and what the operator makes of it, so  fill(img, circle, c) with
-//               composite_op::clear cuts a smooth hole in the shape of the circle and leaves the
-//               rest of the image alone (the way Skia and Cairo's bounded operators work).
-struct draw_options {
+namespace detail {
+struct draw_params {  // what a painter (and a canvas item) holds besides the shape and the colour
     matrix transform;
     blend_mode blend = blend_mode::normal;
     float opacity = 1.f;
     composite_op composite = composite_op::source_over;
 };
+}  // namespace detail
 
-// Fills the inside of `p` with `c`, anti-aliased, blended over `img` like image::blend does with a
-// layer. Throws invalid_argument on an empty image or an opacity outside 0..1. Parts of the outline
-// outside the image are ignored.
-STB_API void fill(image& img, const outline& p, const color& c, fill_rule rule = fill_rule::non_zero,
-                  const draw_options& options = {});
+// Draws one outline in one colour onto an image. The image, the outline and the colour are the main parameters and go in
+// the constructor; every other setting is a call that returns the painter, so they chain in any order, and fill() or
+// stroke() does the drawing:
+//
+//     stb::painter(img, p, c).transform(m).blend(stb::blend_mode::multiply).opacity(0.5f).fill(fill_rule::even_odd);
+//     stb::painter(img, p, c).composite(composite_op::clear).stroke(stb::stroke_style{3.f});
+//
+// The image is changed and the outline is not copied: both must outlive the painter (an outline temporary is refused at
+// compile time). The constructor throws invalid_argument for an empty image, and opacity() for a value outside 0..1.
+class STB_API painter {
+public:
+    painter(image& img, const outline& path, const color& c);
+    painter(image& img, outline&& path, const color& c) = delete;
 
-// Draws the outline of `p` with `c`. Throws like fill().
-STB_API void stroke(image& img, const outline& p, const color& c, const stroke_style& style = {},
-                    const draw_options& options = {});
+    // Moves the outline to pixel positions (identity by default).
+    painter& transform(const matrix& m) &;
+    // How the colour mixes with what is below (see image::blend; normal by default).
+    painter& blend(blend_mode m) &;
+    // 0..1, scales the colour's own alpha (1 by default).
+    painter& opacity(float o) &;
+    // How the alpha is shared with what is below (see composite_op; source_over, the plain "over", by default). Any other
+    // operator acts only where the shape is, in proportion to its coverage: a pixel half covered gets the middle between
+    // what was there and what the operator makes of it, so composite_op::clear cuts a smooth hole in the shape and leaves
+    // the rest of the image alone (the way Skia and Cairo's bounded operators work).
+    painter& composite(composite_op op) &;
+
+    // The same on a temporary, so that a chain starting from the constructor works.
+    painter&& transform(const matrix& m) && { transform(m); return std::move(*this); }
+    painter&& blend(blend_mode m) && { blend(m); return std::move(*this); }
+    painter&& opacity(float o) && { opacity(o); return std::move(*this); }
+    painter&& composite(composite_op op) && { composite(op); return std::move(*this); }
+
+    // Fills the inside of the outline, anti-aliased, blended over the image like image::blend does with a layer. Parts of
+    // the outline outside the image are ignored.
+    void fill(fill_rule rule = fill_rule::non_zero) const;
+    // Draws the outline of the outline with `style`.
+    void stroke(const stroke_style& style = {}) const;
+
+private:
+    image* img_;
+    const outline* path_;
+    color color_;
+    detail::draw_params p_;
+};
+
+// Shortcuts for the painter without settings: fill and stroke `p` with `c`. Throw invalid_argument on an empty image.
+STB_API void fill(image& img, const outline& p, const color& c, fill_rule rule = fill_rule::non_zero);
+STB_API void stroke(image& img, const outline& p, const color& c, const stroke_style& style = {});
 
 }  // namespace stb

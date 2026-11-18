@@ -37,10 +37,9 @@ U glyphs(const std::vector<stb::shaped_glyph>& g) {
     return out;
 }
 
-stb::shape_options with_direction(stb::text_direction d) {
-    stb::shape_options o;
-    o.direction = d;
-    return o;
+// The glyphs of `text` with the paragraph direction `d`.
+std::vector<stb::shaped_glyph> shape_direction(const stb::font& f, const char* text, stb::text_direction d) {
+    return stb::shaping(f, text).direction(d).run();
 }
 
 }  // namespace
@@ -62,19 +61,13 @@ UTEST(libstb_font_shape_tests, test_latin_text_is_one_glyph_per_character_in_fon
 
 UTEST(libstb_font_shape_tests, test_the_kerning_option_chooses_the_kerning) {
     const stb::font f = rects();
-    stb::shape_options no_kerning;
-    no_kerning.kerning = stb::kerning_mode::none;
-    ASSERT_TRUE(f.shape("AB", no_kerning)[0].x_advance == 600.0f);
-    stb::shape_options table;
-    table.kerning = stb::kerning_mode::kern_table;
-    ASSERT_TRUE(f.shape("AB", table)[0].x_advance == 500.0f);
+    ASSERT_TRUE(stb::shaping(f, "AB").kerning(stb::kerning_mode::none).run()[0].x_advance == 600.0f);
+    ASSERT_TRUE(stb::shaping(f, "AB").kerning(stb::kerning_mode::kern_table).run()[0].x_advance == 500.0f);
     ASSERT_TRUE(f.shape("BA")[0].x_advance == 500.0f);  // no pair (B, A): the advance of B alone
 
     // whatever the font says about a pair is what goes into the advance of the first glyph
     for (const stb::kerning_mode mode : {stb::kerning_mode::none, stb::kerning_mode::kern_table, stb::kerning_mode::automatic}) {
-        stb::shape_options o;
-        o.kerning = mode;
-        const std::vector<stb::shaped_glyph> g = f.shape("AB", o);
+        const std::vector<stb::shaped_glyph> g = stb::shaping(f, "AB").kerning(mode).run();
         ASSERT_TRUE(g[0].x_advance == f.glyph_info(g[0].glyph).advance + f.glyph_kerning(g[0].glyph, g[1].glyph, mode));
     }
 }
@@ -130,32 +123,30 @@ UTEST(libstb_font_shape_tests, test_clusters_follow_the_letters_through_joining_
 UTEST(libstb_font_shape_tests, test_the_direction_option_decides_the_order_of_the_runs) {
     const stb::font f = gsub_font();
     // Persian first: the paragraph is right-to-left by itself
-    ASSERT_TRUE(clusters(f.shape("\u0633 ab", with_direction(stb::text_direction::automatic))) == (U{3, 4, 2, 0}));
-    ASSERT_TRUE(clusters(f.shape("\u0633 ab", with_direction(stb::text_direction::rtl))) == (U{3, 4, 2, 0}));
+    ASSERT_TRUE(clusters(shape_direction(f, "\u0633 ab", stb::text_direction::automatic)) == (U{3, 4, 2, 0}));
+    ASSERT_TRUE(clusters(shape_direction(f, "\u0633 ab", stb::text_direction::rtl)) == (U{3, 4, 2, 0}));
     // forced left to right: the Persian word is one right-to-left run in a left-to-right line
-    ASSERT_TRUE(clusters(f.shape("\u0633 ab", with_direction(stb::text_direction::ltr))) == (U{0, 2, 3, 4}));
+    ASSERT_TRUE(clusters(shape_direction(f, "\u0633 ab", stb::text_direction::ltr)) == (U{0, 2, 3, 4}));
 
     // a neutral after left-to-right text goes to the far side of a right-to-left paragraph
     const stb::font r = rects();
     ASSERT_TRUE(clusters(r.shape("A!")) == (U{0, 1}));
-    ASSERT_TRUE(clusters(r.shape("A!", with_direction(stb::text_direction::ltr))) == (U{0, 1}));
-    ASSERT_TRUE(clusters(r.shape("A!", with_direction(stb::text_direction::rtl))) == (U{1, 0}));
+    ASSERT_TRUE(clusters(shape_direction(r, "A!", stb::text_direction::ltr)) == (U{0, 1}));
+    ASSERT_TRUE(clusters(shape_direction(r, "A!", stb::text_direction::rtl)) == (U{1, 0}));
 }
 
 UTEST(libstb_font_shape_tests, test_the_ligatures_option_stops_the_optional_ligatures_only) {
     const stb::font f = gsub_font();
-    stb::shape_options plain;
-    plain.ligatures = false;
     ASSERT_TRUE(glyphs(f.shape("\u0627\u0644\u0644\u0647")) == (U{240}));  // liga: the Allah glyph
-    const std::vector<stb::shaped_glyph> letters = f.shape("\u0627\u0644\u0644\u0647", plain);
+    const std::vector<stb::shaped_glyph> letters = stb::shaping(f, "\u0627\u0644\u0644\u0647").ligatures(false).run();
     ASSERT_EQ(std::size_t(4), letters.size());
     for (const stb::shaped_glyph& s : letters) {
         ASSERT_TRUE(s.glyph != 240);
     }
     ASSERT_TRUE(clusters(letters) == (U{6, 4, 2, 0}));
     // lam + alef is required (rlig), so it stays one glyph
-    ASSERT_EQ(std::size_t(1), f.shape("\u0644\u0627", plain).size());
-    ASSERT_EQ(std::size_t(3), f.shape("\u0633\u0644\u0627\u0645", plain).size());
+    ASSERT_EQ(std::size_t(1), stb::shaping(f, "\u0644\u0627").ligatures(false).run().size());
+    ASSERT_EQ(std::size_t(3), stb::shaping(f, "\u0633\u0644\u0627\u0645").ligatures(false).run().size());
 }
 
 UTEST(libstb_font_shape_tests, test_marks_take_no_advance_and_stack_on_the_letter) {
@@ -356,4 +347,24 @@ UTEST(libstb_font_shape_tests, test_a_bad_range_is_refused) {
     ASSERT_THROWS(f.shape("A\u00E9B", 2, 3), std::invalid_argument);  // starts inside the e acute
     ASSERT_THROWS(f.shape("A\u00E9B", 0, 2), std::invalid_argument);  // ends inside it
     ASSERT_EQ(std::size_t(1), f.shape("A\u00E9B", 1, 3).size());
+}
+
+UTEST(libstb_font_shape_tests, test_the_shaping_builder_chains_in_any_order_and_refuses_bad_values_at_the_call) {
+    const stb::font f = rects();
+    const std::string text = "ABAB";
+    const std::vector<stb::shaped_glyph> a = stb::shaping(f, text).kerning(stb::kerning_mode::none).range(2, 4).run();
+    const std::vector<stb::shaped_glyph> b = stb::shaping(f, text).range(2, 4).kerning(stb::kerning_mode::none).run();
+    ASSERT_EQ(std::size_t(2), a.size());
+    ASSERT_TRUE(clusters(a) == clusters(b));
+    ASSERT_TRUE(clusters(a) == (U{2, 3}));
+    stb::shaping named(f, text);
+    named.direction(stb::text_direction::ltr).ligatures(false);
+    ASSERT_EQ(std::size_t(4), named.run().size());
+    ASSERT_THROWS(named.range(3, 2), std::invalid_argument);
+    ASSERT_THROWS(named.range(0, 5), std::invalid_argument);
+    ASSERT_THROWS(named.direction(static_cast<stb::text_direction>(9)), std::invalid_argument);
+    ASSERT_THROWS(named.kerning(static_cast<stb::kerning_mode>(9)), std::invalid_argument);
+    ASSERT_EQ(std::size_t(4), named.run().size());  // the refused calls changed nothing
+    const std::string two_byte = "A\u00E9B";
+    ASSERT_THROWS(stb::shaping(f, two_byte).range(2, 4).run(), std::invalid_argument);  // inside the UTF-8 sequence of the e acute
 }

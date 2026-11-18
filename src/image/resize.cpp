@@ -112,18 +112,36 @@ resize_filter resize_filter_from_name(std::string_view name) {
     throw std::invalid_argument(msg);
 }
 
-resizer::resizer(const resize_options& options) : options_(options) {
-    (void)to_stb(options.filter);  // reject out-of-range enum values up front
-    (void)to_stb(options.edge);
+resizer::resizer(resize_filter filter) { this->filter(filter); }
+
+resizer::resizer(std::string_view filter_name) : filter_(resize_filter_from_name(filter_name)) {}
+
+resizer& resizer::filter(resize_filter f) & {
+    (void)to_stb(f);  // reject out-of-range enum values up front
+    filter_ = f;
+    return *this;
 }
 
-resizer::resizer(resize_filter filter) : resizer([&] {
-          resize_options o;
-          o.filter = filter;
-          return o;
-      }()) {}
+resizer& resizer::filter(std::string_view name) & {
+    filter_ = resize_filter_from_name(name);
+    return *this;
+}
 
-resizer::resizer(std::string_view filter_name) : resizer(resize_filter_from_name(filter_name)) {}
+resizer& resizer::edge(resize_edge e) & {
+    (void)to_stb(e);
+    edge_ = e;
+    return *this;
+}
+
+resizer& resizer::srgb(bool on) & {
+    srgb_ = on;
+    return *this;
+}
+
+resizer& resizer::max_bytes(std::size_t bytes) & {
+    max_bytes_ = bytes;
+    return *this;
+}
 
 image resizer::resize(const image& src, int width, int height) const {
     if (src.empty()) throw std::invalid_argument("cannot resize an empty image");
@@ -133,7 +151,7 @@ image resizer::resize(const image& src, int width, int height) const {
     const std::uint64_t out_bytes = out_stride * std::uint64_t(height);  // <= 2^31 * 4 * 2^31 = 2^64: check below first
     if (out_stride > INT_MAX || src.stride() > std::size_t(INT_MAX) ||
         std::uint64_t(width) * std::uint64_t(height) > std::uint64_t(INT_MAX) ||
-        out_bytes > std::uint64_t(INT_MAX) || out_bytes > options_.max_bytes)
+        out_bytes > std::uint64_t(INT_MAX) || out_bytes > max_bytes_)
         throw limit_error(sformat("resized image too large: %dx%dx%d", width, height, src.channels()));
 
     image out(width, height, src.format());
@@ -142,9 +160,9 @@ image resizer::resize(const image& src, int width, int height) const {
     stbir_resize_init(&r, src.data(), src.width(), src.height(), static_cast<int>(src.stride()),
                       out.data(), width, height, static_cast<int>(out_stride),
                       layout_for(src.channels()),
-                      options_.srgb ? STBIR_TYPE_UINT8_SRGB : STBIR_TYPE_UINT8);
-    stbir_set_edgemodes(&r, to_stb(options_.edge), to_stb(options_.edge));
-    stbir_set_filters(&r, to_stb(options_.filter), to_stb(options_.filter));
+                      srgb_ ? STBIR_TYPE_UINT8_SRGB : STBIR_TYPE_UINT8);
+    stbir_set_edgemodes(&r, to_stb(edge_), to_stb(edge_));
+    stbir_set_filters(&r, to_stb(filter_), to_stb(filter_));
 
     // A big resize is shared between threads: the engine splits the output rows, each piece is
     // independent, and the result is byte for byte the one-thread result. How many threads the work
@@ -152,7 +170,7 @@ image resizer::resize(const image& src, int width, int height) const {
     // what one core measured: about 1.2 ns per sample of the larger of the two images for the
     // filters, 0.3 for point sampling.
     const double larger_side = std::max(double(src.width()) * double(src.height()), double(width) * double(height));
-    const double ns_per_sample = options_.filter == resize_filter::point ? 0.3 : 1.0;
+    const double ns_per_sample = filter_ == resize_filter::point ? 0.3 : 1.0;
     const std::size_t threads = utils::threads_for(larger_side * double(src.channels()) * ns_per_sample);
     detail::loggers::resize().debug("resize %dx%d -> %dx%d, %d channel(s): %zu thread(s) (ceiling %d)", src.width(), src.height(),
                                     width, height, src.channels(), threads, stb::thread_count());

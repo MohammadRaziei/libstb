@@ -204,9 +204,7 @@ stb::image ramp(int w, int h, int c) {
 // Opens `path` with `c` channels: BMP and JPEG files always hold RGB, so a gray image comes back
 // as three channels unless it is asked for as one.
 stb::image open_as(const std::filesystem::path& path, int c) {
-    stb::load_options opt;
-    opt.format = testutil::fmt(c);
-    return stb::image::open(path, opt);
+    return stb::loader(path).format(testutil::fmt(c)).run();
 }
 
 double mean_abs_diff(const stb::image& a, const stb::image& b) {

@@ -354,7 +354,7 @@ public:
             return *this;
         }
         // How the alpha is shared with what is below (composite_op::source_over by default). The other operators act
-        // only where the outline is, in proportion to its coverage (see draw_options).
+        // only where the outline is, in proportion to its coverage (see painter::composite).
         outline_item& composite(composite_op op) {
             check();
             options_.composite = op;
@@ -373,7 +373,7 @@ public:
         std::optional<stb::color> stroke_;
         fill_rule rule_ = fill_rule::non_zero;
         stroke_style style_;
-        draw_options options_;
+        detail::draw_params options_;
     };
 
     // Copies `base` once.
@@ -476,8 +476,11 @@ public:
             } else if (const image_item* i = std::get_if<image_item>(&it)) {
                 img_.blend(i->img_, i->x_, i->y_, i->mode_, i->opacity_, i->op_);
             } else if (const outline_item* pi = std::get_if<outline_item>(&it)) {
-                if (pi->fill_) stb::fill(img_, pi->outline_, *pi->fill_, pi->rule_, pi->options_);
-                if (pi->stroke_) stb::stroke(img_, pi->outline_, *pi->stroke_, pi->style_, pi->options_);
+                const detail::draw_params& o = pi->options_;
+                if (pi->fill_)
+                    painter(img_, pi->outline_, *pi->fill_).transform(o.transform).blend(o.blend).opacity(o.opacity).composite(o.composite).fill(pi->rule_);
+                if (pi->stroke_)
+                    painter(img_, pi->outline_, *pi->stroke_).transform(o.transform).blend(o.blend).opacity(o.opacity).composite(o.composite).stroke(pi->style_);
             } else {
                 draw_shape(img_, std::get<shape_item>(it).s_);
             }

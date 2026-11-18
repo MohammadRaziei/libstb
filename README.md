@@ -136,9 +136,7 @@ img.thumbnail(256, 256).write_jpg("thumb.jpg", quality=80)    # fits the box, ne
 const stb::image_info info = stb::image_info::read_file("photo.jpg");   // header only: no pixel is decoded
 std::cout << info.width << "x" << info.height << "\n";
 
-stb::load_options opt;
-opt.orient = true;                                    // apply the EXIF rotation while decoding
-stb::image img = stb::image::open("photo.jpg", opt);
+stb::image img = stb::loader("photo.jpg").orient().run();   // orient(): apply the EXIF rotation while decoding
 
 img.resize(320, 240, "mitchell").write("small.png");  // the format comes from the extension
 img.thumbnail(256, 256).write_jpg("thumb.jpg", 80);   // fits the box, never enlarges
@@ -382,9 +380,8 @@ std::ifstream in("photo.jpg", std::ios::binary);      // say, an upload from a u
 std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(in)), {});
 
 try {
-    stb::load_options opt;
-    opt.max_bytes = 64u << 20;                        // checked from the header, before any pixel memory
-    stb::image img = stb::image::decode(data.data(), data.size(), opt);
+    // max_bytes is checked from the header, before any pixel memory
+    stb::image img = stb::loader(data.data(), data.size()).max_bytes(64u << 20).run();
 } catch (const stb::limit_error&) {
     std::cerr << "too big\n";
 } catch (const stb::decode_error&) {

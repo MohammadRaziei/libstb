@@ -51,13 +51,16 @@ stb::stroke_style make_style(float width, const std::string& cap, const std::str
 
 stb::matrix matrix_or_identity(const std::optional<stb::matrix>& m) { return m ? *m : stb::matrix{}; }
 
-stb::draw_options make_options(const std::optional<stb::matrix>& m, nb::handle blend, float opacity, nb::handle composite) {
-    stb::draw_options o;
-    o.transform = matrix_or_identity(m);
-    o.blend = to_blend_mode(blend);
-    o.opacity = opacity;
-    o.composite = to_composite_op(composite);
-    return o;
+// The arguments of Image.fill_outline / stroke_outline, read with the GIL before the drawing runs without it.
+struct paint_settings {
+    stb::matrix transform;
+    stb::blend_mode blend;
+    float opacity;
+    stb::composite_op composite;
+};
+
+paint_settings make_settings(const std::optional<stb::matrix>& m, nb::handle blend, float opacity, nb::handle composite) {
+    return paint_settings{matrix_or_identity(m), to_blend_mode(blend), opacity, to_composite_op(composite)};
 }
 
 }  // namespace
@@ -356,10 +359,10 @@ void bind_outline(nb::module_& m) {
                const std::optional<matrix>& t, nb::handle blend, float opacity, nb::handle composite) {
                 const stb::color c = text_colour(color);
                 const stb::fill_rule r = to_rule(rule);
-                const stb::draw_options o = make_options(t, blend, opacity, composite);
+                const paint_settings o = make_settings(t, blend, opacity, composite);
                 nb::gil_scoped_release unlock;
                 stb::image out = self.copy();
-                stb::fill(out, p, c, r, o);
+                stb::painter(out, p, c).transform(o.transform).blend(o.blend).opacity(o.opacity).composite(o.composite).fill(r);
                 return out;
             },
             nb::name("fill_outline"), nb::scope(nb::type<stb::image>()), nb::is_method(), "outline"_a, "color"_a, nb::kw_only(),
@@ -380,10 +383,10 @@ void bind_outline(nb::module_& m) {
                float dash_offset, const std::optional<matrix>& t, nb::handle blend, float opacity, nb::handle composite) {
                 const stb::color c = text_colour(color);
                 const stb::stroke_style st = make_style(width, cap, join, miter_limit, dashes, dash_offset);
-                const stb::draw_options o = make_options(t, blend, opacity, composite);
+                const paint_settings o = make_settings(t, blend, opacity, composite);
                 nb::gil_scoped_release unlock;
                 stb::image out = self.copy();
-                stb::stroke(out, p, c, st, o);
+                stb::painter(out, p, c).transform(o.transform).blend(o.blend).opacity(o.opacity).composite(o.composite).stroke(st);
                 return out;
             },
             nb::name("stroke_outline"), nb::scope(nb::type<stb::image>()), nb::is_method(), "outline"_a, "color"_a, "width"_a = 1.f,

@@ -24,9 +24,7 @@ UTEST(libstb_ltr_shaping_tests, test_the_liga_feature_forms_a_ligature_and_ligat
     EXPECT_EQ(std::uint32_t(0), on[0].cluster);
     EXPECT_EQ(650.0f, on[0].x_advance);
 
-    stb::shape_options off;
-    off.ligatures = false;
-    const std::vector<stb::shaped_glyph> plain = f.shape("fi", off);
+    const std::vector<stb::shaped_glyph> plain = stb::shaping(f, "fi").ligatures(false).run();
     ASSERT_EQ(std::size_t(2), plain.size());
     EXPECT_EQ(std::uint32_t(2), plain[0].glyph);
     EXPECT_EQ(std::uint32_t(3), plain[1].glyph);
@@ -57,12 +55,9 @@ UTEST(libstb_ltr_shaping_tests, test_gpos_kerning_applies_and_kerning_modes_stil
     EXPECT_EQ(600.0f, kerned[0].x_advance);  // 700 - 100: the pair adjustment of GPOS (kern)
     EXPECT_EQ(700.0f, kerned[1].x_advance);
 
-    stb::shape_options none;
-    none.kerning = stb::kerning_mode::none;
-    EXPECT_EQ(700.0f, f.shape("AV", none)[0].x_advance);
-    stb::shape_options table;
-    table.kerning = stb::kerning_mode::kern_table;  // the legacy table only; this font has none
-    EXPECT_EQ(700.0f, f.shape("AV", table)[0].x_advance);
+    EXPECT_EQ(700.0f, stb::shaping(f, "AV").kerning(stb::kerning_mode::none).run()[0].x_advance);
+    // the legacy table only; this font has none
+    EXPECT_EQ(700.0f, stb::shaping(f, "AV").kerning(stb::kerning_mode::kern_table).run()[0].x_advance);
 
     // drawing and measuring make the same decisions: the pair is 100 units (10 px) tighter
     EXPECT_NEAR(130.0f, f.measure("AV", 100.0f).width, 1e-3f);
@@ -108,9 +103,7 @@ UTEST(libstb_ltr_shaping_tests, test_a_real_font_with_a_latin_liga_feature_is_sh
     // The Persian test font (a Vazirmatn subset) has a Latin liga lookup for f + i in its GSUB
     const stb::font v = stb::font::open(std::string(LIBSTB_TEST_DATA_DIR) + "/libstb-fa-gsub-test.ttf");
     EXPECT_EQ(std::size_t(1), v.shape_glyphs("fi").size());
-    stb::shape_options off;
-    off.ligatures = false;
-    EXPECT_EQ(std::size_t(2), v.shape("fi", off).size());
+    EXPECT_EQ(std::size_t(2), stb::shaping(v, "fi").ligatures(false).run().size());
     EXPECT_EQ(std::size_t(3), v.shape_glyphs("a\nb").size());  // nothing to form: one glyph per character
 
     // The solid-rectangle test font has no GSUB and no GPOS: one glyph per character, as always

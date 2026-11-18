@@ -293,16 +293,13 @@ UTEST(libstb_threads_tests, test_resize_really_uses_threads_when_the_work_is_big
     ASSERT_TRUE(testutil::same(threaded, big.resize(800, 600)));
 }
 
-UTEST(libstb_threads_tests, test_resize_options_and_edge_modes_are_unaffected_by_threads) {
+UTEST(libstb_threads_tests, test_resizer_settings_and_edge_modes_are_unaffected_by_threads) {
     restore_defaults restore;
     stb::detail::set_parallel_grain_ns(1.0);
     const stb::image img = testutil::gradient(333, 222, 4);
     for (stb::resize_edge edge : {stb::resize_edge::clamp, stb::resize_edge::reflect, stb::resize_edge::wrap, stb::resize_edge::zero})
         for (bool srgb : {false, true}) {
-            stb::resize_options o;
-            o.edge = edge;
-            o.srgb = srgb;
-            const stb::resizer r(o);
+            const stb::resizer r = stb::resizer().edge(edge).srgb(srgb);
             stb::image one, four;
             {
                 stb::thread_scope scope(1);

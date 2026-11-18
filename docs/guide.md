@@ -423,9 +423,7 @@ stb::image small = img.resize(320, 240);              // default resizer
 stb::image crisp = img.resize(320, 240, "cubic");      // filter by name, or by enum:
 stb::image soft  = img.resize(320, 240, stb::resize_filter::mitchell);
 
-stb::resize_options o;                                 // full control: filter, edge, srgb, max_bytes
-o.edge = stb::resize_edge::wrap;
-stb::resizer r(o);                                     // also: resizer("cubic"), resizer(resize_filter::box)
+stb::resizer r = stb::resizer("cubic").edge(stb::resize_edge::wrap);   // the filter in the constructor, then edge, srgb, max_bytes
 stb::image tile = img.resize(320, 240, &r);            // nullptr = default resizer; r.resize(img, w, h) works too
 
 stb::image part  = img.crop(10, 10, 200, 100);        // geometry: each returns a new image
@@ -440,7 +438,7 @@ img.fill("red", 10, 10, 50, 20);                       // overwrite a rectangle 
 stb::image mask = logo.alpha();                        // the alpha channel as a gray image; with_alpha(mask) sets it
 stb::image strip = stb::image::hstack({&a, &b, &c}, 8, "white", stb::align::center);   // also vstack
 
-stb::load_options lo;                                  // EXIF orientation: JPEG APP1 / PNG eXIf; lo.format = pixel_format::rgb converts
+stb::image up = stb::loader("photo.jpg").orient().run();  // EXIF orientation: JPEG APP1 / PNG eXIf; .format(pixel_format::rgb) converts
 lo.orient = true;                                      //   upright while decoding (then `flip` goes after it)
 stb::image photo = stb::image::open("IMG_0001.jpg", lo);
 int turn = stb::exif_orientation(bytes.data(), bytes.size());   // 1..8, 1 if none; never throws
@@ -515,11 +513,12 @@ checks coverage; it reads the cmap's own ranges, so it does not cost a `has_glyp
 the glyphs in visual order (left to right), in font units with y up, each with its pen movement and where it came from.
 
 ```cpp
-stb::shape_options opt;                     // direction: automatic | ltr | rtl, kerning: kerning_mode, ligatures: bool
-opt.direction = stb::text_direction::rtl;   // e.g. a Persian label that starts with a Latin word
 const std::string text = "\u0633\u0644\u0627\u0645 world\nsecond line";
+// font::shape(text) has the defaults; stb::shaping takes the font and the text, then the settings as calls:
+// .direction(automatic | ltr | rtl), .kerning(kerning_mode), .ligatures(bool), .range(begin, end)
+auto glyphs = stb::shaping(f, text).direction(stb::text_direction::rtl).run();   // e.g. a Persian label that starts with a Latin word
 float pen = 0;
-for (const stb::shaped_glyph& g : f.shape(text, opt)) {
+for (const stb::shaped_glyph& g : glyphs) {
     if (text[g.cluster] == '\n') {            // a line break: glyph 0, no advance
         pen = 0;                              // and y moves down by ascent - descent + line_gap
         continue;
@@ -614,9 +613,8 @@ p.add_commands(font.outline(glyph), stb::matrix::translation(10, 40));   // a gl
 stb::fill(img, p, stb::color("#09f"), stb::fill_rule::even_odd);
 stb::stroke_style st{3.f};                                   // width in outline units
 st.cap = stb::line_cap::round; st.join = stb::line_join::bevel; st.dashes = {8, 4};
-stb::draw_options o;                                         // matrix, blend mode, opacity
-o.transform = stb::matrix().translate(40, 40).rotate(0.3f);
-stb::stroke(img, p, stb::color("white"), st, o);
+stb::painter(img, p, stb::color("white"))                    // the settings are calls: transform, blend, opacity, composite
+    .transform(stb::matrix().translate(40, 40).rotate(0.3f)).stroke(st);
 
 // Your own compositing: coverage spans (y, x, len, coverage 1..255), top to bottom, left to right.
 stb::rasterize_fill(p, stb::fill_rule::non_zero, {}, stb::clip_rect{0, 0, img.width(), img.height()},

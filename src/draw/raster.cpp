@@ -112,13 +112,6 @@ void rasterize_stroke(const outline& p, const stroke_style& style, const matrix&
 
 namespace {
 
-void check_options(const image& img, const draw_options& options) {
-    if (img.empty()) throw std::invalid_argument("stb::fill/stroke: the image is empty");
-    if (!(options.opacity >= 0.f && options.opacity <= 1.f)) {
-        throw std::invalid_argument("stb::fill/stroke: opacity must be between 0 and 1");
-    }
-}
-
 std::uint8_t unit_to_byte(float v) { return std::uint8_t(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f); }
 
 // One pixel of the image moved towards the pixel the operator made, by `k` (the coverage, 0..1). With alpha the
@@ -140,7 +133,7 @@ void mix_pixel(std::uint8_t* d, const std::uint8_t* r, int colours, bool alpha, 
 // The Porter-Duff operators other than source_over. image::blend runs the operator on a copy of the part of the image
 // under the shape's bounding box, with the colour at its full alpha (the coverage is NOT in it); then each covered
 // pixel of the image moves towards that result by its coverage. Pixels the shape does not cover stay as they were.
-void paint_composite(image& img, const color& c, const draw_options& options, const std::vector<span>& spans, int x0,
+void paint_composite(image& img, const color& c, const detail::draw_params& options, const std::vector<span>& spans, int x0,
                      int y0, int x1, int y1) {
     const int w = x1 - x0, h = y1 - y0;
     image result = img.crop(x0, y0, w, h);
@@ -163,7 +156,7 @@ void paint_composite(image& img, const color& c, const draw_options& options, co
 // holds the colour with the coverage as alpha, and image::blend puts it on the image (so the blend
 // mode, the opacity and the pixel formats work exactly as for any other overlay).
 template <class Produce>
-void paint(image& img, const color& c, const draw_options& options, Produce&& produce) {
+void paint(image& img, const color& c, const detail::draw_params& options, Produce&& produce) {
     std::vector<span> spans;
     int x0 = img.width(), y0 = img.height(), x1 = 0, y1 = 0;
 
@@ -195,20 +188,47 @@ void paint(image& img, const color& c, const draw_options& options, Produce&& pr
 
 }  // namespace
 
-void fill(image& img, const outline& p, const color& c, fill_rule rule, const draw_options& options) {
-    check_options(img, options);
-    if (p.empty()) return;
-    paint(img, c, options, [&](const clip_rect& clip, span_sink sink) {
-        rasterize_fill(p, rule, options.transform, clip, sink);
+painter::painter(image& img, const outline& path, const color& c) : img_(&img), path_(&path), color_(c) {
+    if (img.empty()) throw std::invalid_argument("stb::painter: the image is empty");
+}
+
+painter& painter::transform(const matrix& m) & {
+    p_.transform = m;
+    return *this;
+}
+
+painter& painter::blend(blend_mode m) & {
+    p_.blend = m;
+    return *this;
+}
+
+painter& painter::opacity(float o) & {
+    if (!(o >= 0.f && o <= 1.f)) throw std::invalid_argument("stb::painter: opacity must be between 0 and 1");
+    p_.opacity = o;
+    return *this;
+}
+
+painter& painter::composite(composite_op op) & {
+    p_.composite = op;
+    return *this;
+}
+
+void painter::fill(fill_rule rule) const {
+    if (path_->empty()) return;
+    paint(*img_, color_, p_, [&](const clip_rect& clip, span_sink sink) {
+        rasterize_fill(*path_, rule, p_.transform, clip, sink);
     });
 }
 
-void stroke(image& img, const outline& p, const color& c, const stroke_style& style, const draw_options& options) {
-    check_options(img, options);
-    if (p.empty()) return;
-    paint(img, c, options, [&](const clip_rect& clip, span_sink sink) {
-        rasterize_stroke(p, style, options.transform, clip, sink);
+void painter::stroke(const stroke_style& style) const {
+    if (path_->empty()) return;
+    paint(*img_, color_, p_, [&](const clip_rect& clip, span_sink sink) {
+        rasterize_stroke(*path_, style, p_.transform, clip, sink);
     });
 }
+
+void fill(image& img, const outline& p, const color& c, fill_rule rule) { painter(img, p, c).fill(rule); }
+
+void stroke(image& img, const outline& p, const color& c, const stroke_style& style) { painter(img, p, c).stroke(style); }
 
 }  // namespace stb

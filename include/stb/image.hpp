@@ -105,17 +105,8 @@ struct STB_API image_info {
     static image_info read_file(const std::filesystem::path& path);
 };
 
-struct load_options {
-    std::optional<pixel_format> format;  // empty = keep the source's, else convert to this
-    bool flip = false;  // flip vertically while decoding (per call, thread-safe)
-    // Apply the EXIF orientation stored in the file (JPEG and PNG), so a phone
-    // photo comes out upright. The result may have width and height swapped
-    // relative to image_info. Combined with `flip`, the orientation is applied first.
-    bool orient = false;
-    // Refuse to decode anything whose output would exceed this many bytes.
-    // Checked from the header BEFORE any pixel memory is allocated.
-    std::size_t max_bytes = std::size_t(1) << 29;  // 512 MiB
-};
+// The default of loader::max_bytes: refuse to decode anything whose output would exceed 512 MiB.
+inline constexpr std::size_t default_max_decode_bytes = std::size_t(1) << 29;
 
 // The EXIF orientation (1..8, as the standard numbers them) stored in an encoded
 // JPEG or PNG, or 1 ("upright") when there is none, the format has none, or the
@@ -209,17 +200,6 @@ enum class resize_edge { clamp, reflect, wrap, zero };
 // Throws invalid_argument (listing the valid names) for anything else.
 STB_API resize_filter resize_filter_from_name(std::string_view name);
 
-struct resize_options {
-    resize_filter filter = resize_filter::automatic;
-    resize_edge edge = resize_edge::clamp;
-    // Treat 8-bit colour channels as sRGB and blend in linear light (correct
-    // for photos/UI; alpha is always linear). Turn off for data such as
-    // normal maps or masks, which are already linear.
-    bool srgb = true;
-    // Refuse to produce an output larger than this many bytes.
-    std::size_t max_bytes = std::size_t(1) << 29;  // 512 MiB
-};
-
 class resizer;  // defined after image, which only takes a pointer to one
 
 // Defaults of to_png / write_png and to_jpg / write_jpg.
@@ -275,9 +255,10 @@ public:
     image8u copy() const { return image8u(base::copy()); }
 
     // --- decoding (throws invalid_argument, decode_error, limit_error) ---
-    static image decode(const void* data, std::size_t size, const load_options& opt = {});
+    // With the defaults (the file's own format, upright as stored, 512 MiB limit); for anything else see `loader`.
+    static image decode(const void* data, std::size_t size);
     // Also throws io_error.
-    static image open(const std::filesystem::path& path, const load_options& opt = {});
+    static image open(const std::filesystem::path& path);
 
     // --- encoding ---
     // to_*: the bytes of a whole file in that format. Throw invalid_argument
@@ -521,23 +502,93 @@ STB_API void composite_solid_row(std::uint32_t* dest, std::uint32_t color, std::
 // Immutable after construction, hence shareable between threads.
 class STB_API resizer {
 public:
+    // A default resizer: filter automatic, edge clamp, sRGB blending, 512 MiB limit.
     resizer() = default;
-    explicit resizer(const resize_options& options);  // throws invalid_argument on a bad enum value
-    // Shortcuts for "default options, just this filter":
-    //   resizer(resize_filter::mitchell)   resizer("cubic")
-    // The name is parsed by resize_filter_from_name (invalid_argument if unknown).
+    // The filter is the main parameter; every other setting is a call that returns the resizer, so they chain:
+    //   resizer(resize_filter::mitchell).edge(resize_edge::wrap).srgb(false).max_bytes(1 << 26)
+    //   resizer("cubic")
+    // A name is parsed by resize_filter_from_name (invalid_argument if unknown). An enum value that is not one of
+    // resize_filter / resize_edge throws invalid_argument at the call that gives it.
     explicit resizer(resize_filter filter);
     explicit resizer(std::string_view filter_name);
 
-    const resize_options& options() const noexcept { return options_; }
+    resizer& filter(resize_filter f) &;
+    resizer& filter(std::string_view name) &;
+    // How the filter reads past the image's edge (default clamp).
+    resizer& edge(resize_edge e) &;
+    // Treat 8-bit colour channels as sRGB and blend in linear light (correct for photos and UI; alpha is always
+    // linear). Turn off for data such as normal maps or masks, which are already linear (default true).
+    resizer& srgb(bool on) &;
+    // Refuse to produce an output larger than this many bytes (default 512 MiB).
+    resizer& max_bytes(std::size_t bytes) &;
+
+    // The same on a temporary, so that a chain starting from the constructor works.
+    resizer&& filter(resize_filter f) && { filter(f); return std::move(*this); }
+    resizer&& filter(std::string_view name) && { filter(name); return std::move(*this); }
+    resizer&& edge(resize_edge e) && { edge(e); return std::move(*this); }
+    resizer&& srgb(bool on) && { srgb(on); return std::move(*this); }
+    resizer&& max_bytes(std::size_t bytes) && { max_bytes(bytes); return std::move(*this); }
+
+    // What is set.
+    resize_filter filter() const noexcept { return filter_; }
+    resize_edge edge() const noexcept { return edge_; }
+    bool srgb() const noexcept { return srgb_; }
+    std::size_t max_bytes() const noexcept { return max_bytes_; }
 
     // Throws invalid_argument (empty image, width/height < 1),
-    // limit_error (output larger than options().max_bytes or 2 GiB),
+    // limit_error (output larger than max_bytes() or 2 GiB),
     // error (allocation failure inside stb).
     image resize(const image& src, int width, int height) const;
 
 private:
-    resize_options options_;
+    resize_filter filter_ = resize_filter::automatic;
+    resize_edge edge_ = resize_edge::clamp;
+    bool srgb_ = true;
+    std::size_t max_bytes_ = std::size_t(1) << 29;  // 512 MiB
+};
+
+// Decodes an image with settings. The source is the main parameter and goes in the constructor; every other setting is a call
+// that returns the loader, so they chain in any order and run() does the work:
+//
+//     image photo = stb::loader("holiday.jpg").orient().format(pixel_format::rgb).max_bytes(1 << 26).run();
+//     image a = stb::loader(bytes.data(), bytes.size()).flip().run();
+//
+// A loader made from memory does not copy the bytes: they must outlive the loader (a path is copied). run() throws what
+// image::decode and image::open throw: invalid_argument (null data), decode_error, limit_error, and io_error for a file.
+class STB_API loader {
+public:
+    loader(const void* data, std::size_t size);
+    explicit loader(std::filesystem::path path);
+
+    // Convert to this format (default: keep the source's).
+    loader& format(pixel_format f) &;
+    // Flip vertically while decoding (per call, thread-safe). Default off.
+    loader& flip(bool on = true) &;
+    // Apply the EXIF orientation stored in the file (JPEG and PNG), so a phone photo comes out upright. The result may
+    // have width and height swapped relative to image_info. Combined with flip, the orientation is applied first. Default off.
+    loader& orient(bool on = true) &;
+    // Refuse to decode anything whose output would exceed this many bytes. Checked from the header BEFORE any pixel
+    // memory is allocated. Default default_max_decode_bytes (512 MiB).
+    loader& max_bytes(std::size_t bytes) &;
+
+    // The same on a temporary, so that a chain starting from the constructor works.
+    loader&& format(pixel_format f) && { format(f); return std::move(*this); }
+    loader&& flip(bool on = true) && { flip(on); return std::move(*this); }
+    loader&& orient(bool on = true) && { orient(on); return std::move(*this); }
+    loader&& max_bytes(std::size_t bytes) && { max_bytes(bytes); return std::move(*this); }
+
+    // Does the work; can be called again.
+    image run() const;
+
+private:
+    const void* data_ = nullptr;
+    std::size_t size_ = 0;
+    std::filesystem::path path_;
+    bool from_file_ = false;
+    std::optional<pixel_format> format_;
+    bool flip_ = false;
+    bool orient_ = false;
+    std::size_t max_bytes_ = default_max_decode_bytes;
 };
 
 // ---------------------------------------------------------------------------------------- traits

@@ -47,9 +47,9 @@ static std::vector<std::uint8_t> fake_png(std::uint32_t width, std::uint32_t hei
 }
 
 // Decodes `data` and says what happened. Each error has its own type: a bad upload is an exception you can name.
-static void try_decode(const std::string& what, const std::vector<std::uint8_t>& data, const stb::load_options& opt = {}) {
+static void try_decode(const std::string& what, const std::vector<std::uint8_t>& data, std::size_t max_bytes = stb::default_max_decode_bytes) {
     try {
-        const stb::image img = stb::image::decode(data.data(), data.size(), opt);
+        const stb::image img = stb::loader(data.data(), data.size()).max_bytes(max_bytes).run();
         std::cout << what << ": decoded " << img.width() << "x" << img.height() << '\n';
     } catch (const stb::limit_error& e) {
         std::cout << what << ": limit_error (" << e.what() << ")\n";
@@ -75,9 +75,7 @@ int main() {
 
         // 3. Limits are checked from that header, BEFORE any pixel memory exists. The default is 512 MiB.
         try_decode("the bomb, default limit", bomb);
-        stb::load_options strict;
-        strict.max_bytes = 1u << 20;                                      // 1 MiB of pixels at most
-        try_decode("a real png, 1 MiB limit", png, strict);               // 451*300*3 bytes: fits
+        try_decode("a real png, 1 MiB limit", png, 1u << 20);             // 1 MiB of pixels at most; 451*300*3 bytes: fits
 
         // 4. Typed errors for what is not an image, or not all of one.
         try_decode("garbage", std::vector<std::uint8_t>(100, 0x42));

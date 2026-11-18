@@ -31,19 +31,15 @@ void bind_resizer(nb::module_& m) {
         .value("WRAP", resize_edge::wrap)
         .value("ZERO", resize_edge::zero);
 
-    // Both constructors build the same options; only the way the filter is given differs.
+    // Both constructors build the same resizer; only the way the filter is given differs.
+    const std::size_t default_max_bytes = resizer().max_bytes();
     auto construct = [](resizer* self, resize_filter filter, resize_edge edge, bool srgb, std::size_t max_bytes) {
-        stb::resize_options o;
-        o.filter = filter;
-        o.edge = edge;
-        o.srgb = srgb;
-        o.max_bytes = max_bytes;
-        new (self) resizer(o);
+        new (self) resizer(resizer(filter).edge(edge).srgb(srgb).max_bytes(max_bytes));
     };
 
     cls.def(
            "__init__", construct, "filter"_a = resize_filter::automatic, "edge"_a = resize_edge::clamp,
-           "srgb"_a = true, "max_bytes"_a = stb::resize_options{}.max_bytes)
+           "srgb"_a = true, "max_bytes"_a = default_max_bytes)
         // Resizer("cubic", ...): the filter by name (see resize_filter_from_name).
         // An unknown name raises ValueError listing the valid ones.
         .def(
@@ -52,11 +48,11 @@ void bind_resizer(nb::module_& m) {
                 construct(self, stb::resize_filter_from_name(filter), edge, srgb, max_bytes);
             },
             "filter"_a, "edge"_a = resize_edge::clamp, "srgb"_a = true,
-            "max_bytes"_a = stb::resize_options{}.max_bytes)
-        .def_prop_ro("filter", [](const resizer& r) { return r.options().filter; })
-        .def_prop_ro("edge", [](const resizer& r) { return r.options().edge; })
-        .def_prop_ro("srgb", [](const resizer& r) { return r.options().srgb; })
-        .def_prop_ro("max_bytes", [](const resizer& r) { return r.options().max_bytes; })
+            "max_bytes"_a = default_max_bytes)
+        .def_prop_ro("filter", [](const resizer& r) { return r.filter(); })
+        .def_prop_ro("edge", [](const resizer& r) { return r.edge(); })
+        .def_prop_ro("srgb", [](const resizer& r) { return r.srgb(); })
+        .def_prop_ro("max_bytes", [](const resizer& r) { return r.max_bytes(); })
         .def("resize", &resizer::resize, "image"_a, "width"_a, "height"_a,
              nb::call_guard<nb::gil_scoped_release>(),
              "A new Image of the given size (same as image.resize(width, height, resizer)).");

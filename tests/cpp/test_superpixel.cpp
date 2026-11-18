@@ -1,5 +1,7 @@
 #include <cstdint>
 #include <cstring>
+#include <utility>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -74,10 +76,7 @@ const stb::superpixel_method methods[] = {stb::superpixel_method::slic, stb::sup
 UTEST(libstb_superpixel_tests, test_every_method_labels_every_pixel_with_connected_regions_near_the_requested_count) {
     const stb::image8u img = noise(96, 80, stb::pixel_format::rgb);
     for (const stb::superpixel_method me : methods) {
-        stb::superpixel_options opt;
-        opt.method = me;
-        opt.count = 100;
-        const stb::superpixel_map sp = stb::superpixels(img, opt);
+        const stb::superpixel_map sp = stb::superpixel(img, 100).method(me).run();
         ASSERT_EQ(96, sp.width());
         ASSERT_EQ(80, sp.height());
         EXPECT_TRUE(sp.count() >= 50 && sp.count() <= 200);
@@ -89,10 +88,7 @@ UTEST(libstb_superpixel_tests, test_every_method_labels_every_pixel_with_connect
 UTEST(libstb_superpixel_tests, test_regions_do_not_cross_the_borders_between_flat_colours) {
     const stb::image8u img = quadrants(80, 80);
     for (const stb::superpixel_method me : methods) {
-        stb::superpixel_options opt;
-        opt.method = me;
-        opt.count = 64;
-        const stb::superpixel_map sp = stb::superpixels(img, opt);
+        const stb::superpixel_map sp = stb::superpixel(img, 64).method(me).run();
         const stb::image8u mean = sp.mean_color(img);
         // a region holding two colours would have a mean that is neither
         EXPECT_EQ(0, std::memcmp(mean.data(), img.data(), img.size_bytes()));
@@ -102,15 +98,14 @@ UTEST(libstb_superpixel_tests, test_regions_do_not_cross_the_borders_between_fla
 UTEST(libstb_superpixel_tests, test_the_result_does_not_depend_on_the_number_of_threads) {
     const stb::image8u img = noise(160, 120, stb::pixel_format::rgb);
     for (const stb::superpixel_method me : methods) {
-        stb::superpixel_options opt;
-        opt.method = me;
+        const stb::superpixel sp = std::move(stb::superpixel(img, 400).method(me));
         stb::superpixel_map one;
         {
             stb::thread_scope threads(1);
-            one = stb::superpixels(img, opt);
+            one = sp.run();
         }
         stb::thread_scope threads(4);
-        EXPECT_TRUE(labels_equal(one, stb::superpixels(img, opt)));
+        EXPECT_TRUE(labels_equal(one, sp.run()));
     }
 }
 
@@ -122,43 +117,56 @@ UTEST(libstb_superpixel_tests, test_gray_and_alpha_images_work_and_alpha_is_igno
             for (int k = 0; k < 3; ++k) rgba(x, y, k) = rgb(x, y, k);
             rgba(x, y, 3) = std::uint8_t(x * 6);  // changes with x; must not matter
         }
-    stb::superpixel_options opt;
-    opt.count = 30;
-    EXPECT_TRUE(labels_equal(stb::superpixels(rgb, opt), stb::superpixels(rgba, opt)));
-    EXPECT_TRUE(stb::superpixels(noise(40, 30, stb::pixel_format::gray), opt).count() >= 1);
-    EXPECT_TRUE(stb::superpixels(noise(40, 30, stb::pixel_format::gray_alpha), opt).count() >= 1);
+    EXPECT_TRUE(labels_equal(stb::superpixel(rgb, 30).run(), stb::superpixel(rgba, 30).run()));
+    const stb::image8u gray = noise(40, 30, stb::pixel_format::gray), gray_alpha = noise(40, 30, stb::pixel_format::gray_alpha);
+    EXPECT_TRUE(stb::superpixel(gray, 30).run().count() >= 1);
+    EXPECT_TRUE(stb::superpixel(gray_alpha, 30).run().count() >= 1);
 }
 
 UTEST(libstb_superpixel_tests, test_tiny_images_and_huge_counts_are_fine) {
     const stb::image8u one(1, 1, stb::pixel_format::rgb);
     const stb::image8u three = noise(3, 3, stb::pixel_format::rgb);
     for (const stb::superpixel_method me : methods) {
-        stb::superpixel_options opt;
-        opt.method = me;
-        opt.count = 400;
-        EXPECT_EQ(1, stb::superpixels(one, opt).count());
-        const stb::superpixel_map sp = stb::superpixels(three, opt);
+        EXPECT_EQ(1, stb::superpixel(one, 400).method(me).run().count());
+        const stb::superpixel_map sp = stb::superpixel(three, 400).method(me).run();
         EXPECT_TRUE(sp.count() >= 1 && sp.count() <= 9);
         EXPECT_TRUE(all_connected(sp));
     }
-    stb::superpixel_options single;
-    single.count = 1;
-    EXPECT_TRUE(stb::superpixels(three, single).count() >= 1);
+    EXPECT_TRUE(stb::superpixel(three, 1).run().count() >= 1);
 }
 
-UTEST(libstb_superpixel_tests, test_bad_arguments_throw) {
+UTEST(libstb_superpixel_tests, test_bad_arguments_throw_at_the_call_that_gives_them) {
     const stb::image8u img = noise(20, 20, stb::pixel_format::rgb);
-    stb::superpixel_options bad;
-    bad.count = 0;
-    ASSERT_THROWS(stb::superpixels(img, bad), std::invalid_argument);
-    bad = {};
-    bad.compactness = 0.0f;
-    ASSERT_THROWS(stb::superpixels(img, bad), std::invalid_argument);
-    bad = {};
-    bad.iterations = 0;
-    ASSERT_THROWS(stb::superpixels(img, bad), std::invalid_argument);
-    ASSERT_THROWS(stb::superpixels(stb::image8u()), std::invalid_argument);
-    ASSERT_THROWS(stb::superpixels(stb::mat8u(4, 4, 5)), std::invalid_argument);
+    ASSERT_THROWS(stb::superpixel(img, 0), std::invalid_argument);
+    ASSERT_THROWS(stb::superpixel(img, -3), std::invalid_argument);
+    stb::superpixel sp(img, 10);
+    ASSERT_THROWS(sp.compactness(0.0f), std::invalid_argument);
+    ASSERT_THROWS(sp.compactness(-1.0f), std::invalid_argument);
+    ASSERT_THROWS(sp.compactness(std::numeric_limits<float>::infinity()), std::invalid_argument);
+    ASSERT_THROWS(sp.compactness(std::numeric_limits<float>::quiet_NaN()), std::invalid_argument);
+    ASSERT_THROWS(sp.iterations(0), std::invalid_argument);
+    ASSERT_THROWS(sp.method(static_cast<stb::superpixel_method>(9)), std::invalid_argument);
+    EXPECT_TRUE(sp.run().count() >= 1);  // the refused calls changed nothing
+    const stb::image8u empty;
+    const stb::mat8u five(4, 4, 5);
+    ASSERT_THROWS(stb::superpixel(empty, 10), std::invalid_argument);
+    ASSERT_THROWS(stb::superpixel(five, 10), std::invalid_argument);
+}
+
+UTEST(libstb_superpixel_tests, test_the_settings_chain_in_any_order_on_a_temporary_and_on_a_named_builder) {
+    const stb::image8u img = noise(64, 48, stb::pixel_format::rgb);
+    const stb::superpixel_map a = stb::superpixel(img, 40).method(stb::superpixel_method::slic).compactness(15.0f).iterations(3).run();
+    const stb::superpixel_map b = stb::superpixel(img, 40).iterations(3).compactness(15.0f).method(stb::superpixel_method::slic).run();
+    stb::superpixel named(img, 40);
+    named.method(stb::superpixel_method::slic).compactness(15.0f).iterations(3);
+    EXPECT_TRUE(labels_equal(a, b));
+    EXPECT_TRUE(labels_equal(a, named.run()));
+    // the settings count: another compactness gives another map
+    EXPECT_TRUE(!labels_equal(a, stb::superpixel(img, 40).method(stb::superpixel_method::slic).compactness(1.0f).iterations(3).run()));
+    // run() can be repeated, and the connectivity switch is honoured
+    EXPECT_TRUE(labels_equal(named.run(), named.run()));
+    const stb::superpixel_map loose = stb::superpixel(img, 40).method(stb::superpixel_method::slic).enforce_connectivity(false).run();
+    EXPECT_TRUE(loose.count() >= 1);
 }
 
 UTEST(libstb_superpixel_tests, test_the_map_checks_its_labels_and_copies_explicitly) {

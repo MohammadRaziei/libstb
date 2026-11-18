@@ -40,9 +40,8 @@ static void draw_vector_text(stb::image& img, const stb::font& font, std::string
                                   .rotate(angle)
                                   .translate((pen + g.x_offset) * scale, float(line) * line_pitch - g.y_offset * scale)
                                   .scale(scale, -scale);
-        stb::draw_options options;
-        options.transform = m;
-        stb::fill(img, stb::outline(font.outline(g.glyph)), color, stb::fill_rule::non_zero, options);
+        const stb::outline glyph(font.outline(g.glyph));
+        stb::painter(img, glyph, color).transform(m).fill();
         pen += g.x_advance;
     }
 }

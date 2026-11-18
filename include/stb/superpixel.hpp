@@ -5,8 +5,8 @@
 // feature grid for a model.
 //
 //   image8u img = image8u::decode(bytes, size);
-//   superpixel_options opt; opt.count = 300;
-//   superpixel_map sp = stb::superpixels(img, opt);               // SLICO by default
+//   superpixel_map sp = stb::superpixel(img, 300).run();          // SLICO by default
+//   superpixel_map sn = stb::superpixel(img, 300).method(superpixel_method::snic).compactness(20).run();
 //   image8u mosaic = sp.mean_color(img);                          // every region in its mean colour
 //   image8u lines = sp.overlay(img, color(255, 255, 0));          // region borders on the picture
 //   int region_of_pixel = sp.label(x, y);                         // 0 .. sp.count() - 1
@@ -18,6 +18,7 @@
 // compactness allows.
 
 #include <cstdint>
+#include <utility>
 
 #include "stb/color.hpp"
 #include "stb/export.hpp"
@@ -32,22 +33,15 @@ enum class superpixel_method : std::uint8_t {
     snic,   // one pass over the pixels in order of distance: no iterations, regions are connected by construction
 };
 
-struct superpixel_options {
-    // About how many regions: the picture is cut into a grid of count cells and the regions start there.
-    // The result has about as many (see superpixel_map::count()). Must be >= 1.
+namespace detail {
+struct superpixel_params {  // the settings of a superpixel builder; the defaults are the documented ones
     int count = 400;
-    // How much position counts against colour (CIELAB units, 10 is usual, 1 to 40 is the useful range):
-    // higher gives squarer, more regular regions, lower follows the edges more closely. For slico this
-    // is only where the first iteration starts. Must be a positive finite number.
     float compactness = 10.0f;
-    // How many times slic and slico refine the regions (they stop earlier if nothing moves any more).
-    // Unused by snic. Must be >= 1.
     int iterations = 10;
-    // slic and slico can leave a few small detached pieces: merge them into a neighbour so that every
-    // region is one connected piece. (snic always is.)
     bool enforce_connectivity = true;
     superpixel_method method = superpixel_method::slico;
 };
+}  // namespace detail
 
 // The regions of an image: a label for every pixel, 0 .. count() - 1, each label one connected area (4-neighbours,
 // unless enforce_connectivity was off). Move-only like the arrays it holds; copy() says so.
@@ -91,10 +85,48 @@ private:
     int count_ = 0;
 };
 
-// Cuts `src` (1 to 4 channels; an alpha channel is ignored; gray is read as gray) into superpixels.
-// Deterministic: the same image and options give the same map on every number of threads and every SIMD
-// backend. SLIC and SLICO use all the cores; SNIC is one sequential pass. Throws invalid_argument for an
-// empty image, one with more than 4 channels, or options outside the ranges documented above.
-STB_API superpixel_map superpixels(const mat8u& src, const superpixel_options& options = {});
+// Cuts an image into superpixels. The main parameters go in the constructor and every other setting is a call that
+// returns the builder, so they chain in any order and run() does the work:
+//
+//     superpixel_map sp = stb::superpixel(img, 400).method(superpixel_method::slic).compactness(15).iterations(5).run();
+//
+// `src` (1 to 4 channels; an alpha channel is ignored; gray is read as gray) must outlive the builder: it is not copied.
+// A temporary image is refused at compile time for that reason. Deterministic: the same image and settings give the same
+// map on every number of threads and every SIMD backend. SLIC and SLICO use all the cores; SNIC is one sequential pass.
+// A bad value throws invalid_argument at the call that gives it (the constructor for the image and the count).
+class STB_API superpixel {
+public:
+    // `count`: about how many regions. The picture is cut into a grid of count cells and the regions start there; the
+    // result has about as many (see superpixel_map::count()). Must be >= 1. Throws for an empty image or one with more
+    // than 4 channels.
+    superpixel(const mat8u& src, int count);
+    superpixel(mat8u&&, int) = delete;
+
+    // Which algorithm (default slico).
+    superpixel& method(superpixel_method m) &;
+    // How much position counts against colour (CIELAB units, 10 is usual, 1 to 40 is the useful range): higher gives
+    // squarer, more regular regions, lower follows the edges more closely. For slico this is only where the first
+    // iteration starts. Must be a positive finite number (default 10).
+    superpixel& compactness(float c) &;
+    // How many times slic and slico refine the regions (they stop earlier if nothing moves any more). Unused by snic.
+    // Must be >= 1 (default 10).
+    superpixel& iterations(int n) &;
+    // slic and slico can leave a few small detached pieces: merge them into a neighbour so that every region is one
+    // connected piece (default true; snic always is connected).
+    superpixel& enforce_connectivity(bool on) &;
+
+    // The same on a temporary, so that a chain starting from the constructor works.
+    superpixel&& method(superpixel_method m) && { method(m); return std::move(*this); }
+    superpixel&& compactness(float c) && { compactness(c); return std::move(*this); }
+    superpixel&& iterations(int n) && { iterations(n); return std::move(*this); }
+    superpixel&& enforce_connectivity(bool on) && { enforce_connectivity(on); return std::move(*this); }
+
+    // Does the work. Can be called again, also after changing a setting.
+    superpixel_map run() const;
+
+private:
+    const mat8u* src_;
+    detail::superpixel_params p_;
+};
 
 }  // namespace stb

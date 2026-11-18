@@ -430,16 +430,15 @@ stb::outline circle() {
     o.add_circle(10.f, 10.f, 6.f);
     return o;
 }
-stb::draw_options with_composite(composite_op op) {
-    stb::draw_options o;
-    o.composite = op;
-    return o;
+// Fills `shape` with `c` using the operator `op`.
+void fill_with(stb::image& img, const stb::outline& shape, const stb::color& c, composite_op op) {
+    stb::painter(img, shape, c).composite(op).fill();
 }
 }  // namespace
 
 UTEST(libstb_blend_tests, test_clear_cuts_a_smooth_hole_in_the_shape_and_leaves_the_rest) {
     stb::image img = solid(20, 20, 4, 255);
-    stb::fill(img, circle(), stb::color(0, 0, 0), stb::fill_rule::non_zero, with_composite(composite_op::clear));
+    { const stb::outline shape = circle(); fill_with(img, shape, stb::color(0, 0, 0), composite_op::clear); }
     ASSERT_EQ(0, img(10, 10, 3));    // inside: gone
     ASSERT_EQ(255, img(0, 0, 3));    // far outside the circle, inside its bounding box's corner: untouched
     ASSERT_EQ(255, img(19, 19, 3));  // outside the shape's bounding box
@@ -451,13 +450,13 @@ UTEST(libstb_blend_tests, test_clear_cuts_a_smooth_hole_in_the_shape_and_leaves_
 
 UTEST(libstb_blend_tests, test_other_operators_act_where_the_shape_is) {
     stb::image keep = solid(20, 20, 4, 255);
-    stb::fill(keep, circle(), stb::color(0, 0, 0, 128), stb::fill_rule::non_zero, with_composite(composite_op::destination_in));
+    { const stb::outline shape = circle(); fill_with(keep, shape, stb::color(0, 0, 0, 128), composite_op::destination_in); }
     ASSERT_EQ(128, keep(10, 10, 3));  // 255 * (128 / 255) where the circle is
     ASSERT_EQ(255, keep(0, 0, 3));    // elsewhere: as it was
     ASSERT_EQ(255, keep(19, 0, 3));
 
     stb::image src = solid(20, 20, 4, 200);
-    stb::fill(src, circle(), stb::color(10, 20, 30, 255), stb::fill_rule::non_zero, with_composite(composite_op::source_in));
+    { const stb::outline shape = circle(); fill_with(src, shape, stb::color(10, 20, 30, 255), composite_op::source_in); }
     ASSERT_EQ(10, src(10, 10, 0));    // the colour of the circle,
     ASSERT_EQ(200, src(10, 10, 3));   // with the alpha of what was below (source_in: sa * ab)
     ASSERT_EQ(200, src(0, 0, 0));     // elsewhere: as it was
@@ -465,7 +464,7 @@ UTEST(libstb_blend_tests, test_other_operators_act_where_the_shape_is) {
 
 UTEST(libstb_blend_tests, test_an_operator_on_an_image_without_alpha_mixes_by_coverage) {
     stb::image img = solid(20, 20, 3, 200);
-    stb::fill(img, circle(), stb::color(0, 0, 0), stb::fill_rule::non_zero, with_composite(composite_op::source));
+    { const stb::outline shape = circle(); fill_with(img, shape, stb::color(0, 0, 0), composite_op::source); }
     ASSERT_EQ(0, img(10, 10, 0));
     ASSERT_EQ(200, img(0, 0, 0));
 }

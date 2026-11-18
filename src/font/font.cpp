@@ -621,12 +621,43 @@ std::vector<std::uint32_t> font::shape_glyphs(std::string_view utf8) const {
     return out;
 }
 
-std::vector<shaped_glyph> font::shape(std::string_view utf8, const shape_options& options) const {
-    return shape(utf8, 0, utf8.size(), options);
+std::vector<shaped_glyph> font::shape(std::string_view utf8) const { return shape_with(utf8, 0, utf8.size(), {}); }
+
+std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, std::size_t end) const {
+    return shape_with(utf8, begin, end, {});
 }
 
-std::vector<shaped_glyph> font::shape(std::string_view utf8, std::size_t begin, std::size_t end,
-                                      const shape_options& options) const {
+shaping::shaping(const font& f, std::string_view utf8) : font_(&f), text_(utf8), end_(utf8.size()) {}
+
+shaping& shaping::range(std::size_t begin, std::size_t end) & {
+    if (begin > end || end > text_.size()) throw std::invalid_argument("shaping: the range is not inside the text");
+    begin_ = begin;
+    end_ = end;
+    return *this;
+}
+
+shaping& shaping::direction(text_direction d) & {
+    if (d != text_direction::automatic && d != text_direction::ltr && d != text_direction::rtl)
+        throw std::invalid_argument("shaping: direction must be automatic, ltr or rtl");
+    p_.direction = d;
+    return *this;
+}
+
+shaping& shaping::kerning(kerning_mode k) & {
+    if (k != kerning_mode::none && k != kerning_mode::kern_table && k != kerning_mode::automatic)
+        throw std::invalid_argument("shaping: kerning must be none, kern_table or automatic");
+    p_.kerning = k;
+    return *this;
+}
+
+shaping& shaping::ligatures(bool on) & {
+    p_.ligatures = on;
+    return *this;
+}
+
+std::vector<shaped_glyph> shaping::run() const { return font_->shape_with(text_, begin_, end_, p_); }
+
+std::vector<shaped_glyph> font::shape_with(std::string_view utf8, std::size_t begin, std::size_t end, const detail::shape_params& options) const {
     if (static_cast<unsigned long long>(utf8.size()) > 0xFFFFFFFFull) throw limit_error("text is longer than 4 GiB");
     if (begin > end || end > utf8.size()) throw std::invalid_argument("shape: the range is not inside the text");
     // An edge inside a UTF-8 sequence would cut a character in two (a continuation byte is 10xxxxxx).

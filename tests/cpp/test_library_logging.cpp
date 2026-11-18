@@ -69,10 +69,8 @@ UTEST(libstb_library_logging_tests, test_a_failure_is_an_exception_and_not_also_
     const std::vector<std::uint8_t> junk(64, 0x5A);
     ASSERT_THROWS(stb::image::decode(junk.data(), junk.size()), stb::decode_error);
     ASSERT_THROWS(stb::zlib_decompress(junk), stb::decode_error);
-    stb::load_options opt;
-    opt.max_bytes = 4;
     const std::vector<std::uint8_t> png = small_image().to_png();
-    ASSERT_THROWS(stb::image::decode(png.data(), png.size(), opt), stb::limit_error);
+    ASSERT_THROWS(stb::loader(png.data(), png.size()).max_bytes(4).run(), stb::limit_error);
     for (const entry& e : c.records) ASSERT_TRUE(int(e.level) < int(lg::level::error));
     ASSERT_EQ(c.count("libstb.decode"), 0);  // nothing was decoded
 }
@@ -103,9 +101,10 @@ UTEST(libstb_library_logging_tests, test_input_libstb_had_to_change_is_a_single_
     }
     {  // a transformation that gives NaN: nothing is drawn, and it is said
         capture c(lg::level::warning);
-        stb::draw_options options;
-        options.transform.a = std::numeric_limits<float>::quiet_NaN();
-        stb::fill(img, square(1.f, 1.f, 4.f), white, stb::fill_rule::non_zero, options);
+        stb::matrix nan_matrix;
+        nan_matrix.a = std::numeric_limits<float>::quiet_NaN();
+        const stb::outline sq = square(1.f, 1.f, 4.f);
+        stb::painter(img, sq, white).transform(nan_matrix).fill();
         ASSERT_EQ(c.count("libstb.raster"), 1);
     }
     {  // an unusable dash pattern: the line is solid, and it is said

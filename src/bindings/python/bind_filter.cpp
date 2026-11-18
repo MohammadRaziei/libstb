@@ -1435,14 +1435,9 @@ void bind_filter(nb::module_& m) {
         "number of threads. Returns a SuperpixelMap.";
     const auto make = [](const stb::image& img, int count, float compactness, int iterations, nb::handle method,
                          bool enforce) {
-        stb::superpixel_options o;
-        o.count = count;
-        o.compactness = compactness;
-        o.iterations = iterations;
-        o.enforce_connectivity = enforce;
-        o.method = method_of(method);
+        const stb::superpixel_method me = method_of(method);
         nb::gil_scoped_release release;
-        return stb::superpixels(img, o);
+        return stb::superpixel(img, count).method(me).compactness(compactness).iterations(iterations).enforce_connectivity(enforce).run();
     };
     m.def("superpixels", make, "src"_a, "count"_a = 400, "compactness"_a = 10.0f, "iterations"_a = 10, "method"_a = "slico",
           "enforce_connectivity"_a = true, sp_doc);

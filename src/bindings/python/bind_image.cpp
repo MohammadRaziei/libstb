@@ -199,13 +199,11 @@ stb::pixel_format to_format(nb::handle h) {
     throw nb::type_error("format must be a PixelFormat or one of 'gray', 'gray_alpha', 'rgb', 'rgba'");
 }
 
-stb::load_options make_options(nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
-    stb::load_options o;
-    if (!format.is_none()) o.format = to_format(format);
-    o.flip = flip;
-    o.max_bytes = max_bytes;
-    o.orient = orient;
-    return o;
+// The settings of Image.open() as a loader's: the format is read here, with the GIL.
+template <class Loader>
+Loader&& apply_settings(Loader&& l, nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
+    if (!format.is_none()) l.format(to_format(format));
+    return std::move(l.flip(flip).orient(orient).max_bytes(max_bytes));
 }
 
 // Buffer protocol: memoryview(img) is a writable 3-D (height, width, channels)
@@ -324,7 +322,7 @@ void bind_image(nb::module_& m) {
     using stb::resizer;
     using release = nb::call_guard<nb::gil_scoped_release>;  // the C++ call runs without the GIL
 
-    m.attr("DEFAULT_MAX_BYTES") = stb::load_options{}.max_bytes;
+    m.attr("DEFAULT_MAX_BYTES") = stb::default_max_decode_bytes;
 
     nb::enum_<stb::pixel_format>(m, "PixelFormat",
                                  "What one pixel holds. Functions that take a PixelFormat also take its name:\n"
@@ -518,12 +516,12 @@ void bind_image(nb::module_& m) {
         .def_static(
             "open",
             [](const bytes_in& data, nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
-                const stb::load_options opt = make_options(format, flip, max_bytes, orient);
+                const stb::loader ld = apply_settings(stb::loader(data.data(), data.size()), format, flip, max_bytes, orient);
                 nb::gil_scoped_release unlock;
-                return image::decode(data.data(), data.size(), opt);
+                return ld.run();
             },
             "source"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
-            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false,
+            "max_bytes"_a = stb::default_max_decode_bytes, "orient"_a = false,
             "Decode an image from encoded bytes (bytes, bytearray, memoryview) or from a file path.\n\n"
             "format    : None keeps the file's format; a PixelFormat (or its name) converts.\n"
             "flip      : flip vertically while decoding.\n"
@@ -536,12 +534,12 @@ void bind_image(nb::module_& m) {
             "open",
             [](const std::filesystem::path& path, nb::handle format, bool flip, std::size_t max_bytes,
                bool orient) {
-                const stb::load_options opt = make_options(format, flip, max_bytes, orient);
+                const stb::loader ld = apply_settings(stb::loader(path), format, flip, max_bytes, orient);
                 nb::gil_scoped_release unlock;
-                return image::open(path, opt);
+                return ld.run();
             },
             "source"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
-            "max_bytes"_a = stb::load_options{}.max_bytes, "orient"_a = false)
+            "max_bytes"_a = stb::default_max_decode_bytes, "orient"_a = false)
 
         // --- DLPack import: Image.from_dlpack(x), the mirror of np.from_dlpack(img) ---
         .def_static(

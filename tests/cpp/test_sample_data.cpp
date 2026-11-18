@@ -119,9 +119,7 @@ UTEST(libstb_sample_data_tests, test_the_jpeg_writer_keeps_the_picture_close) {
         const stb::image img = stb::image::open(image_path(name));
         for (auto [quality, ceiling] : {std::pair<int, double>{50, 0.02}, {90, 0.012}}) {
             const std::vector<std::uint8_t> jpg = img.to_jpg(quality);
-            stb::load_options as_rgb;
-            as_rgb.format = stb::pixel_format::rgb;
-            const stb::image back = stb::image::decode(jpg.data(), jpg.size(), as_rgb);
+            const stb::image back = stb::loader(jpg.data(), jpg.size()).format(stb::pixel_format::rgb).run();
             ASSERT_TRUE(nmae(back, img) < ceiling);
         }
     }
@@ -156,12 +154,9 @@ UTEST(libstb_sample_data_tests, test_shrinking_then_growing_stays_close_to_the_o
 
 UTEST(libstb_sample_data_tests, test_every_pixel_format_of_a_real_picture) {
     for (const picture& p : pictures) {
-        stb::load_options opt;
         for (stb::pixel_format f : {stb::pixel_format::gray, stb::pixel_format::gray_alpha, stb::pixel_format::rgb,
-                                    stb::pixel_format::rgba}) {
-            opt.format = f;
-            ASSERT_EQ(stb::channel_count(f), stb::image::open(image_path(p.name), opt).channels());
-        }
+                                    stb::pixel_format::rgba})
+            ASSERT_EQ(stb::channel_count(f), stb::loader(image_path(p.name)).format(f).run().channels());
     }
 }
 
@@ -202,9 +197,7 @@ UTEST(libstb_sample_data_tests, test_blend_over_leaves_transparent_pixels_alone_
 // ---- SIMD backends and threads must not change a single byte -----------------------------------------------------
 
 UTEST(libstb_sample_data_tests, test_every_simd_backend_gives_the_scalar_result_on_real_pictures) {
-    stb::load_options rgba;
-    rgba.format = stb::pixel_format::rgba;
-    const stb::image base = stb::image::open(image_path("astronaut.png"), rgba);
+    const stb::image base = stb::loader(image_path("astronaut.png")).format(stb::pixel_format::rgba).run();
     const stb::image overlay = stb::image::open(image_path("badge.png"));
     auto run = [&](const std::string& backend) {
         stb::simd_scope scope(backend);
@@ -253,9 +246,7 @@ UTEST(libstb_sample_data_tests, test_persian_joins_ligates_and_orders_like_the_s
     ASSERT_EQ(std::size_t(1), f.shape("\u0644\u0627").size());
     const std::string mixed = std::string(SALAM) + " hello " + DONYA;              // SALAM 0-7, hello 9-13, DONYA 15-22
     ASSERT_TRUE(clusters(f.shape(mixed)) == (U{21, 19, 17, 15, 14, 9, 10, 11, 12, 13, 8, 6, 2, 0}));
-    stb::shape_options ltr;
-    ltr.direction = stb::text_direction::ltr;
-    ASSERT_TRUE(clusters(f.shape(mixed, ltr)) == (U{6, 2, 0, 8, 9, 10, 11, 12, 13, 14, 21, 19, 17, 15}));
+    ASSERT_TRUE(clusters(stb::shaping(f, mixed).direction(stb::text_direction::ltr).run()) == (U{6, 2, 0, 8, 9, 10, 11, 12, 13, 14, 21, 19, 17, 15}));
 
     const std::vector<stb::shaped_glyph> beh = f.shape("\u0628\u0628\u0628");     // initial, medial, final: all different
     ASSERT_EQ(std::size_t(3), beh.size());
@@ -285,9 +276,10 @@ UTEST(libstb_sample_data_tests, test_a_vector_text_from_shape_and_outline_is_the
     stb::image img = white.copy();
     float pen = 0.f;
     for (const stb::shaped_glyph& g : f.shape("Hello, AV kerning")) {
-        stb::draw_options options;
-        options.transform = stb::matrix().translate(10.f + pen * scale, 10.f + float(d.ascent) * scale).scale(scale, -scale);
-        stb::fill(img, stb::outline(f.outline(g.glyph)), stb::color(0, 0, 0), stb::fill_rule::non_zero, options);
+        const stb::outline glyph(f.outline(g.glyph));
+        stb::painter(img, glyph, stb::color(0, 0, 0))
+            .transform(stb::matrix().translate(10.f + pen * scale, 10.f + float(d.ascent) * scale).scale(scale, -scale))
+            .fill();
         pen += g.x_advance;
     }
     double total = 0;

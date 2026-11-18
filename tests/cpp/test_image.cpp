@@ -33,9 +33,7 @@ UTEST(libstb_image_tests, test_decode_and_accessors) {
 
 UTEST(libstb_image_tests, test_decode_converts_to_rgba_with_opaque_alpha) {
     const std::string d = red_over_green();
-    stb::load_options o;
-    o.format = stb::pixel_format::rgba;
-    stb::image img = stb::image::decode(d.data(), d.size(), o);
+    stb::image img = stb::loader(d.data(), d.size()).format(stb::pixel_format::rgba).run();
     ASSERT_EQ(4, img.channels());
     ASSERT_EQ(8u, img.size_bytes());
     ASSERT_EQ(255, img(0, 0, 3));
@@ -44,9 +42,7 @@ UTEST(libstb_image_tests, test_decode_converts_to_rgba_with_opaque_alpha) {
 
 UTEST(libstb_image_tests, test_decode_converts_to_gray) {
     const std::string d = red_over_green();
-    stb::load_options o;
-    o.format = stb::pixel_format::gray;
-    stb::image img = stb::image::decode(d.data(), d.size(), o);
+    stb::image img = stb::loader(d.data(), d.size()).format(stb::pixel_format::gray).run();
     ASSERT_EQ(1, img.channels());
     ASSERT_EQ(2u, img.size_bytes());
     ASSERT_TRUE(img(0, 0) > 0 && img(0, 0) < 255);
@@ -54,9 +50,7 @@ UTEST(libstb_image_tests, test_decode_converts_to_gray) {
 
 UTEST(libstb_image_tests, test_flip_swaps_rows) {
     const std::string d = red_over_green();
-    stb::load_options o;
-    o.flip = true;
-    stb::image img = stb::image::decode(d.data(), d.size(), o);
+    stb::image img = stb::loader(d.data(), d.size()).flip().run();
     ASSERT_EQ(255, img(0, 0, 1));  // green now on top
     ASSERT_EQ(255, img(0, 1, 0));  // red at the bottom
 }
@@ -87,9 +81,10 @@ UTEST(libstb_image_tests, test_errors_form_one_hierarchy) {
 }
 
 UTEST(libstb_image_tests, test_bad_arguments_throw_invalid_argument) {
-    const std::string d = red_over_green();
-    stb::load_options o;
     ASSERT_THROWS(stb::image::decode(nullptr, 10), std::invalid_argument);
+    ASSERT_THROWS(stb::loader(nullptr, 10).run(), std::invalid_argument);
+    ASSERT_THROWS(stb::loader(std::filesystem::path("no/such/file.png")).run(), stb::io_error);
+    ASSERT_THROWS(stb::loader(std::filesystem::path("x.png")).format(static_cast<stb::pixel_format>(9)), std::invalid_argument);
 }
 
 UTEST(libstb_image_tests, test_a_real_png_bomb_is_refused_from_its_header) {
@@ -110,20 +105,17 @@ UTEST(libstb_image_tests, test_a_real_png_bomb_is_refused_from_its_header) {
     ASSERT_EQ(6000, info.width);
     ASSERT_EQ(6000, info.height);
 
-    stb::load_options o;
-    o.max_bytes = std::size_t(64) << 20;
-    ASSERT_THROWS(stb::image::decode(png.data(), png.size(), o), stb::limit_error);   // not decode_error
-    o.format = stb::pixel_format::gray;                                     // asking for gray: 36 MB, under the limit
-    ASSERT_EQ(6000, stb::image::decode(png.data(), png.size(), o).width());           // so it is decoded
+    stb::loader l(png.data(), png.size());
+    l.max_bytes(std::size_t(64) << 20);
+    ASSERT_THROWS(l.run(), stb::limit_error);   // not decode_error
+    l.format(stb::pixel_format::gray);          // asking for gray: 36 MB, under the limit
+    ASSERT_EQ(6000, l.run().width());           // so it is decoded
 }
 
 UTEST(libstb_image_tests, test_max_bytes_is_enforced_from_header) {
     const std::string d = red_over_green();  // decodes to 6 bytes
-    stb::load_options o;
-    o.max_bytes = 5;
-    ASSERT_THROWS(stb::image::decode(d.data(), d.size(), o), stb::limit_error);
-    o.max_bytes = 6;
-    ASSERT_EQ(6u, stb::image::decode(d.data(), d.size(), o).size_bytes());
+    ASSERT_THROWS(stb::loader(d.data(), d.size()).max_bytes(5).run(), stb::limit_error);
+    ASSERT_EQ(6u, stb::loader(d.data(), d.size()).max_bytes(6).run().size_bytes());
 }
 
 UTEST(libstb_image_tests, test_huge_declared_dimensions_rejected_without_allocating) {
@@ -223,11 +215,10 @@ UTEST(libstb_image_tests, test_flip_is_per_call_and_thread_safe) {
     for (int t = 0; t < 8; ++t) {
         ts.emplace_back([&, t] {
             for (int i = 0; i < 2000; ++i) {
-                stb::load_options o;
-                o.flip = ((i + t) % 2) == 1;
-                stb::image img = stb::image::decode(d.data(), d.size(), o);
+                const bool flip = ((i + t) % 2) == 1;
+                stb::image img = stb::loader(d.data(), d.size()).flip(flip).run();
                 const bool top_is_red = img(0, 0, 0) == 255;
-                if (top_is_red == o.flip) ++bad;  // flipped => green on top
+                if (top_is_red == flip) ++bad;  // flipped => green on top
             }
         });
     }

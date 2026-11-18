@@ -210,6 +210,7 @@
       `eps` بر حسب مربع بازه‌ی ۰ تا ۱؛ آلفا کپی می‌شه؛ با راهنمای تخت نتیجه میانگینِ میانگین‌هاست؛ مرجع تست: numpy و scipy.
 - [x] **۲ب-۴ `warp_affine` و `warp_perspective`** (`stb/warp.hpp`). انجام شد (C++ 730 تست، Python 1845 تست پاس). قالب روی نوع ورودی (trait `if_image_t`)، `matrix` موجود برای affine و نوع جدید
       `homography` (با `from_quad`)؛ مرکز پیکسل (x + 0.5, y + 0.5)؛ `nearest`/`bilinear`/`bicubic` (Catmull-Rom)؛ لبه‌ی پیش‌فرض `zero`؛ مرجع تست: scipy `map_coordinates`، شیب خطی و sampler دوبل.
+- [x] **همه‌ی `…_options` ها به builder تبدیل شدن** (`superpixel`، `loader`، `resizer`، `painter`، `shaping`)؛ قرارداد: پارامتر اصلی توی سازنده، تنظیم اختیاری با تابع زنجیره‌ای، آخرش `run()`/`fill()`/`stroke()`.
 - [ ] **۲ب-۵ superpixel (DISF/SICLE).** بررسی لایسنس و پتنت انجام شد (۲۰۲۶-۱۱-۱۸، با جست‌وجوی وب؛ مشاوره‌ی حقوقی نیست):
       - کد مرجع **DISF** (`LIDS-UNICAMP/DISF`) تحت **OSL-3.0** است (Open Software License، با شرط بازنشر برای آثار مشتق): کدش را نمی‌خونیم و کپی نمی‌کنیم.
         فقط از مقاله پیاده می‌شه (Belém, Guimarães, Falcão، IEEE Signal Processing Letters 2020، arXiv 2007.04257).
