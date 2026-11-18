@@ -202,8 +202,8 @@
       فاصله‌ی رنگ مشترک بین کانال‌های رنگ و بر حسب کسری از کل بازه؛ آلفا کپی می‌شه؛ مرجع تست: نسخه‌ی numpy همین فرمول (OpenCV نصب نیست).
 - [x] **۲ب-۳ `guided_filter`** (`stb/filter.hpp`). انجام شد (C++ 719 تست، Python 1836 تست پاس). دو فرم: خودراهنما و با `guide` جدا (۱ یا ۳ کانال رنگ، کوواریانس 3x3)؛
       `eps` بر حسب مربع بازه‌ی ۰ تا ۱؛ آلفا کپی می‌شه؛ با راهنمای تخت نتیجه میانگینِ میانگین‌هاست؛ مرجع تست: numpy و scipy.
-- [ ] **۲ب-۴ `warp_affine` و `warp_perspective`**: بزرگ‌ترین بخش؛ interpolation و مدیریت مرز، احتمالاً مشترک با `resize`؛
-      API اول پیشنهاد می‌شه.
+- [x] **۲ب-۴ `warp_affine` و `warp_perspective`** (`stb/warp.hpp`). انجام شد (C++ 730 تست، Python 1845 تست پاس). قالب روی نوع ورودی (trait `if_image_t`)، `matrix` موجود برای affine و نوع جدید
+      `homography` (با `from_quad`)؛ مرکز پیکسل (x + 0.5, y + 0.5)؛ `nearest`/`bilinear`/`bicubic` (Catmull-Rom)؛ لبه‌ی پیش‌فرض `zero`؛ مرجع تست: scipy `map_coordinates`، شیب خطی و sampler دوبل.
 - [ ] **۲ب-۵ superpixel (DISF/SICLE).** پیش از هر کد: بررسی لایسنس و پتنت هر دو الگوریتم (نتیجه توی همین فایل نوشته
       می‌شه). بعد API پیشنهادی و تأیید. `src/image/superpixel.cpp` الان از `connected_components` عمومی استفاده می‌کنه؛
       الگوریتم جدید باید همون و `stb/morphology.hpp`/`stb/filter.hpp` رو بدون کپی دوباره‌کاری به کار ببره.

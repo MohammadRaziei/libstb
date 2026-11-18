@@ -150,6 +150,7 @@ function(libstb_apply_core_build_settings target)
             ${PROJECT_SOURCE_DIR}/src/image/morphology.cpp
             ${PROJECT_SOURCE_DIR}/src/image/components.cpp
             ${PROJECT_SOURCE_DIR}/src/image/canny.cpp
+            ${PROJECT_SOURCE_DIR}/src/image/warp.cpp
             ${PROJECT_SOURCE_DIR}/src/image/superpixel.cpp
             TARGET_DIRECTORY ${target}
             PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-math-errno")

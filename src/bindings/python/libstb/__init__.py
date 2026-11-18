@@ -44,6 +44,7 @@ from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, s
 from .libstb_py import logging_bridge, set_threads, thread_count
 from .libstb_py import (EdgeMode, SuperpixelMap, SuperpixelMethod, box_blur, convolve, gaussian_blur, gaussian_kernel, magnitude, sobel,
                         superpixels, to_8u, to_f32)
+from .libstb_py import (Homography, Interpolation, warp_affine, warp_perspective)
 from .libstb_py import (ToneMode, apply_lut, auto_contrast, clahe, equalize, gamma, gamma_lut, histogram, levels, levels_lut, match_histogram)
 from .libstb_py import (ColorSpace, bilateral_filter, convert_color, guided_filter, mae, median_filter, mse, pixelize, psnr, ssim, ssim_map, unsharp_mask)
 from .libstb_py import (AdaptiveMethod, Components, Connectivity, MorphShape, adaptive_threshold, black_hat, canny, connected_components,
@@ -182,7 +183,7 @@ __all__ = [
     "ToneMode", "histogram", "equalize", "auto_contrast", "clahe", "match_histogram", "gamma", "levels", "gamma_lut", "levels_lut", "apply_lut",
     "ColorSpace", "convert_color", "AdaptiveMethod", "Components", "Connectivity", "MorphShape", "adaptive_threshold",
     "black_hat", "canny", "connected_components", "dilate", "erode", "morph_close", "morph_gradient", "morph_open",
-    "otsu_threshold", "scharr", "structuring_element", "threshold", "top_hat", "median_filter", "bilateral_filter", "guided_filter", "unsharp_mask", "pixelize", "mae", "mse", "psnr", "ssim", "ssim_map",
+    "otsu_threshold", "scharr", "structuring_element", "threshold", "top_hat", "median_filter", "bilateral_filter", "guided_filter", "Homography", "Interpolation", "warp_affine", "warp_perspective", "unsharp_mask", "pixelize", "mae", "mse", "psnr", "ssim", "ssim_map",
     "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "CompositeOp", "Align", "FontMetrics", "FontFaceInfo", "SystemFont", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",

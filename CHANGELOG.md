@@ -8,6 +8,16 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **`warp_affine` and `warp_perspective`** (`stb/warp.hpp`, `libstb.warp_affine`, `libstb.warp_perspective`, `Image.warp_affine`, `Image.warp_perspective`; round 2b): a picture seen through a
+  transform. Templates over the input type like the tone functions (`mat8u` gives `mat8u`, `image8u` gives `image8u`, `mat32f` gives `mat32f`; 1 to 4 channels, every channel sampled on its own,
+  alpha included). The transform takes a source point to a point of the result in the canvas / SVG convention of `stb::matrix` (the centre of pixel (x, y) is (x + 0.5, y + 0.5), so the identity
+  returns the picture and a whole-number translation is an exact shift); the function walks the pixels of the result through the inverse. `warp_affine(src, matrix, out_width, out_height, interp, edge)`
+  and `warp_perspective(src, homography, ...)`; a result size of 0 is the size of the picture; `interpolation` is `nearest`, `bilinear` (default) or `bicubic` (Catmull-Rom; 8-bit results clamped,
+  floats not); `edge` is any `edge_mode`, default `zero` (not `clamp`: there is no data outside, and on RGBA it is transparent). New type `stb::homography` (3 x 3 by rows, converts from `matrix`;
+  `from_quad` of four point pairs, `then`, `map`, `inverse`). `invalid_argument` (`ValueError`) for a transform with no inverse, a negative or too large size, an unknown interpolation or more than 4
+  channels. Python also has `Homography` and `Interpolation`; a transform may be a `Matrix`, a `Homography` or a sequence of 6 or 9 numbers, `size` is `(width, height)` or `None`. Same bits on every
+  number of threads. Tests: `test_warp.cpp` (identity, whole-pixel shifts and edge modes, half a pixel, a doubling, a quarter turn equals `rotate90`, every kernel against a sampler in doubles
+  for every edge mode, `from_quad`, degenerate input, a perspective squeeze, errors, threads) and `tests/python/test_warp.py` (scipy `map_coordinates`, a linear ramp, forms, errors).
 - **`guided_filter`** (`stb/filter.hpp`, `libstb.guided_filter`; round 2b): `guided_filter(src, [guide,] radius, eps, edge)` for `mat8u` (gives an `image8u`) and `mat32f`, 1 to 4 channels. In
   every (2 * radius + 1)-square the output is the linear function of the guide that fits the image best (`eps`, in units of the full range squared, keeps the slope down); the lines of the
   squares that cover a pixel are averaged, so the cost is a handful of box means and does not depend on the radius. The guide is the image itself or another picture of the same size, gray

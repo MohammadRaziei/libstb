@@ -30,6 +30,7 @@
 #include "stb/metrics.hpp"
 #include "stb/threshold.hpp"
 #include "stb/morphology.hpp"
+#include "stb/warp.hpp"
 #include "stb/components.hpp"
 #include "stb/superpixel.hpp"
 #include "stb/outline.hpp"

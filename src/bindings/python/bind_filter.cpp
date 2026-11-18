@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <cstdint>
 #include <memory>
@@ -10,7 +11,10 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 
 #include "binding.hpp"
 #include "stb.h"
@@ -56,6 +60,44 @@ stb::edge_mode edge_of(nb::handle h) {
                                {"wrap", edge_mode::wrap},
                                {"zero", edge_mode::zero}},
                               "edge");
+}
+
+stb::interpolation interp_of(nb::handle h) {
+    using stb::interpolation;
+    return to_enum<interpolation>(h, {{"nearest", interpolation::nearest}, {"bilinear", interpolation::bilinear}, {"bicubic", interpolation::bicubic}},
+                                  "interpolation");
+}
+
+// A Matrix, or a sequence of the six numbers a, b, c, d, e, f.
+stb::matrix matrix_of(nb::handle h) {
+    if (nb::isinstance<stb::matrix>(h)) return nb::cast<stb::matrix>(h);
+    std::vector<float> v;
+    if (nb::try_cast(h, v, /*convert=*/true) && v.size() == 6) return stb::matrix{v[0], v[1], v[2], v[3], v[4], v[5]};
+    throw std::invalid_argument("expected a Matrix or a sequence of 6 numbers (a, b, c, d, e, f)");
+}
+
+// A Homography, a Matrix, or a sequence of 9 numbers (by rows) or of the 6 of a matrix.
+stb::homography homography_of(nb::handle h) {
+    if (nb::isinstance<stb::homography>(h)) return nb::cast<stb::homography>(h);
+    if (nb::isinstance<stb::matrix>(h)) return stb::homography(nb::cast<stb::matrix>(h));
+    std::vector<float> v;
+    if (nb::try_cast(h, v, /*convert=*/true)) {
+        if (v.size() == 9) {
+            stb::homography r;
+            for (std::size_t i = 0; i < 9; ++i) r.m[i] = v[i];
+            return r;
+        }
+        if (v.size() == 6) return stb::homography(stb::matrix{v[0], v[1], v[2], v[3], v[4], v[5]});
+    }
+    throw std::invalid_argument("expected a Homography, a Matrix, or a sequence of 9 numbers (by rows)");
+}
+
+// size=None is (0, 0): the size of the picture.
+std::pair<int, int> size_of(nb::handle h) {
+    if (h.is_none()) return {0, 0};
+    std::tuple<int, int> t;
+    if (!nb::try_cast(h, t, /*convert=*/true)) throw std::invalid_argument("size must be (width, height) or None");
+    return {std::get<0>(t), std::get<1>(t)};
 }
 
 stb::superpixel_method method_of(nb::handle h) {
@@ -569,6 +611,119 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
             return g != nullptr ? stb::guided_filter(img, *g, radius, eps, e) : stb::guided_filter(img, radius, eps, e);
         },
         "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp", "A new Image: the guided filter of this one.");
+
+    // ---- warp_affine, warp_perspective
+    nb::enum_<stb::interpolation>(m, "Interpolation",
+                                  "How a warp reads a value between pixel centres. Functions that take an Interpolation also take its\n"
+                                  "lower-case name: \"nearest\", \"bilinear\" (the default) or \"bicubic\" (Catmull-Rom).")
+        .value("NEAREST", stb::interpolation::nearest)
+        .value("BILINEAR", stb::interpolation::bilinear)
+        .value("BICUBIC", stb::interpolation::bicubic);
+
+    nb::class_<stb::homography>(
+        m, "Homography",
+        "A projective transform of the plane, as a 3 x 3 matrix by rows: x' = (m0 x + m1 y + m2) / (m6 x + m7 y + m8) and\n"
+        "y' = (m3 x + m4 y + m5) / (m6 x + m7 y + m8). The default is the identity; Homography(matrix) turns a Matrix\n"
+        "into one, Homography(values) takes 9 numbers, and Homography.from_quad() fits one to four pairs of points.\n"
+        "This is the C++ class stb::homography.")
+        .def(nb::init<>())
+        .def(
+            "__init__", [](stb::homography* self, nb::handle value) { new (self) stb::homography(homography_of(value)); }, "value"_a,
+            "From a Matrix, or from 9 numbers by rows (6 numbers a, b, c, d, e, f are a Matrix).")
+        .def_static(
+            "from_quad",
+            [](const std::vector<std::tuple<float, float>>& src, const std::vector<std::tuple<float, float>>& dst) {
+                if (src.size() != 4 || dst.size() != 4) throw std::invalid_argument("from_quad takes four points and four points");
+                stb::point s[4], d[4];
+                for (std::size_t i = 0; i < 4; ++i) {
+                    s[i] = stb::point{std::get<0>(src[i]), std::get<1>(src[i])};
+                    d[i] = stb::point{std::get<0>(dst[i]), std::get<1>(dst[i])};
+                }
+                const std::optional<stb::homography> h = stb::homography::from_quad(s, d);
+                if (!h) throw std::invalid_argument("the points are degenerate: no transform takes them to those");
+                return *h;
+            },
+            "src"_a, "dst"_a, "The transform that takes the four points `src` to the four points `dst` (lists of (x, y)). ValueError if they are degenerate.")
+        .def("then", &stb::homography::then, "next"_a, "A new transform that applies this one first and `next` second.")
+        .def(
+            "map", [](const stb::homography& h, float x, float y) { const stb::point p = h.map(x, y); return std::make_tuple(p.x, p.y); }, "x"_a, "y"_a,
+            "The point (x, y) after the transform, as a tuple ((nan, nan) where it is sent to infinity).")
+        .def("inverse", &stb::homography::inverse, "The inverse transform, or None if there is none.")
+        .def("__iter__", [](const stb::homography& h) { return nb::iter(nb::cast(std::vector<float>(h.m, h.m + 9))); }, "The nine numbers by rows.")
+        .def("__eq__", [](const stb::homography& a, const stb::homography& b) { return std::equal(a.m, a.m + 9, b.m); }, nb::is_operator())
+        .def("__repr__", [](const stb::homography& h) {
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "Homography(%g, %g, %g; %g, %g, %g; %g, %g, %g)", double(h.m[0]), double(h.m[1]), double(h.m[2]),
+                          double(h.m[3]), double(h.m[4]), double(h.m[5]), double(h.m[6]), double(h.m[7]), double(h.m[8]));
+            return std::string(buf);
+        });
+
+    const std::string warp_doc =
+        std::string("A picture seen through a transform that takes a point of the source to a point of the result, in the canvas / SVG\n"
+                    "convention of Matrix: the centre of pixel (x, y) is the point (x + 0.5, y + 0.5), so the identity returns the picture\n"
+                    "and a whole-number translation moves it by exactly that. `size` is the (width, height) of the result (default: the\n"
+                    "size of the picture). `edge` is what is read where the transform reaches outside the picture; the default is \"zero\"\n"
+                    "(transparent black on RGBA), not \"clamp\". `interpolation` is \"nearest\", \"bilinear\" (the default) or \"bicubic\".\n"
+                    "Every channel is sampled on its own (alpha too). ValueError for a transform that cannot be inverted or a bad size.\n"
+                    "Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array); 1 to 4 channels.\n");
+    const std::string affine_doc = warp_doc + "`transform` is a Matrix or the six numbers a, b, c, d, e, f.\n";
+    const std::string persp_doc = warp_doc + "`transform` is a Homography, a Matrix, or 9 numbers by rows.\n";
+    const auto warp_image = [](const stb::image& img, const stb::homography& h, nb::handle size, nb::handle interp, nb::handle edge) -> stb::image {
+        const auto [ow, oh] = size_of(size);
+        const stb::interpolation ip = interp_of(interp);
+        const stb::edge_mode e = edge_of(edge);
+        nb::gil_scoped_release release;
+        return stb::warp_perspective(img, h, ow, oh, ip, e);
+    };
+    const auto warp_array = [](const f32_array& src, const stb::homography& h, nb::handle size, nb::handle interp, nb::handle edge) -> f32_result {
+        const auto [ow, oh] = size_of(size);
+        const stb::interpolation ip = interp_of(interp);
+        const stb::edge_mode e = edge_of(edge);
+        const bool with_channels = src.ndim() == 3;
+        const stb::mat32f in = view_of(src);
+        stb::mat32f out;
+        {
+            nb::gil_scoped_release release;
+            out = stb::warp_perspective(in, h, ow, oh, ip, e);
+        }
+        return to_array(std::move(out), with_channels);
+    };
+    m.def(
+        "warp_affine",
+        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
+            return warp_image(img, stb::homography(matrix_of(transform)), size, interp, edge);
+        },
+        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", affine_doc.c_str());
+    m.def(
+        "warp_affine",
+        [=](const f32_array& src, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
+            return warp_array(src, stb::homography(matrix_of(transform)), size, interp, edge);
+        },
+        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
+    m.def(
+        "warp_perspective",
+        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
+            return warp_image(img, homography_of(transform), size, interp, edge);
+        },
+        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", persp_doc.c_str());
+    m.def(
+        "warp_perspective",
+        [=](const f32_array& src, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
+            return warp_array(src, homography_of(transform), size, interp, edge);
+        },
+        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
+    image_cls.def(
+        "warp_affine",
+        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
+            return warp_image(img, stb::homography(matrix_of(transform)), size, interp, edge);
+        },
+        "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by an affine transform (see warp_affine).");
+    image_cls.def(
+        "warp_perspective",
+        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
+            return warp_image(img, homography_of(transform), size, interp, edge);
+        },
+        "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by a perspective transform (see warp_perspective).");
 
     // ---- unsharp_mask
     const std::string unsharp_doc =
