@@ -369,6 +369,12 @@ STB_K_ATTR vec vsub(vec a, vec b) { return _mm_sub_epi16(a, b); }
 STB_K_ATTR vec vmullo(vec a, vec b) { return _mm_mullo_epi16(a, b); }
 STB_K_ATTR vec vsrl8(vec a) { return _mm_srli_epi16(a, 8); }
 STB_K_ATTR vec vmin(vec a, vec b) { return _mm_min_epi16(a, b); }
+STB_K_ATTR vec vmax(vec a, vec b) { return _mm_max_epi16(a, b); }
+STB_K_ATTR vec vcmpgt(vec a, vec b) { return _mm_cmpgt_epi16(a, b); }
+STB_K_ATTR vec vand(vec a, vec b) { return _mm_and_si128(a, b); }
+STB_K_ATTR vec vandnot(vec a, vec b) { return _mm_andnot_si128(a, b); }  // ~a & b
+STB_K_ATTR vec vor(vec a, vec b) { return _mm_or_si128(a, b); }
+STB_K_ATTR vec valphamask() { return _mm_set_epi16(-1, 0, 0, 0, -1, 0, 0, 0); }  // lane 3 of each pixel
 STB_K_ATTR vec vunpacklo(vec a, vec z) { return _mm_unpacklo_epi8(a, z); }
 STB_K_ATTR vec vunpackhi(vec a, vec z) { return _mm_unpackhi_epi8(a, z); }
 STB_K_ATTR vec vpack(vec lo, vec hi) { return _mm_packus_epi16(lo, hi); }
@@ -387,6 +393,18 @@ void run(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
     }
     for (; i < n; ++i) dest[i] = apply<Op, Solid>(dest[i], Solid ? color : src[i], ca);
 }
+
+template <bool Solid, blend_mode M, bool Full>
+void run_mode(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
+    const vec CA = vset16(int(ca)), one = _mm_set1_epi32(int(color));
+    std::size_t i = 0;
+    for (; i + lanes <= n; i += lanes) {
+        const vec d = _mm_loadu_si128(reinterpret_cast<const vec*>(dest + i));
+        const vec s = Solid ? one : _mm_loadu_si128(reinterpret_cast<const vec*>(src + i));
+        _mm_storeu_si128(reinterpret_cast<vec*>(dest + i), compute_mode<M, Full>(d, s, CA));
+    }
+    for (; i < n; ++i) dest[i] = mode_over<M>(dest[i], Full ? (Solid ? color : src[i]) : byte_mul(Solid ? color : src[i], ca));
+}
 }  // namespace sse2
 #endif
 
@@ -403,6 +421,12 @@ STB_K_ATTR vec vsub(vec a, vec b) { return _mm256_sub_epi16(a, b); }
 STB_K_ATTR vec vmullo(vec a, vec b) { return _mm256_mullo_epi16(a, b); }
 STB_K_ATTR vec vsrl8(vec a) { return _mm256_srli_epi16(a, 8); }
 STB_K_ATTR vec vmin(vec a, vec b) { return _mm256_min_epi16(a, b); }
+STB_K_ATTR vec vmax(vec a, vec b) { return _mm256_max_epi16(a, b); }
+STB_K_ATTR vec vcmpgt(vec a, vec b) { return _mm256_cmpgt_epi16(a, b); }
+STB_K_ATTR vec vand(vec a, vec b) { return _mm256_and_si256(a, b); }
+STB_K_ATTR vec vandnot(vec a, vec b) { return _mm256_andnot_si256(a, b); }  // ~a & b
+STB_K_ATTR vec vor(vec a, vec b) { return _mm256_or_si256(a, b); }
+STB_K_ATTR vec valphamask() { return _mm256_set_epi16(-1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0); }
 STB_K_ATTR vec vunpacklo(vec a, vec z) { return _mm256_unpacklo_epi8(a, z); }  // within each 128-bit half, undone by vpack
 STB_K_ATTR vec vunpackhi(vec a, vec z) { return _mm256_unpackhi_epi8(a, z); }
 STB_K_ATTR vec vpack(vec lo, vec hi) { return _mm256_packus_epi16(lo, hi); }
@@ -425,6 +449,23 @@ STB_TARGET_AVX2 void run(u32* dest, const u32* src, u32 color, std::size_t n, u3
         const vec d = _mm256_maskload_epi32(reinterpret_cast<const int*>(dest + i), mask);
         const vec s = Solid ? one : _mm256_maskload_epi32(reinterpret_cast<const int*>(src + i), mask);
         _mm256_maskstore_epi32(reinterpret_cast<int*>(dest + i), mask, compute<Op, Full, Solid>(d, s, CA, IA));
+    }
+}
+
+template <bool Solid, blend_mode M, bool Full>
+STB_TARGET_AVX2 void run_mode(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
+    const vec CA = vset16(int(ca)), one = _mm256_set1_epi32(int(color));
+    std::size_t i = 0;
+    for (; i + lanes <= n; i += lanes) {
+        const vec d = _mm256_loadu_si256(reinterpret_cast<const vec*>(dest + i));
+        const vec s = Solid ? one : _mm256_loadu_si256(reinterpret_cast<const vec*>(src + i));
+        _mm256_storeu_si256(reinterpret_cast<vec*>(dest + i), compute_mode<M, Full>(d, s, CA));
+    }
+    if (i < n) {
+        const vec mask = _mm256_cmpgt_epi32(_mm256_set1_epi32(int(n - i)), _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7));
+        const vec d = _mm256_maskload_epi32(reinterpret_cast<const int*>(dest + i), mask);
+        const vec s = Solid ? one : _mm256_maskload_epi32(reinterpret_cast<const int*>(src + i), mask);
+        _mm256_maskstore_epi32(reinterpret_cast<int*>(dest + i), mask, compute_mode<M, Full>(d, s, CA));
     }
 }
 }  // namespace avx2
@@ -468,6 +509,24 @@ void loop_mode(u32* dest, const u32* src, u32 color, std::size_t n, u32 ca) {
             return ca == 255 ? r : mix255(r, ca, d, 255 - ca);
         });
     } else {
+#if defined(STB_COMPOSITE_SSE2)
+        // the vector kernels give the scalar loop's bits (mulq is the scalar mul255), on every instruction set
+        if (n >= 4) {
+            const detail::backend be = detail::current_backend();
+#if defined(STB_HAVE_AVX2_DISPATCH)
+            if (be == detail::backend::avx2 && n >= 8) {
+                if (ca == 255) avx2::run_mode<Solid, M, true>(dest, src, color, n, ca);
+                else avx2::run_mode<Solid, M, false>(dest, src, color, n, ca);
+                return;
+            }
+#endif
+            if (be != detail::backend::scalar) {
+                if (ca == 255) sse2::run_mode<Solid, M, true>(dest, src, color, n, ca);
+                else sse2::run_mode<Solid, M, false>(dest, src, color, n, ca);
+                return;
+            }
+        }
+#endif
         // source_over: scaling the source by the coverage is the same as taking that share of the result
         loop<Solid>(dest, src, color, n, [ca](u32 d, u32 s) { return mode_over<M>(d, ca == 255 ? s : byte_mul(s, ca)); });
     }

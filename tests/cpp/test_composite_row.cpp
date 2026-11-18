@@ -422,3 +422,43 @@ UTEST(libstb_composite_row_tests, test_the_newer_blend_modes_give_the_w3c_values
     // hue of a green over a red backdrop at full saturation: green hue, red's saturation and luminosity (0.3 * 255)
     ASSERT_TRUE(near(mix(blend_mode::hue, 0xFFFF0000u, 0xFF00FF00u), 0, 130, 0));
 }
+
+// The vector kernels of the closed-form blend modes (source_over) must give the scalar loop's integers on every
+// instruction set, for every coverage and every row length (the lengths run through the vector bodies and tails).
+UTEST(libstb_composite_row_tests, test_every_simd_backend_gives_the_same_integers_for_every_blend_mode) {
+    std::uint32_t state = 777;
+    for (const blend_mode mode : all_modes) {
+        for (const composite_op op : {composite_op::source_over, composite_op::source_atop}) {
+            for (const int ca : {255, 200, 77, 1, 0}) {
+                for (std::size_t n = 0; n <= 41; ++n) {
+                    std::vector<u32> dst(n), src(n);
+                    for (std::size_t i = 0; i < n; ++i) {
+                        dst[i] = random_pixel(state);
+                        src[i] = random_pixel(state);
+                    }
+                    const u32 color = random_pixel(state);
+                    for (const std::string& name : stb::simd_backends()) {
+                        std::vector<u32> row_ref = dst, solid_ref = dst, row_got = dst, solid_got = dst;
+                        {
+                            stb::simd_scope scope("scalar");
+                            stb::composite_row(row_ref.data(), src.data(), n, op, mode, std::uint8_t(ca));
+                            stb::composite_solid_row(solid_ref.data(), color, n, op, mode, std::uint8_t(ca));
+                        }
+                        {
+                            stb::simd_scope scope(name);
+                            stb::composite_row(row_got.data(), src.data(), n, op, mode, std::uint8_t(ca));
+                            stb::composite_solid_row(solid_got.data(), color, n, op, mode, std::uint8_t(ca));
+                        }
+                        if (row_ref != row_got || solid_ref != solid_got) {
+                            UTEST_PRINTF("backend %s mode %s op %s ca %d n %d differs from scalar\n", name.c_str(),
+                                         std::string(stb::blend_mode_name(mode)).c_str(),
+                                         std::string(stb::composite_op_name(op)).c_str(), ca, int(n));
+                        }
+                        ASSERT_TRUE(row_ref == row_got);
+                        ASSERT_TRUE(solid_ref == solid_got);
+                    }
+                }
+            }
+        }
+    }
+}

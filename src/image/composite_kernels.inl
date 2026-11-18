@@ -62,3 +62,62 @@ STB_K_ATTR vec compute(vec d, vec s, vec CA, vec IA) {
     return vpack(half<Op, Full, Solid>(vunpacklo(d, z), vunpacklo(s, z), CA, IA),
                  half<Op, Full, Solid>(vunpackhi(d, z), vunpackhi(s, z), CA, IA));
 }
+
+// ---------------------------------------------------------------- blend modes (source_over, the closed-form modes)
+
+// x * y / 255 as the scalar mul255 of composite_row.cpp rounds it, (x * y + 127) / 255: not what finish() gives for 24
+// of the 65536 pairs, so the modes cannot use mul16 and stay equal to the scalar code. With u = x * y + 127 (below
+// 2^16 as an unsigned lane), u / 255 == (u + 1 + (u >> 8)) >> 8 exactly.
+STB_K_ATTR vec mulq(vec x, vec y) {
+    const vec u = vadd(vmullo(x, y), vset16(127));
+    return vsrl8(vadd(vadd(u, vset16(1)), vsrl8(u)));
+}
+
+// The colour channels of mode M of S over D (S already scaled by the coverage), one value per 16-bit lane, as
+// mode_value gives them; the alpha lane holds garbage that mode_half replaces.
+template <blend_mode M>
+STB_K_ATTR vec mode_colour(vec D, vec s, vec as, vec ab) {
+    const vec ias = inv16(as), iab = inv16(ab);
+    if constexpr (M == blend_mode::multiply) {
+        return vadd(vadd(mulq(s, iab), mulq(D, ias)), mulq(s, D));
+    } else if constexpr (M == blend_mode::screen) {
+        return vsub(vadd(s, D), mulq(s, D));
+    } else if constexpr (M == blend_mode::darken) {
+        return vsub(vadd(s, D), vmax(mulq(s, ab), mulq(D, as)));
+    } else if constexpr (M == blend_mode::lighten) {
+        return vsub(vadd(s, D), vmin(mulq(s, ab), mulq(D, as)));
+    } else if constexpr (M == blend_mode::difference) {
+        const vec m = vmin(mulq(s, ab), mulq(D, as));
+        return vsub(vsub(vadd(s, D), m), m);
+    } else if constexpr (M == blend_mode::exclusion) {
+        const vec m = mulq(s, D);
+        return vsub(vsub(vadd(s, D), m), m);
+    } else if constexpr (M == blend_mode::add) {
+        return vadd(vadd(mulq(s, iab), mulq(D, ias)), vmin(mulq(as, ab), vadd(mulq(D, as), mulq(s, ab))));
+    } else {  // overlay: multiply where the backdrop is dark (2 cb <= ab), screen where it is light
+        const vec base = vadd(mulq(s, iab), mulq(D, ias));
+        const vec m = mulq(s, D);
+        const vec low = vadd(vadd(base, m), m);
+        const vec k = vsub(vadd(D, D), ab);
+        const vec high = vsub(vadd(vadd(base, mulq(s, ab)), mulq(as, k)), mulq(s, k));
+        const vec light = vcmpgt(vadd(D, D), ab);
+        return vor(vand(light, high), vandnot(light, low));
+    }
+}
+
+// Two (or four) pixels: the new destination, as mode_over computes it.
+template <blend_mode M, bool Full>
+STB_K_ATTR vec mode_half(vec D, vec S, vec CA) {
+    const vec s = Full ? S : mul16(S, CA);
+    const vec as = valpha(s), ab = valpha(D);
+    const vec ar = vsub(vadd(as, ab), mulq(as, ab));
+    const vec c = vmin(vmax(mode_colour<M>(D, s, as, ab), vzero()), ar);  // a premultiplied channel never exceeds the alpha
+    return vor(vand(valphamask(), ar), vandnot(valphamask(), c));
+}
+
+template <blend_mode M, bool Full>
+STB_K_ATTR vec compute_mode(vec d, vec s, vec CA) {
+    const vec z = vzero();
+    return vpack(mode_half<M, Full>(vunpacklo(d, z), vunpacklo(s, z), CA),
+                 mode_half<M, Full>(vunpackhi(d, z), vunpackhi(s, z), CA));
+}

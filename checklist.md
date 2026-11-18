@@ -151,6 +151,12 @@
       `color`، `luminosity`) بعد از `exclusion` (عدد mode های قبلی عوض نشد). هم در `image::blend` (float، پایتون با
       `BlendMode.COLOR_DODGE` و ...) و هم در `composite_row` (integer، روی رنگ unpremultiplied ی 8 بیتی؛ non-separable ها با ۶۴ بیت و وزن
       دقیق ۰٫۳/۰٫۵۹/۰٫۱۱ تا همه‌ی backend ها بیت‌به‌بیت یکی باشن). تست با فرمول double روی هر ۱۷ mode (بیشترین خطا ۱٫۹۶ سطح).
+- [x] **blend mode های closed-form بردار شدن** (`composite_row` و `composite_solid_row`، فقط `source_over`): multiply، screen،
+      overlay، darken، lighten، difference، exclusion، add با kernel های SSE2 و AVX2 در `composite_kernels.inl`، بیت‌به‌بیت برابر
+      حلقه‌ی scalar (جمع‌وضرب scalar یعنی `(x*y+127)/255` برای ۲۴ جفت از ۶۵۵۳۶ با `finish()` فرق داره، پس `mulq` ی دقیق نوشته شد).
+      روی ۱M پیکسل: multiply از ۸٫۲ ms (scalar) به ۱٫۵ ms (AVX2)، overlay از ۲۱٫۷ به ۲٫۴.
+- [ ] **هنوز تک‌پیکسلی**: color_dodge، color_burn، hard_light، soft_light (حدود ۱۹۰ ms برای ۱M به‌خاطر جذر با حلقه) و ۴ حالت
+      non-separable (حدود ۷۲ ms برای ۱M)؛ و ترکیب mode با opی غیر از source_over.
 
 ## قبل از هر چیز دیگه
 
