@@ -55,7 +55,7 @@ Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_im
 
 ## ۶. بعدی و سؤال‌های باز
 
-- **دور ۲ب** تموم شد: CLAHE، `bilateral_filter`، `guided_filter`، `warp_affine` و `warp_perspective` (`stb/tone.hpp`، `stb/filter.hpp`، `stb/warp.hpp`؛ همه در Python؛ C++ 730 تست و Python 1845 تست پاس). مونده: superpixel (DISF/SICLE؛ اول بررسی لایسنس و پتنت، بعد API پیشنهادی و منتظر تأیید) و بعدش دور ۳ (بخش «پردازش تصویر: ترتیب کارها تا superpixel» در `checklist.md`). کاربر آخر کار فقط **یک** فایل patch می‌خواد (نه چندتا) و آخرین commit خودش رو می‌گه که patch روش ساخته بشه؛ API جدید بعد از تأیید یا «برو جلوتر» ساخته می‌شه.
+- **دور ۲ب** تموم شد: CLAHE، `bilateral_filter`، `guided_filter`، `warp_affine` و `warp_perspective` (`stb/tone.hpp`، `stb/filter.hpp`، `stb/warp.hpp`؛ همه در Python؛ C++ 730 تست و Python 1845 تست پاس). مونده: superpixel (SICLE که DISF رو هم پوشش می‌ده؛ بررسی لایسنس انجام شد و توی `checklist.md` ثبته: کد DISF تحت OSL-3.0 پس کپی نمی‌شه، کد SICLE تحت MIT؛ بعد API پیشنهادی و منتظر تأیید) و بعدش دور ۳ (بخش «پردازش تصویر: ترتیب کارها تا superpixel» در `checklist.md`). کاربر آخر کار فقط **یک** فایل patch می‌خواد (نه چندتا) و آخرین commit خودش رو می‌گه که patch روش ساخته بشه؛ API جدید بعد از تأیید یا «برو جلوتر» ساخته می‌شه.
 - بنچمارک نداریم (ثابت‌های ns اندازه‌گیری نشده؛ `median_filter` روی float برای radius بزرگ O(r^2) است). اندازه‌ی wheel بعد از این دورها اندازه‌گیری نشده.
 - `docs/guide.md` و `README.md` درباره‌ی این قابلیت‌ها چیزی ندارند (CHANGELOG و handoff به‌روزند).
 - `Components` را با `SuperpixelMap` ترکیب نکرده‌ام. ویندوز، macOS و ARM را خودم اجرا نکرده‌ام.
