@@ -170,6 +170,19 @@ struct font_face_info {
     int weight = 400;         // OS/2 usWeightClass: 100 thin ... 400 regular ... 700 bold ... 900 black (400 or 700 if the font has none)
     int width = 5;            // OS/2 usWidthClass: 1 ultra-condensed ... 5 normal ... 9 ultra-expanded (5 if the font has none)
     std::string legacy_family_name;  // as font::legacy_family_name() gives it
+    // The weights a variable font can be set to (the range of its `wght` axis, rounded; see font::with_weight).
+    // Both equal `weight` for a font that has no such axis.
+    int weight_min = 400;
+    int weight_max = 400;
+};
+
+// One design axis of a variable font (its `fvar` table): "wght" (weight, 1..1000), "wdth" (width in percent of
+// normal), "ital", "slnt", "opsz", or a font's own axis.
+struct font_axis {
+    std::string tag;  // four characters
+    float min = 0;
+    float default_value = 0;
+    float max = 0;
 };
 
 // A font face found on the system by font::system_fonts: where it is (open it with
@@ -259,8 +272,24 @@ public:
     // what tells "DejaVu Sans", "DejaVu Sans ExtraLight" and "DejaVu Sans Condensed Bold" apart when they share the
     // family name. A font without an OS/2 table (or with a value outside the range) gives 700 or 400 by is_bold()
     // and 5.
+    // For a variable font, weight() is the current value of its `wght` axis (the default instance's until
+    // with_weight / with_variation change it), rounded.
     int weight() const noexcept;
     int width() const noexcept;
+
+    // ---- variable fonts (TrueType outlines with `gvar`; the weight, width and other axes of OpenType font
+    // variations). A font that is not variable has no axes and is returned unchanged by with_weight.
+    //
+    // The design axes, empty for a font that is not variable.
+    std::vector<font_axis> axes() const;
+    // A font with the axis `tag` set to `value` (clamped to the axis's range) and every other axis as it is in
+    // this one. Shares the file bytes with this font; outlines, advances and glyph boxes follow the new
+    // coordinates. Kerning (GPOS), the vertical metrics (MVAR) and left side bearings stay those of the default
+    // instance. Throws invalid_argument if the font has no axis `tag` (or `tag` is not four characters).
+    font with_variation(std::string_view tag, float value) const;
+    // with_variation("wght", weight) if the font has a weight axis, else this font unchanged. CSS weights
+    // (400 regular, 700 bold) are the axis's own units.
+    font with_weight(int weight) const;
 
     // One entry per font of a file (a .ttc gives one for each of its faces), read from the name,
     // OS/2 and head tables alone: no cmap, outlines or metrics are parsed, and a file on disk is

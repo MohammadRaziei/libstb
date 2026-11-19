@@ -91,6 +91,10 @@ bool face::init(byte_view file, int font_start) {
     hmtx_ = table('h', 'm', 't', 'x');
     kern_ = table('k', 'e', 'r', 'n');
     gpos_ = table('G', 'P', 'O', 'S');
+    fvar_ = table('f', 'v', 'a', 'r');
+    avar_ = table('a', 'v', 'a', 'r');
+    gvar_ = table('g', 'v', 'a', 'r');
+    hvar_ = table('H', 'V', 'A', 'R');
 
     if (cmap.empty() || head_.empty() || hhea_.empty() || hmtx_.empty()) return false;
     if (!glyf_.empty()) {
@@ -228,6 +232,7 @@ void face::h_metrics(int glyph, int& advance, int& left_bearing) const {
         advance = hmtx_.i16(4 * std::size_t(long_metrics - 1));
         left_bearing = hmtx_.i16(4 * std::size_t(long_metrics) + 2 * std::size_t(glyph - long_metrics));
     }
+    if (varied_) advance += int(std::lround(advance_delta(glyph)));
 }
 
 int face::units_per_em() const { return head_.u16(18); }
@@ -326,7 +331,7 @@ byte_view face::glyph_data(int glyph) const {
 
 // A simple glyph: contours of on- and off-curve points (quadratic splines whose on-curve points
 // may be implied between two off-curve ones).
-std::vector<vertex> face::simple_glyph(byte_view g, int contours) const {
+std::vector<vertex> face::simple_glyph(byte_view g, int contours, int glyph) const {
     struct raw_point {
         std::uint8_t flags = 0;
         std::int16_t x = 0, y = 0;
@@ -373,6 +378,28 @@ std::vector<vertex> face::simple_glyph(byte_view g, int contours) const {
             p += 2;
         }
         pts[i].y = static_cast<std::int16_t>(y);
+    }
+
+    // a variable font: move the points by the deltas of the current coordinates (the four phantom points that
+    // follow the outline carry the metrics and are not drawn)
+    if (varied_) {
+        const std::size_t total = std::size_t(n) + 4, contour_count = std::size_t(contours);
+        std::vector<int> ox(total, 0), oy(total, 0), ends(contour_count, 0);
+        for (int i = 0; i < n; ++i) {
+            ox[std::size_t(i)] = pts[std::size_t(i)].x;
+            oy[std::size_t(i)] = pts[std::size_t(i)].y;
+        }
+        for (int c = 0; c < contours; ++c) ends[std::size_t(c)] = g.u16(end_points + std::size_t(c) * 2);
+        std::vector<float> dx, dy;
+        if (gvar_deltas(glyph, n + 4, ox.data(), oy.data(), &ends, dx, dy)) {
+            const auto moved = [](int v, float d) {
+                return static_cast<std::int16_t>(std::min(32767L, std::max(-32768L, std::lround(float(v) + d))));
+            };
+            for (int i = 0; i < n; ++i) {
+                pts[std::size_t(i)].x = moved(ox[std::size_t(i)], dx[std::size_t(i)]);
+                pts[std::size_t(i)].y = moved(oy[std::size_t(i)], dy[std::size_t(i)]);
+            }
+        }
     }
 
     // convert to moves, lines and quadratic curves
@@ -426,9 +453,28 @@ std::vector<vertex> face::simple_glyph(byte_view g, int contours) const {
 }
 
 // A composite glyph: other glyphs, each scaled / translated.
-std::vector<vertex> face::composite_glyph(byte_view g, int depth) const {
+std::vector<vertex> face::composite_glyph(byte_view g, int depth, int glyph) const {
     std::vector<vertex> out;
     if (depth >= max_composite_depth) return out;
+
+    // a variable font moves the components: one delta per component, after them the four phantom points
+    std::vector<float> dx, dy;
+    if (varied_) {
+        int components = 0;
+        std::size_t q = 10;
+        for (bool more = true; more && components < 0xFFFF;) {
+            const unsigned flags = g.u16(q);
+            q += 4 + ((flags & 1u) ? 4 : 2);
+            if (flags & (1u << 3)) q += 2;
+            else if (flags & (1u << 6)) q += 4;
+            else if (flags & (1u << 7)) q += 8;
+            ++components;
+            more = (flags & (1u << 5)) != 0 && g.has(q, 4);
+        }
+        if (!gvar_deltas(glyph, components + 4, nullptr, nullptr, nullptr, dx, dy)) dx.clear();
+    }
+    int component_index = 0;
+
     std::size_t p = 10;
     bool more = true;
     while (more) {
@@ -436,17 +482,21 @@ std::vector<vertex> face::composite_glyph(byte_view g, int depth) const {
         const std::uint16_t component = static_cast<std::uint16_t>(g.i16(p + 2));
         p += 4;
         float mtx[6] = {1, 0, 0, 1, 0, 0};
-        if (flags & 2) {  // x, y offsets (matching points are not supported)
+        if (flags & 2) {  // x, y offsets (matching points are not supported: that component stays at the origin)
             if (flags & 1) {
                 mtx[4] = g.i16(p);
                 mtx[5] = g.i16(p + 2);
-                p += 4;
             } else {
                 mtx[4] = static_cast<std::int8_t>(g.u8(p));
                 mtx[5] = static_cast<std::int8_t>(g.u8(p + 1));
-                p += 2;
+            }
+            if (std::size_t(component_index) < dx.size()) {
+                mtx[4] += dx[std::size_t(component_index)];
+                mtx[5] += dy[std::size_t(component_index)];
             }
         }
+        p += (flags & 1) ? 4 : 2;  // the two arguments, whatever they mean
+        ++component_index;
         if (flags & (1 << 3)) {  // a uniform scale
             mtx[0] = mtx[3] = g.i16(p) / 16384.0f;
             p += 2;
@@ -486,8 +536,8 @@ std::vector<vertex> face::outline_truetype(int glyph, int depth) const {
     const byte_view g = glyph_data(glyph);
     if (g.empty()) return {};
     const int contours = g.i16(0);
-    if (contours > 0) return simple_glyph(g, contours);
-    if (contours < 0) return composite_glyph(g, depth);
+    if (contours > 0) return simple_glyph(g, contours, glyph);
+    if (contours < 0) return composite_glyph(g, depth, glyph);
     return {};
 }
 
@@ -502,7 +552,7 @@ bool face::glyph_box(int glyph, box& out) const {
     }
     const byte_view g = glyph_data(glyph);
     if (g.empty()) return false;
-    out = box{g.i16(2), g.i16(4), g.i16(6), g.i16(8)};
+    out = varied_ ? varied_glyph_box(glyph) : box{g.i16(2), g.i16(4), g.i16(6), g.i16(8)};
     return true;
 }
 

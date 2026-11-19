@@ -94,6 +94,8 @@ struct font::impl {
     font_bytes data;
     truetype::face face;
     int index = 0;
+    // A font made by with_variation has no bytes of its own: its face reads those of `base`, which it keeps alive.
+    std::shared_ptr<const impl> base;
 
     float scale(float pixel_height) const { return face.scale_for_pixel_height(pixel_height); }
 
@@ -106,7 +108,7 @@ struct font::impl {
     // The font's GSUB data for Arabic script, parsed the first time right-to-left text is shaped.
     const arabic_layout& arabic() const {
         std::call_once(arabic_once_, [this] {
-            arabic_ = arabic_layout::build(otl::byte_view(data.ptr, data.len), std::uint32_t(face.font_start()));
+            arabic_ = arabic_layout::build(face.file(), std::uint32_t(face.font_start()));
         });
         return arabic_;
     }
@@ -445,7 +447,7 @@ namespace {
 
 truetype::face_info info_of(const font::impl& f) {
     truetype::face_info info;
-    truetype::read_face_info(otl::byte_view(f.data.ptr, f.data.len), std::uint32_t(f.face.font_start()), info);
+    truetype::read_face_info(f.face.file(), std::uint32_t(f.face.font_start()), info);
     return info;
 }
 
@@ -465,7 +467,7 @@ std::vector<font_face_info> scan_view(const std::uint8_t* ptr, std::size_t len) 
         const int offset = truetype::face::offset_for_index(file, i);
         truetype::face_info info;
         if (offset < 0 || !truetype::read_face_info(file, std::uint32_t(offset), info)) continue;
-        faces.push_back({i, std::move(info.family_name), info.bold, info.italic, info.weight, info.width, std::move(info.legacy_family_name)});
+        faces.push_back({i, std::move(info.family_name), info.bold, info.italic, info.weight, info.width, std::move(info.legacy_family_name), info.weight_min, info.weight_max});
     }
     return faces;
 }
@@ -476,8 +478,45 @@ std::string font::family_name() const { return info_of(*impl_).family_name; }
 std::string font::legacy_family_name() const { return info_of(*impl_).legacy_family_name; }
 bool font::is_bold() const noexcept { return info_of(*impl_).bold; }
 bool font::is_italic() const noexcept { return info_of(*impl_).italic; }
-int font::weight() const noexcept { return info_of(*impl_).weight; }
+int font::weight() const noexcept {
+    const int declared = info_of(*impl_).weight;
+    return int(std::lround(impl_->face.axis_value(otl::make_tag('w', 'g', 'h', 't'), float(declared))));
+}
 int font::width() const noexcept { return info_of(*impl_).width; }
+
+namespace {
+
+std::string tag_name(std::uint32_t tag) {
+    std::string name(4, ' ');
+    for (int i = 0; i < 4; ++i) name[std::size_t(i)] = char((tag >> (24 - 8 * i)) & 0xFFu);
+    return name;
+}
+
+}  // namespace
+
+std::vector<font_axis> font::axes() const {
+    std::vector<font_axis> out;
+    for (const truetype::face::axis& a : impl_->face.axes()) out.push_back({tag_name(a.tag), a.min, a.def, a.max});
+    return out;
+}
+
+font font::with_variation(std::string_view tag, float value) const {
+    if (tag.size() != 4) throw std::invalid_argument("a variation axis tag has four characters");
+    if (!std::isfinite(value)) throw std::invalid_argument("a variation value must be finite");
+    auto p = std::make_shared<impl>();
+    p->base = impl_->base ? impl_->base : impl_;  // never a chain of instances: they all read the root's bytes
+    p->index = impl_->index;
+    p->face = impl_->face;  // a view onto the root's bytes, plus the coordinates set so far
+    if (!p->face.set_variation(otl::make_tag(tag[0], tag[1], tag[2], tag[3]), value))
+        throw std::invalid_argument("the font has no variation axis '" + std::string(tag) + "'");
+    return font(std::move(p));
+}
+
+font font::with_weight(int weight) const {
+    for (const truetype::face::axis& a : impl_->face.axes())
+        if (a.tag == otl::make_tag('w', 'g', 'h', 't')) return with_variation("wght", float(weight));
+    return *this;
+}
 
 std::vector<font_face_info> font::scan(const std::vector<std::uint8_t>& data) {
     return scan_view(data.data(), data.size());

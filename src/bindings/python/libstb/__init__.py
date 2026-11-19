@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover
     __version__ = "0.0.0+unknown"
 
 from .image import DEFAULT_MAX_BYTES, Image, ImageInfo, PixelFormat
-from .font import (Atlas, AtlasGlyph, DesignMetrics, Font, FontFaceInfo, FontMetrics, Glyph, GlyphMetrics, RenderedText,
+from .font import (Atlas, AtlasGlyph, DesignMetrics, Font, FontAxis, FontFaceInfo, FontMetrics, Glyph, GlyphMetrics, RenderedText,
                    ShapedGlyph, SystemFont, TextSize, estimate_metrics, estimate_text)
 from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
 from .libstb_py import (Align, BlendMode, PremultipliedImage, CompositeOp, Canvas, CanvasImage, CanvasOutline, CanvasShape, CanvasText, DecodeError, EncodeError,
@@ -184,7 +184,7 @@ __all__ = [
     "ColorSpace", "convert_color", "AdaptiveMethod", "Components", "Connectivity", "MorphShape", "adaptive_threshold",
     "black_hat", "canny", "connected_components", "dilate", "erode", "morph_close", "morph_gradient", "morph_open",
     "otsu_threshold", "scharr", "structuring_element", "threshold", "top_hat", "median_filter", "bilateral_filter", "guided_filter", "Homography", "Interpolation", "warp_affine", "warp_perspective", "unsharp_mask", "pixelize", "mae", "mse", "psnr", "ssim", "ssim_map",
-    "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "CompositeOp", "Align", "FontMetrics", "FontFaceInfo", "SystemFont", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
+    "Font", "Canvas", "CanvasText", "CanvasShape", "CanvasImage", "CanvasOutline", "Outline", "Matrix", "BlendMode", "CompositeOp", "Align", "FontMetrics", "FontAxis", "FontFaceInfo", "SystemFont", "Glyph", "GlyphMetrics", "DesignMetrics", "ShapedGlyph", "TextSize", "RenderedText", "Atlas", "AtlasGlyph",
     "estimate_text", "estimate_metrics",
     "zlib_compress", "zlib_decompress", "DEFAULT_ZLIB_LEVEL", "DEFAULT_ZLIB_MAX_BYTES",
     "Error", "DecodeError", "EncodeError", "LimitError",

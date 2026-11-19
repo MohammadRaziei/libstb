@@ -60,6 +60,10 @@ the wheel. Each can be redistributed, and `data/README.md` lists what and where 
 - `data/fonts/Vazirmatn-Regular.ttf`, `Vazirmatn-Bold.ttf`: Copyright 2015 The Vazirmatn Project Authors
   (https://github.com/rastikerdar/vazirmatn), SIL Open Font License 1.1, the unmodified upstream files; the license
   text is `data/fonts/OFL.txt`.
+- `tests/data/libstb-variable-test.ttf` and `libstb-variable-ref-*.ttf` (tests only, not in the wheel): subsets of Open Sans,
+  Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans), SIL Open Font License 1.1, made with
+  fontTools (a subset to printable ASCII plus two accented letters; the `ref` files are static instances of it at fixed
+  weights and widths). The font declares no Reserved Font Name. The license text is `tests/data/OFL-OpenSans.txt`.
 
 ## stb license (MIT option)
 

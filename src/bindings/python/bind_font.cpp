@@ -15,12 +15,12 @@ using namespace nb::literals;
 
 namespace {
 
-using face_tuple = std::tuple<int, std::string, bool, bool, int, int, std::string>;
+using face_tuple = std::tuple<int, std::string, bool, bool, int, int, std::string, int, int>;
 
 std::vector<face_tuple> face_tuples(const std::vector<stb::font_face_info>& faces) {
     std::vector<face_tuple> out;
     out.reserve(faces.size());
-    for (const auto& f : faces) out.emplace_back(f.index, f.family_name, f.bold, f.italic, f.weight, f.width, f.legacy_family_name);
+    for (const auto& f : faces) out.emplace_back(f.index, f.family_name, f.bold, f.italic, f.weight, f.width, f.legacy_family_name, f.weight_min, f.weight_max);
     return out;
 }
 
@@ -183,6 +183,16 @@ void bind_font(nb::module_& m) {
         .def_prop_ro("is_italic", [](const font& f) { return f.is_italic(); })
         .def_prop_ro("weight", [](const font& f) { return f.weight(); })
         .def_prop_ro("width", [](const font& f) { return f.width(); })
+        // ---- variable fonts; libstb/font.py names the axes ----
+        .def("axes",
+             [](const font& f) {
+                 std::vector<std::tuple<std::string, float, float, float>> out;
+                 for (const auto& a : f.axes()) out.emplace_back(a.tag, a.min, a.default_value, a.max);
+                 return out;
+             })
+        .def("with_variation", [](const font& f, const std::string& tag, float value) { return f.with_variation(tag, value); },
+             "tag"_a, "value"_a)
+        .def("with_weight", [](const font& f, int weight) { return f.with_weight(weight); }, "weight"_a)
         .def_static(
             "scan",
             [](const std::filesystem::path& path) { return face_tuples(font::scan(path)); }, "path"_a,
@@ -199,9 +209,9 @@ void bind_font(nb::module_& m) {
             "system_fonts",
             [](const std::optional<std::vector<std::filesystem::path>>& dirs) {
                 const auto found = dirs ? font::system_fonts(*dirs) : font::system_fonts();
-                std::vector<std::tuple<std::filesystem::path, int, std::string, bool, bool, int, int, std::string>> out;
+                std::vector<std::tuple<std::filesystem::path, int, std::string, bool, bool, int, int, std::string, int, int>> out;
                 out.reserve(found.size());
-                for (const auto& f : found) out.emplace_back(f.path, f.index, f.family_name, f.bold, f.italic, f.weight, f.width, f.legacy_family_name);
+                for (const auto& f : found) out.emplace_back(f.path, f.index, f.family_name, f.bold, f.italic, f.weight, f.width, f.legacy_family_name, f.weight_min, f.weight_max);
                 return out;
             },
             "dirs"_a = nb::none(), nb::call_guard<nb::gil_scoped_release>())

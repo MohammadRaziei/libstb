@@ -8,6 +8,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Added
+- **Variable fonts** (OpenType font variations, TrueType outlines): `font::axes()`, `font::with_variation(tag, value)`,
+  `font::with_weight(weight)` and `font_face_info::weight_min` / `weight_max` (`libstb.Font.axes`, `with_variation`,
+  `with_weight`, `FontAxis`, `FontFaceInfo.weight_min` / `weight_max`). A variable font (Open Sans, Inter, Roboto Flex) used to
+  draw only its default instance, so `bold` changed nothing. Reads `fvar`, `avar`, `gvar` (with interpolation of untouched
+  points) and `HVAR` (or the phantom points of `gvar`); outlines, advances and glyph boxes follow the coordinates, and an
+  instance shares the file bytes of the font it came from. Not applied: kerning (GPOS), `MVAR` and left side bearings stay those
+  of the default instance. The tests compare every glyph with static instances that fontTools made at the same coordinates,
+  and damage the tables at random under the sanitizers.
 - **`warp_affine` and `warp_perspective`** (`stb/warp.hpp`, `libstb.warp_affine`, `libstb.warp_perspective`, `Image.warp_affine`, `Image.warp_perspective`; round 2b): a picture seen through a
   transform. Templates over the input type like the tone functions (`mat8u` gives `mat8u`, `image8u` gives `image8u`, `mat32f` gives `mat32f`; 1 to 4 channels, every channel sampled on its own,
   alpha included). The transform takes a source point to a point of the result in the canvas / SVG convention of `stb::matrix` (the centre of pixel (x, y) is (x + 0.5, y + 0.5), so the identity

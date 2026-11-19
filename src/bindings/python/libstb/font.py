@@ -35,6 +35,17 @@ class FontFaceInfo(NamedTuple):
     weight: int = 400  # OS/2 usWeightClass
     width: int = 5  # OS/2 usWidthClass (5 is normal)
     legacy_family_name: str = ""  # name id 1 ("DejaVu Sans Light"); family_name is the typographic family
+    weight_min: int = 400  # the range of a variable font's wght axis (both equal `weight` for a font without one)
+    weight_max: int = 400
+
+
+class FontAxis(NamedTuple):
+    """One design axis of a variable font: "wght" (weight), "wdth" (width in percent), "opsz", ..."""
+
+    tag: str  # four characters
+    min: float
+    default: float
+    max: float
 
 
 class SystemFont(NamedTuple):
@@ -48,6 +59,8 @@ class SystemFont(NamedTuple):
     weight: int = 400
     width: int = 5
     legacy_family_name: str = ""
+    weight_min: int = 400
+    weight_max: int = 400
 
 
 class Glyph(NamedTuple):
@@ -218,6 +231,21 @@ class Font:
     def width(self) -> int:
         """OS/2 usWidthClass (5 normal, 1 ultra-condensed, 9 ultra-expanded); 5 if the font has no OS/2 table."""
         return self._f.width
+
+    @property
+    def axes(self) -> List[FontAxis]:
+        """The design axes of a variable font (empty for a font that is not variable)."""
+        return [FontAxis(*a) for a in self._f.axes()]
+
+    def with_variation(self, tag: str, value: float) -> "Font":
+        """A font with the axis `tag` set to `value` (clamped to the axis's range), the other axes as they are in
+        this one. Kerning (GPOS) and the vertical metrics stay those of the default instance. Raises ValueError if
+        the font has no such axis, `tag` is not four characters or `value` is not finite."""
+        return Font(self._f.with_variation(tag, value))
+
+    def with_weight(self, weight: int) -> "Font":
+        """`with_variation("wght", weight)` for a font that has a weight axis, else this font unchanged."""
+        return Font(self._f.with_weight(weight))
 
     @staticmethod
     def scan(source: Source) -> List[FontFaceInfo]:

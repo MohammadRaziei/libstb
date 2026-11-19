@@ -6,6 +6,9 @@
 
 ## انجام‌شده
 
+- [x] **فونت variable (`wght`، `wdth`، هر محور)**: `font::axes`، `with_variation`، `with_weight`، `font_face_info::weight_min/max`، پایتون هم. `fvar`/`avar`/`gvar`/`HVAR`؛ تست در برابر fontTools؛ novasvg با آن bold ی Open Sans ی variable را درست رندر می‌کند.
+- [ ] فونت variable: kerning (GPOS) و `MVAR` با محورها عوض شود؛ CFF2 پشتیبانی شود؛ left side bearing از HVAR/`gvar`.
+
 - [x] **نوشتن متن روی تصویر.** `font::draw_text` (C++) و `Image.draw_text` (Python): متن چندخطی UTF-8،
       رنگ با آلفا (شفافیت)، برش خودکار در لبه‌ها، روی تصویر ۱ تا ۴ کاناله. تصویر ورودی تغییر نمی‌کنه.
       از `image::composite` استفاده می‌کنه، پس حلقه‌ی blend تکراری نداریم.

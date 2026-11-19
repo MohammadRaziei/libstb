@@ -54,6 +54,8 @@ struct face_info {
     bool italic = false;
     int weight = 400;  // OS/2 usWeightClass (1..1000); 700 or 400 by the bold flag if there is none
     int width = 5;     // OS/2 usWidthClass (1..9, 5 is normal); 5 if there is none
+    int weight_min = 400;  // the range of a `wght` axis (`fvar`), rounded; both equal `weight` for a font that has none
+    int weight_max = 400;
 };
 
 // False when the font that starts at `font_start` in `file` has neither a `head` nor an `OS/2`
@@ -101,6 +103,25 @@ public:
     // Kerning from the legacy `kern` table alone, whether or not the font also has GPOS; 0 if it has
     // no `kern` table.
     int kern_table_advance(int left, int right) const;
+
+    // ---- variable fonts (variation.cpp): TrueType outlines with `gvar`, advances from `HVAR` (or the phantom
+    // points of `gvar`). A face starts at the default instance; set_variation moves it. Kerning (GPOS), the
+    // vertical metrics (MVAR) and the left side bearings stay those of the default instance.
+    struct axis {
+        std::uint32_t tag = 0;  // 'wght', 'wdth', ...
+        float min = 0, def = 0, max = 0;
+    };
+    // The design axes (`fvar`), empty for a font that is not variable.
+    std::vector<axis> axes() const;
+    // Sets one axis to `value` (clamped to its range), the others keep their current value. False if the font
+    // has no such axis.
+    bool set_variation(std::uint32_t tag, float value);
+    // The current value of an axis (its default until set), or `fallback` if the font has no such axis.
+    float axis_value(std::uint32_t tag, float fallback) const;
+    // True when some axis is off its default: outlines and advances then go through the variation tables.
+    bool is_varied() const { return varied_; }
+    // The bytes of the font file this face reads (to read a table the face itself does not need).
+    otl::byte_view file() const { return file_; }
 
     // The scale that makes (ascent - descent) `height` pixels tall.
     float scale_for_pixel_height(float height) const;
@@ -158,11 +179,24 @@ private:
     std::vector<vertex> outline_truetype(int glyph, int depth) const;
     std::vector<vertex> outline_cff(int glyph) const;
     box box_cff(int glyph) const;
-    std::vector<vertex> simple_glyph(otl::byte_view g, int contours) const;
-    std::vector<vertex> composite_glyph(otl::byte_view g, int depth) const;
+    std::vector<vertex> simple_glyph(otl::byte_view g, int contours, int glyph) const;
+    std::vector<vertex> composite_glyph(otl::byte_view g, int depth, int glyph) const;
     int glyph_index_in_cmap(int codepoint) const;
     int kern_pair_advance(int left, int right) const;
     int gpos_pair_advance(int left, int right) const;
+
+    // variation.cpp
+    bool gvar_deltas(int glyph, int n_points, const int* orig_x, const int* orig_y, const std::vector<int>* contour_ends,
+                     std::vector<float>& dx, std::vector<float>& dy) const;
+    float advance_delta(int glyph) const;
+    float hvar_advance_delta(int glyph) const;
+    box varied_glyph_box(int glyph) const;
+    void refresh_coords();
+
+    otl::byte_view fvar_, avar_, gvar_, hvar_;
+    std::vector<float> values_;  // current user-space value of each axis (empty until the first set_variation)
+    std::vector<float> coords_;  // the same, normalised to -1..1 (avar applied)
+    bool varied_ = false;
 
     otl::byte_view file_;
     int font_start_ = 0;
@@ -175,6 +209,9 @@ private:
 
     cff_buffer cff_, char_strings_, global_subrs_, subrs_, font_dicts_, fd_select_;
 };
+
+// The design axes of an `fvar` table (empty for an empty or damaged one). Used by face::axes and read_face_info.
+std::vector<face::axis> read_fvar_axes(otl::byte_view fvar);
 
 // ---- glyph_raster.cpp
 

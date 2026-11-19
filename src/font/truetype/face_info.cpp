@@ -2,6 +2,8 @@
 // Every read goes through otl::byte_view, so a damaged table gives an empty name or false flags
 // instead of reading outside the file.
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 
 #include "font/truetype/truetype.hpp"
@@ -144,6 +146,14 @@ bool read_face_info(byte_view file, std::uint32_t font_start, face_info& out) {
         const unsigned weight = os2.u16(4), width = os2.u16(6);
         if (weight >= 1 && weight <= 1000) out.weight = int(weight);
         if (width >= 1 && width <= 9) out.width = int(width);
+    }
+
+    // A variable font reaches every weight of its `wght` axis (the OS/2 class describes the default instance).
+    out.weight_min = out.weight_max = out.weight;
+    for (const face::axis& a : read_fvar_axes(table('f', 'v', 'a', 'r'))) {
+        if (a.tag != make_tag('w', 'g', 'h', 't')) continue;
+        out.weight_min = std::min(out.weight, int(std::lround(a.min)));
+        out.weight_max = std::max(out.weight, int(std::lround(a.max)));
     }
     return true;
 }

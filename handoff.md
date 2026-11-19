@@ -2,6 +2,12 @@
 
 تاریخ: 2026-11-17. این بخش خلاصه‌ی خودکفا برای چت بعدی است؛ زیرش جزئیات هر دور (جدیدترین اول) و تاریخچه‌ی قدیمی‌تر است.
 
+## ۰. آخرین کار: فونت variable (2026-11-18)
+
+`font::axes()`، `with_variation(tag, value)`، `with_weight(weight)` و `font_face_info::weight_min/weight_max` (پایتون: `Font.axes`، `with_variation`، `with_weight`، `FontAxis`). کد در `src/font/truetype/variation.cpp`: `fvar`، `avar`، `gvar` (با IUP) و `HVAR` (یا نقاط فانتوم `gvar`). `face` فقط نمای بایت‌ها را نگه می‌دارد، پس نمونه‌ی جدید با `impl::base` بایت‌های فونت اصلی را زنده نگه می‌دارد. تست: `tests/cpp/test_font_variable.cpp` (هر glyph در برابر نمونه‌های static ی fontTools، به‌علاوه‌ی تست جدول خراب) و `tests/python/test_font_variable.py`؛ فونت‌ها subset ی Open Sans (OFL) در `tests/data`. نتیجه: 743 تست C++ و 1853 تست Python پاس، ASAN/UBSAN روی 101 تست فونت سبز (کل مجموعه زیر sanitizer اجرا نشد).
+اعمال نمی‌شود: kerning (GPOS)، `MVAR`، left side bearing، CFF2. advance ی `.notdef` در فایل `instancer` با HVAR نمی‌خواند: مرجع‌ها از HVAR ی خود فونت (fontTools `getGlyphSet(location=...)`) تصحیح شده‌اند.
+`font_face_info` دو فیلد جدید دارد، پس `FontFaceInfo` و `SystemFont` ی پایتون هم؛ تست‌های قدیمی `test_font_info.py` با همین مقدارها به‌روز شدند.
+
 ## ۱. وضعیت ریپو
 
 - ریپو `mohammadraziei/libstb`، شاخه‌ی `master` (public: `git clone https://github.com/mohammadraziei/libstb`). در این چت دور ۱ (median، unsharp، pixelize، تبدیل رنگ، معیارها) و دور ۲الف (threshold، morphology، components، canny، scharr) ساخته شد.
