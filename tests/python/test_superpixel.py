@@ -1,11 +1,11 @@
-"""Superpixels: SLIC, SLICO and SNIC through Image.superpixels / libstb.superpixels and the SuperpixelMap."""
+"""Superpixels: SLIC, SLICO, SNIC and SICLE through Image.superpixels / libstb.superpixels and the SuperpixelMap."""
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb as stb
 
-METHODS = ["slic", "slico", "snic"]
+METHODS = ["slic", "slico", "snic", "sicle"]
 
 
 def noise(h, w, c=3, seed=0):
@@ -111,7 +111,45 @@ def test_label_lookup_and_repr():
         sp.label(30, 0)
 
 
-@pytest.mark.parametrize("bad", [dict(count=0), dict(compactness=0.0), dict(iterations=0), dict(method="nope")])
+@pytest.mark.parametrize("bad", [dict(count=0), dict(compactness=0.0), dict(iterations=0), dict(method="nope"),
+                                 dict(method="sicle", oversample=-1), dict(method="sicle", removal_rate=1.0), dict(method="sicle", removal_rate=-0.1)])
 def test_bad_options_raise_value_error(bad):
     with pytest.raises(ValueError):
         noise(20, 20).superpixels(**bad)
+
+
+def test_sicle_gives_exactly_the_count_and_its_settings_all_end_there():
+    img = noise(48, 64)
+    for kwargs in [{}, dict(oversample=400), dict(oversample=5), dict(iterations=1), dict(iterations=2), dict(iterations=12),
+                   dict(removal_rate=0.632), dict(removal_rate=0.1, oversample=300)]:
+        sp = img.superpixels(count=40, method="sicle", **kwargs)
+        assert sp.count == 40 and set(pieces(sp.labels).values()) == {1}, kwargs
+    assert img.superpixels(count=100000, method="sicle").count == 48 * 64  # a region per pixel
+    # a setting that does not apply to the method is ignored; sicle is deterministic
+    assert np.array_equal(img.superpixels(count=30, method="slic", oversample=99, removal_rate=0.5).labels, img.superpixels(count=30, method="slic").labels)
+    a = img.superpixels(count=40, method=stb.SuperpixelMethod.SICLE, oversample=300).labels
+    assert np.array_equal(a, img.superpixels(count=40, method="sicle", oversample=300).labels)
+    # the default `iterations` of sicle is 5, of slic 10: leaving it out is not the same as passing 10 to sicle
+    assert not np.array_equal(img.superpixels(count=40, method="sicle").labels, img.superpixels(count=40, method="sicle", iterations=10).labels)
+
+
+def explained_variation(a, sp):
+    """1 - (the squared distance of the pixels to the mean of their region) / (to the mean of the picture): the closer to 1,
+    the more alike the colours inside a region."""
+    lab = sp.labels.ravel()
+    x = a.reshape(-1, a.shape[-1]).astype(np.float64)
+    counts = np.bincount(lab, minlength=sp.count)
+    means = np.stack([np.bincount(lab, weights=x[:, k], minlength=sp.count) for k in range(x.shape[1])], axis=1) / counts[:, None]
+    return 1.0 - ((x - means[lab]) ** 2).sum() / ((x - x.mean(0)) ** 2).sum()
+
+
+@pytest.mark.parametrize("name", ["astronaut.png", "chelsea.png", "rocket.jpg"])
+def test_sicle_keeps_colours_more_alike_inside_a_region_than_snic_and_slico_on_photos(name):
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[2] / "data" / "images" / name
+    if not path.exists():
+        pytest.skip("the sample images are not here")
+    img = stb.Image.open(path, format="rgb")
+    a = np.asarray(img)
+    sicle, snic, slico = (explained_variation(a, img.superpixels(count=200, method=m)) for m in ("sicle", "snic", "slico"))
+    assert sicle > snic and sicle > slico, (sicle, snic, slico)

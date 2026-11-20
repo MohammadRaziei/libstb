@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <mutex>
 #include <numeric>
 #include <queue>
@@ -14,8 +15,8 @@
 #include "image/lab.hpp"
 #include "stb/parallel.hpp"
 
-// SLIC / SLICO (Achanta et al., TPAMI 2012) and SNIC (Achanta and Susstrunk, CVPR 2017), written for libstb from
-// those papers; nothing is taken from any implementation of them. How it differs in shape from the textbook:
+// SLIC / SLICO (Achanta et al., TPAMI 2012), SNIC (Achanta and Susstrunk, CVPR 2017) and SICLE (Belem et al., arXiv
+// 2204.03533), written for libstb from those papers; nothing is taken from any implementation of them. How it differs in shape from the textbook:
 //  - the assignment step is a "gather": every pixel looks at the few centres around it and picks the nearest, so
 //    pixels are independent and the step runs on all the cores (the textbook scatters from each centre);
 //  - the sums for the new centres are fixed-point integers, so adding them up in any order and on any number of
@@ -163,7 +164,7 @@ mat32i run_slic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds
                                                                K - 1));
 
     std::vector<int> bucket_start(std::size_t(g.nx) * std::size_t(g.ny) + 1), bucket_items(K);
-    for (int iter = 0; iter < opt.iterations; ++iter) {
+    for (int iter = 0; iter < (opt.iterations > 0 ? opt.iterations : 10); ++iter) {
         // centres by the grid cell they are in now, so a pixel finds the ones within a cell of itself
         std::fill(bucket_start.begin(), bucket_start.end(), 0);
         const auto bucket_of = [&](std::size_t k) {
@@ -311,6 +312,221 @@ mat32i run_snic(const mat32f& lab, const grid& g, const std::vector<seed>& seeds
         if (y > 0) visit(x, y - 1);
         if (y + 1 < h) visit(x, y + 1);
     }
+    return labels;
+}
+
+// ----------------------------------------------------------------------------------- SICLE
+
+int relabel(mat32i& labels, std::size_t label_space);  // below
+
+// The seeds of the first run: about n0 of them on a grid whose cells have the shape of the picture (the number across
+// is in the proportion of the sides), at the centre of each cell; at least nf, so that every later run can keep nf.
+std::vector<std::uint32_t> sicle_grid(int w, int h, std::size_t n0, std::size_t nf) {
+    int nx = std::clamp(int(std::lround(std::sqrt(double(n0) * double(w) / double(h)))), 1, w);
+    int ny = std::clamp(int(std::lround(std::sqrt(double(n0) * double(h) / double(w)))), 1, h);
+    while (std::size_t(nx) * std::size_t(ny) < nf) {  // rounding can leave a few too few: add to the sparser axis
+        if (nx < w && (ny >= h || double(nx) / double(w) <= double(ny) / double(h))) ++nx;
+        else ++ny;
+    }
+    std::vector<std::uint32_t> seeds;
+    seeds.reserve(std::size_t(nx) * std::size_t(ny));
+    for (int j = 0; j < ny; ++j) {
+        const int y = int((double(j) + 0.5) * double(h) / double(ny));
+        for (int i = 0; i < nx; ++i) {
+            const int x = int((double(i) + 0.5) * double(w) / double(nx));
+            seeds.push_back(std::uint32_t(std::size_t(y) * std::size_t(w) + std::size_t(x)));
+        }
+    }
+    return seeds;
+}
+
+// The numbers of seeds of the runs after the first (which has n0): strictly decreasing, the last is nf.
+//  - rate > 0: every run keeps (1 - rate) of the seeds of the one before (at least one fewer);
+//  - else the schedule of the paper, M(i) = max(n0^(1 - w i), nf) with w = 1 / (omega - 1), which reaches nf at the
+//    last of the omega runs.
+std::vector<std::size_t> sicle_schedule(std::size_t n0, std::size_t nf, int omega, float rate) {
+    std::vector<std::size_t> runs;
+    if (n0 <= nf) return runs;
+    if (rate > 0.0f) {
+        std::size_t m = n0;
+        while (m > nf) {
+            m = std::max(nf, std::min(m - 1, std::size_t(double(m) * (1.0 - double(rate)))));
+            runs.push_back(m);
+        }
+        return runs;
+    }
+    const double w = omega >= 2 ? 1.0 / double(omega - 1) : 1.0;
+    std::size_t last = n0;
+    for (int i = 1; i < omega; ++i) {
+        const std::size_t m = std::max(nf, std::size_t(std::pow(double(n0), 1.0 - w * double(i))));
+        if (m < last) {
+            runs.push_back(m);
+            last = m;
+        }
+    }
+    if (last != nf) runs.push_back(nf);
+    return runs;
+}
+
+// The seed-restricted Image Foresting Transform with the path cost f_max (the largest arc on the path) and the arc cost
+// "distance of the pixel to the colour of the seed its path comes from": every pixel goes to the seed that reaches it
+// by the path whose largest step is the smallest, ties to the path met first. The arcs are those of the 4-neighbourhood,
+// so a tree is 4-connected. Returns, for every pixel, the index in `seeds` of its seed.
+mat32i sicle_ift(const mat32f& lab, const std::vector<std::uint32_t>& seeds) {
+    const int w = lab.width(), h = lab.height();
+    const std::size_t N = std::size_t(w) * std::size_t(h);
+    const float* lp = lab.data();
+    mat32i labels(w, h, 1);
+    std::int32_t* L = labels.data();
+    std::fill(L, L + N, std::int32_t(-1));
+    std::vector<float> cost(N, std::numeric_limits<float>::infinity());
+
+    struct entry {
+        float cost;
+        std::uint32_t seq;
+        std::uint32_t pixel;
+        std::int32_t k;
+    };
+    const auto later = [](const entry& p, const entry& q) { return p.cost != q.cost ? p.cost > q.cost : p.seq > q.seq; };
+    std::priority_queue<entry, std::vector<entry>, decltype(later)> heap(later);
+    std::uint32_t seq = 0;
+    for (std::size_t k = 0; k < seeds.size(); ++k) {
+        cost[seeds[k]] = 0.0f;
+        heap.push({0.0f, seq++, seeds[k], std::int32_t(k)});
+    }
+    while (!heap.empty()) {
+        const entry e = heap.top();
+        heap.pop();
+        if (L[e.pixel] >= 0 || e.cost > cost[e.pixel]) continue;  // done already, or a better path was found since
+        L[e.pixel] = e.k;
+        const float* root = lp + std::size_t(seeds[std::size_t(e.k)]) * 3;
+        const int x = int(e.pixel % std::uint32_t(w)), y = int(e.pixel / std::uint32_t(w));
+        const auto visit = [&](int nx, int ny) {
+            const std::uint32_t q = std::uint32_t(std::size_t(ny) * std::size_t(w) + std::size_t(nx));
+            if (L[q] >= 0) return;
+            const float* c = lp + std::size_t(q) * 3;
+            const float dl = c[0] - root[0], da = c[1] - root[1], db = c[2] - root[2];
+            const float arc = std::sqrt(dl * dl + da * da + db * db);
+            const float via = std::max(e.cost, arc);
+            if (via < cost[q]) {
+                cost[q] = via;
+                heap.push({via, seq++, q, e.k});
+            }
+        };
+        if (x > 0) visit(x - 1, y);
+        if (x + 1 < w) visit(x + 1, y);
+        if (y > 0) visit(x, y - 1);
+        if (y + 1 < h) visit(x, y + 1);
+    }
+    return labels;
+}
+
+// Which `keep` of the seeds stay for the next run: those with the highest relevance, the size of the region of the seed
+// (as a share of the picture) times its contrast, the smallest colour distance between the mean colour of its region
+// and that of a neighbouring region (criterion V4 of the paper without an object map). Seeds of equal relevance (the
+// seeds of a flat area all have none) are told apart by a fixed hash of their position: a seed is as good as its twin, and
+// taking them in raster order would strip the lower part of the picture of seeds.
+inline std::uint32_t mix32(std::uint32_t v) noexcept {  // a fixed scramble of a number (the finaliser of murmur3)
+    v ^= v >> 16;
+    v *= 0x85ebca6bu;
+    v ^= v >> 13;
+    v *= 0xc2b2ae35u;
+    v ^= v >> 16;
+    return v;
+}
+
+std::vector<std::uint32_t> sicle_keep(const mat32f& lab, const mat32i& labels, const std::vector<std::uint32_t>& seeds, std::size_t keep) {
+    const int w = lab.width(), h = lab.height();
+    const std::size_t K = seeds.size(), N = std::size_t(w) * std::size_t(h);
+    const float* lp = lab.data();
+    const std::int32_t* L = labels.data();
+    std::vector<double> sum(K * 3, 0.0), size(K, 0.0);
+    for (std::size_t i = 0; i < N; ++i) {
+        const std::size_t k = std::size_t(L[i]);
+        size[k] += 1.0;
+        for (int c = 0; c < 3; ++c) sum[k * 3 + std::size_t(c)] += double(lp[i * 3 + std::size_t(c)]);
+    }
+    std::vector<float> mean(K * 3);
+    for (std::size_t k = 0; k < K; ++k)
+        for (int c = 0; c < 3; ++c) mean[k * 3 + std::size_t(c)] = float(sum[k * 3 + std::size_t(c)] / size[k]);
+    std::vector<float> contrast(K, std::numeric_limits<float>::infinity());
+    std::vector<std::int64_t> twin(K, -1);  // the neighbouring region closest in colour: the one a seed is redundant with
+    const auto touch = [&](std::size_t a, std::size_t b) {
+        if (a == b) return;
+        const float dl = mean[a * 3] - mean[b * 3], da = mean[a * 3 + 1] - mean[b * 3 + 1], db = mean[a * 3 + 2] - mean[b * 3 + 2];
+        const float d = std::sqrt(dl * dl + da * da + db * db);
+        if (d < contrast[a]) {
+            contrast[a] = d;
+            twin[a] = std::int64_t(b);
+        }
+        if (d < contrast[b]) {
+            contrast[b] = d;
+            twin[b] = std::int64_t(a);
+        }
+    };
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const std::size_t i = std::size_t(y) * std::size_t(w) + std::size_t(x);
+            if (x + 1 < w) touch(std::size_t(L[i]), std::size_t(L[i + 1]));
+            if (y + 1 < h) touch(std::size_t(L[i]), std::size_t(L[i + std::size_t(w)]));
+        }
+    std::vector<double> relevance(K);
+    for (std::size_t k = 0; k < K; ++k)
+        relevance[k] = std::isfinite(contrast[k]) ? size[k] / double(N) * double(contrast[k]) : 0.0;
+    std::vector<std::uint32_t> order(K);
+    std::iota(order.begin(), order.end(), std::uint32_t(0));
+    const auto better = [&](std::uint32_t x, std::uint32_t y) {
+        if (relevance[x] != relevance[y]) return relevance[x] > relevance[y];
+        const std::uint32_t hx = mix32(seeds[x]), hy = mix32(seeds[y]);
+        return hx != hy ? hx < hy : x < y;
+    };
+    std::sort(order.begin(), order.end(), better);  // most relevant first
+
+    // The K - keep least relevant seeds go, but not a seed together with the twin it is redundant with: two regions of
+    // one flat area are both irrelevant, and dropping both would leave the area without a seed to be grown from. So a
+    // seed is only dropped while its twin stays (and the twin is then kept). Should that stop short of the number to
+    // drop, the rest are the least relevant that are left.
+    const std::size_t drop = K - keep;
+    std::vector<char> dropped(K, 0), pinned(K, 0);
+    std::size_t gone = 0;
+    for (std::size_t r = K; r-- > 0 && gone < drop;) {
+        const std::uint32_t s = order[r];
+        if (pinned[s] || twin[s] < 0 || dropped[std::size_t(twin[s])]) continue;
+        dropped[s] = 1;
+        pinned[std::size_t(twin[s])] = 1;
+        ++gone;
+    }
+    for (std::size_t r = K; r-- > 0 && gone < drop;) {
+        const std::uint32_t s = order[r];
+        if (dropped[s]) continue;
+        dropped[s] = 1;
+        ++gone;
+    }
+    std::vector<std::uint32_t> next;
+    next.reserve(keep);
+    for (std::uint32_t k = 0; k < K; ++k)
+        if (!dropped[k]) next.push_back(seeds[k]);  // the seeds that stay, in their old order
+    return next;
+}
+
+mat32i run_sicle(const mat32f& lab, const detail::superpixel_params& opt, int& count) {
+    const int w = lab.width(), h = lab.height();
+    const std::size_t N = std::size_t(w) * std::size_t(h);
+    const std::size_t nf = std::min<std::size_t>(std::size_t(opt.count), N);
+    const int omega = opt.iterations > 0 ? opt.iterations : 5;
+    std::size_t n0 = nf;
+    if (omega > 1 || opt.removal_rate > 0.0f) {
+        const std::size_t automatic = std::max<std::size_t>(3000, 5 * nf);
+        n0 = std::min(N, std::max(nf, opt.oversample > 0 ? std::size_t(opt.oversample) : automatic));
+    }
+    std::vector<std::uint32_t> seeds = sicle_grid(w, h, n0, nf);
+    const std::vector<std::size_t> runs = sicle_schedule(seeds.size(), nf, omega, opt.removal_rate);
+    mat32i labels = sicle_ift(lab, seeds);
+    for (std::size_t keep : runs) {
+        seeds = sicle_keep(lab, labels, seeds, keep);
+        labels = sicle_ift(lab, seeds);
+    }
+    count = relabel(labels, seeds.size());
     return labels;
 }
 
@@ -509,8 +725,8 @@ superpixel::superpixel(const mat8u& src, int count) : src_(&src) {
 }
 
 superpixel& superpixel::method(superpixel_method m) & {
-    if (m != superpixel_method::slic && m != superpixel_method::slico && m != superpixel_method::snic)
-        throw std::invalid_argument("method must be slic, slico or snic");
+    if (m != superpixel_method::slic && m != superpixel_method::slico && m != superpixel_method::snic && m != superpixel_method::sicle)
+        throw std::invalid_argument("method must be slic, slico, snic or sicle");
     p_.method = m;
     return *this;
 }
@@ -532,10 +748,27 @@ superpixel& superpixel::enforce_connectivity(bool on) & {
     return *this;
 }
 
+superpixel& superpixel::oversample(int seeds) & {
+    if (seeds < 0) throw std::invalid_argument("oversample must be >= 0");
+    p_.oversample = seeds;
+    return *this;
+}
+
+superpixel& superpixel::removal_rate(float rate) & {
+    if (!(rate >= 0.0f && rate < 1.0f)) throw std::invalid_argument("removal_rate must be in [0, 1)");
+    p_.removal_rate = rate;
+    return *this;
+}
+
 superpixel_map superpixel::run() const {
     const mat8u& src = *src_;
     const detail::superpixel_params& opt = p_;
     const mat32f lab = to_lab(src);
+    if (opt.method == superpixel_method::sicle) {
+        int regions = 0;
+        mat32i labels = run_sicle(lab, opt, regions);
+        return superpixel_map(std::move(labels), regions);
+    }
     const grid g = make_grid(src.width(), src.height(), opt.count);
     const std::vector<seed> seeds = make_seeds(lab, g);
 

@@ -69,7 +69,8 @@ bool labels_equal(const stb::superpixel_map& a, const stb::superpixel_map& b) {
            std::memcmp(a.labels().data(), b.labels().data(), a.labels().size_bytes()) == 0;
 }
 
-const stb::superpixel_method methods[] = {stb::superpixel_method::slic, stb::superpixel_method::slico, stb::superpixel_method::snic};
+const stb::superpixel_method methods[] = {stb::superpixel_method::slic, stb::superpixel_method::slico, stb::superpixel_method::snic,
+                                          stb::superpixel_method::sicle};
 
 }  // namespace
 
@@ -205,4 +206,98 @@ UTEST(libstb_superpixel_tests, test_boundaries_overlay_and_mean_color) {
     EXPECT_EQ(150, int(mean(1, 0)));  // (100 + 200) / 2
     ASSERT_THROWS(sp.mean_color(stb::image8u(3, 2, stb::pixel_format::gray)), std::invalid_argument);
     ASSERT_THROWS(sp.overlay(stb::image8u(2, 3, stb::pixel_format::gray)), std::invalid_argument);
+}
+
+// ------------------------------------------------------------------------------------------------- sicle
+
+namespace {
+
+// Pieces of known colour (a grid of 5 x 4 blocks, each its own colour) with a little noise on top; returns the picture
+// and the block of each pixel.
+stb::image8u blocks_with_noise(int w, int h, std::vector<int>& block_of) {
+    stb::image8u img(w, h, stb::pixel_format::rgb);
+    block_of.assign(std::size_t(w) * std::size_t(h), 0);
+    std::uint32_t s = 99u;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const int b = (y * 4 / h) * 5 + (x * 5 / w);
+            block_of[std::size_t(y) * std::size_t(w) + std::size_t(x)] = b;
+            const std::uint32_t hsh = std::uint32_t(b) * 2654435761u;
+            const int base[3] = {int((hsh >> 8) & 0xFF), int((hsh >> 16) & 0xFF), int((hsh >> 24) & 0xFF)};
+            for (int k = 0; k < 3; ++k) {
+                s = s * 1664525u + 1013904223u;
+                const int noise = int(s >> 29) - 3;  // -3..4
+                img(x, y, k) = std::uint8_t(std::min(255, std::max(0, base[k] + noise)));
+            }
+        }
+    return img;
+}
+
+}  // namespace
+
+UTEST(libstb_superpixel_tests, test_sicle_makes_exactly_the_number_of_regions_asked_for_and_keeps_to_the_edges) {
+    std::vector<int> block_of;
+    const stb::image8u img = blocks_with_noise(100, 80, block_of);
+    // 20 is as few regions as there are blocks: a block can be lost then, as it can with any method that drops seeds, so only
+    // the count and the connectivity are checked; from 3 times as many regions on, no block is lost
+    for (int count : {20, 60, 150}) {
+        const stb::superpixel_map sp = stb::superpixel(img, count).method(stb::superpixel_method::sicle).run();
+        EXPECT_EQ(count, sp.count());  // not "about": every seed keeps its own region
+        EXPECT_TRUE(all_connected(sp));
+        if (count < 60) continue;
+        // leakage: pixels in a region whose most common block is another block (the 20 blocks are far apart in colour)
+        std::vector<std::vector<int>> votes(std::size_t(sp.count()), std::vector<int>(20, 0));
+        for (int y = 0; y < 80; ++y)
+            for (int x = 0; x < 100; ++x) ++votes[std::size_t(sp.label(x, y))][std::size_t(block_of[std::size_t(y) * 100 + std::size_t(x)])];
+        int wrong = 0;
+        for (const std::vector<int>& v : votes) {
+            int total = 0, best = 0;
+            for (int n : v) {
+                total += n;
+                best = std::max(best, n);
+            }
+            wrong += total - best;
+        }
+        EXPECT_TRUE(wrong * 200 <= 100 * 80);  // under half a percent of the pixels are in a region of another block
+    }
+}
+
+UTEST(libstb_superpixel_tests, test_sicle_settings_oversample_iterations_and_removal_rate_all_end_at_the_count) {
+    std::vector<int> block_of;
+    const stb::image8u img = blocks_with_noise(64, 48, block_of);
+    const auto sicle = [&](int count) { return stb::superpixel(img, count).method(stb::superpixel_method::sicle); };
+    EXPECT_EQ(40, sicle(40).run().count());
+    EXPECT_EQ(40, sicle(40).oversample(500).run().count());
+    EXPECT_EQ(40, sicle(40).oversample(5).run().count());                 // below the count: raised to it
+    EXPECT_EQ(40, sicle(40).oversample(1000000).run().count());           // above the pixels: as many as there are
+    EXPECT_EQ(40, sicle(40).iterations(1).run().count());                 // a single run from 40 seeds
+    EXPECT_EQ(40, sicle(40).iterations(2).run().count());
+    EXPECT_EQ(40, sicle(40).iterations(12).run().count());
+    EXPECT_EQ(40, sicle(40).removal_rate(0.632f).run().count());         // DISF's schedule
+    EXPECT_EQ(40, sicle(40).removal_rate(0.05f).oversample(300).run().count());
+    EXPECT_EQ(64 * 48, sicle(100000).run().count());                      // more regions than pixels: a region per pixel
+    EXPECT_EQ(1, sicle(1).run().count());
+    // the settings count, and the same settings give the same map
+    EXPECT_TRUE(!labels_equal(sicle(40).iterations(1).run(), sicle(40).run()));
+    EXPECT_TRUE(labels_equal(sicle(40).oversample(500).run(), sicle(40).oversample(500).run()));
+    ASSERT_THROWS(sicle(40).oversample(-1), std::invalid_argument);
+    ASSERT_THROWS(sicle(40).removal_rate(-0.1f), std::invalid_argument);
+    ASSERT_THROWS(sicle(40).removal_rate(1.0f), std::invalid_argument);
+    ASSERT_THROWS(sicle(40).removal_rate(std::numeric_limits<float>::quiet_NaN()), std::invalid_argument);
+}
+
+UTEST(libstb_superpixel_tests, test_sicle_of_a_picture_with_two_flat_halves_splits_it_at_the_edge_as_computed_by_hand) {
+    // 8 x 1 gray: four 0 then four 255, count 2, oversample 8 (a seed on every pixel), iterations 2: the first run gives
+    // 8 regions of one pixel (sizes 1/8, contrast 0 inside a half, 255 across at the edge: the seeds at pixels 3 and 4 are the only
+    // ones whose smallest neighbour contrast... is still 0, since each has a same-colour neighbour on one side). Nothing has
+    // relevance, so the two seeds that stay are the ones the hash puts first, and in any case each half keeps its own edge:
+    // the region borders of a 2-region result never lie inside a flat half unless both seeds are in the same half.
+    stb::image8u img(8, 1, stb::pixel_format::gray);
+    for (int x = 0; x < 8; ++x) img(x, 0, 0) = x < 4 ? 0 : 255;
+    const stb::superpixel_map sp = stb::superpixel(img, 2).method(stb::superpixel_method::sicle).oversample(8).iterations(2).run();
+    ASSERT_EQ(2, sp.count());
+    EXPECT_TRUE(all_connected(sp));
+    int changes = 0;
+    for (int x = 1; x < 8; ++x) changes += sp.label(x, 0) != sp.label(x - 1, 0);
+    EXPECT_EQ(1, changes);  // one border: two connected pieces of a row
 }

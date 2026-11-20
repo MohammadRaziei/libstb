@@ -103,7 +103,11 @@ std::pair<int, int> size_of(nb::handle h) {
 stb::superpixel_method method_of(nb::handle h) {
     using stb::superpixel_method;
     return to_enum<superpixel_method>(
-        h, {{"slic", superpixel_method::slic}, {"slico", superpixel_method::slico}, {"snic", superpixel_method::snic}},
+        h,
+        {{"slic", superpixel_method::slic},
+         {"slico", superpixel_method::slico},
+         {"snic", superpixel_method::snic},
+         {"sicle", superpixel_method::sicle}},
         "method");
 }
 
@@ -1176,10 +1180,11 @@ void bind_filter(nb::module_& m) {
 
     nb::enum_<stb::superpixel_method>(m, "SuperpixelMethod",
                                       "The superpixel algorithm. Functions that take a SuperpixelMethod also take its lower-case\n"
-                                      "name: \"slic\", \"slico\" (the default) or \"snic\".")
+                                      "name: \"slic\", \"slico\" (the default), \"snic\" or \"sicle\".")
         .value("SLIC", stb::superpixel_method::slic)
         .value("SLICO", stb::superpixel_method::slico)
-        .value("SNIC", stb::superpixel_method::snic);
+        .value("SNIC", stb::superpixel_method::snic)
+        .value("SICLE", stb::superpixel_method::sicle);
 
     auto image_cls = nb::borrow<nb::class_<stb::image>>(m.attr("Image"));
 
@@ -1430,19 +1435,26 @@ void bind_filter(nb::module_& m) {
         "Cuts an Image into about `count` compact regions of similar colour. `compactness` (CIELAB units, 10 is usual,\n"
         "1 to 40 is the useful range) is how much position counts against colour: higher gives squarer regions, lower\n"
         "follows edges more closely. `method` is \"slico\" (the default; adapts the compactness per region), \"slic\" or\n"
-        "\"snic\" (one pass, no iterations); `iterations` is for slic and slico, `enforce_connectivity` merges the small\n"
-        "detached pieces slic and slico can leave. The same Image and arguments give the same SuperpixelMap on every\n"
-        "number of threads. Returns a SuperpixelMap.";
-    const auto make = [](const stb::image& img, int count, float compactness, int iterations, nb::handle method,
-                         bool enforce) {
+        "\"snic\" (one pass, no iterations) or \"sicle\" (starts from many more seeds than regions and drops the least\n"
+        "relevant ones run after run; follows edges closely and gives exactly `count` regions; `compactness` is not used).\n"
+        "`iterations` is the number of refinements of slic and slico (default 10) and the most runs of sicle (default 5);\n"
+        "`enforce_connectivity` merges the small detached pieces slic and slico can leave; `oversample` (sicle: the number\n"
+        "of seeds it starts from, 0 is automatic) and `removal_rate` (sicle: the share of the seeds dropped per run, in\n"
+        "[0, 1), 0 follows `iterations`; 0.63 is DISF) are for sicle. The same Image and arguments give the same\n"
+        "SuperpixelMap on every number of threads. Returns a SuperpixelMap.";
+    const auto make = [](const stb::image& img, int count, float compactness, std::optional<int> iterations, nb::handle method,
+                         bool enforce, int oversample, float removal_rate) {
         const stb::superpixel_method me = method_of(method);
         nb::gil_scoped_release release;
-        return stb::superpixel(img, count).method(me).compactness(compactness).iterations(iterations).enforce_connectivity(enforce).run();
+        stb::superpixel sp = std::move(stb::superpixel(img, count).method(me).compactness(compactness).enforce_connectivity(enforce)
+                                           .oversample(oversample).removal_rate(removal_rate));
+        if (iterations) sp.iterations(*iterations);  // not given: the method's own default
+        return sp.run();
     };
-    m.def("superpixels", make, "src"_a, "count"_a = 400, "compactness"_a = 10.0f, "iterations"_a = 10, "method"_a = "slico",
-          "enforce_connectivity"_a = true, sp_doc);
-    image_cls.def("superpixels", make, "count"_a = 400, "compactness"_a = 10.0f, "iterations"_a = 10, "method"_a = "slico",
-                  "enforce_connectivity"_a = true, sp_doc);
+    m.def("superpixels", make, "src"_a, "count"_a = 400, "compactness"_a = 10.0f, "iterations"_a = nb::none(), "method"_a = "slico",
+          "enforce_connectivity"_a = true, "oversample"_a = 0, "removal_rate"_a = 0.0f, sp_doc);
+    image_cls.def("superpixels", make, "count"_a = 400, "compactness"_a = 10.0f, "iterations"_a = nb::none(), "method"_a = "slico",
+                  "enforce_connectivity"_a = true, "oversample"_a = 0, "removal_rate"_a = 0.0f, sp_doc);
 
     bind_tone(m, image_cls);
     bind_image_ops(m, image_cls);

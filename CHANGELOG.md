@@ -16,6 +16,17 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
   instance shares the file bytes of the font it came from. Not applied: kerning (GPOS), `MVAR` and left side bearings stay those
   of the default instance. The tests compare every glyph with static instances that fontTools made at the same coordinates,
   and damage the tables at random under the sanitizers.
+- **SICLE superpixels** (`superpixel_method::sicle`, `stb::superpixel(img, count).method(superpixel_method::sicle)`, Python `method="sicle"`; round 2b): Superpixels through Iterative CLEarcutting (Belem, Perret, Cousty, Guimaraes and Falcao,
+  arXiv 2204.03533), written from the paper; it generalises DISF (Belem, Guimaraes and Falcao, IEEE SPL 2020), which is a setting of it (`removal_rate(0.63)`). The code of the reference implementations was not looked at (that of
+  DISF is under OSL-3.0). It starts from many more seeds than regions (on a grid whose cells have the shape of the picture), grows a region from each seed by the Image Foresting Transform (path cost `f_max`, arc cost the
+  CIELAB distance to the colour of the seed the path comes from, 4-neighbourhood so every region is 4-connected), and between runs drops the least relevant seeds (the size of the region times its smallest colour contrast with a
+  neighbouring region, the V4 criterion of the paper without an object map) until `count` are left, so the result has exactly `count` regions. Settings: `iterations` (the most runs; default 5, as in the paper), `oversample` (the number of
+  seeds; 0 is automatic, the larger of 3000 and 5 times `count`) and `removal_rate` (a share of the seeds to drop per run, DISF's schedule; 0 follows `iterations`). Two additions of ours that the paper does not have: seeds of equal
+  relevance are told apart by a fixed hash of their position (a flat area has no relevance to rank by, and raster order would strip the lower part of the picture), and a seed is only dropped while the neighbouring region closest
+  to it in colour (its twin) stays, so a flat area cannot lose all its seeds in one run. Sequential and deterministic (the same map on every number of threads). On the sample photos at 200 regions it keeps the colours inside
+  a region closer to the region's mean than `snic` and `slico` do (explained variation, a test). `compactness` and `enforce_connectivity` do not apply to it. Python's `iterations` is now `None` (the method's own default: 10 for
+  slic and slico, 5 for sicle) instead of 10. Tests: the generic superpixel tests now run on sicle too, plus exact count, connectivity, leakage on noisy flat blocks, every setting, a hand-worked two-halves case, bad arguments; Python:
+  the same and the explained-variation comparison.
 - **`warp_affine` and `warp_perspective`** (`stb/warp.hpp`, `libstb.warp_affine`, `libstb.warp_perspective`, `Image.warp_affine`, `Image.warp_perspective`; round 2b): a picture seen through a
   transform. Templates over the input type like the tone functions (`mat8u` gives `mat8u`, `image8u` gives `image8u`, `mat32f` gives `mat32f`; 1 to 4 channels, every channel sampled on its own,
   alpha included). The transform takes a source point to a point of the result in the canvas / SVG convention of `stb::matrix` (the centre of pixel (x, y) is (x + 0.5, y + 0.5), so the identity
