@@ -111,7 +111,7 @@ inline constexpr std::size_t default_max_decode_bytes = std::size_t(1) << 29;
 // The EXIF orientation (1..8, as the standard numbers them) stored in an encoded
 // JPEG or PNG, or 1 ("upright") when there is none, the format has none, or the
 // data is not readable. Never throws and never reads out of bounds, so it is safe
-// on untrusted input. Apply it with image::orient().
+// on untrusted input. Apply it with image::orient(), or let loader::exif_orient() do it while decoding.
 STB_API int exif_orientation(const void* data, std::size_t size) noexcept;
 
 // SIMD backends. libstb's own conversion and compositing loops (convert, composite, flatten, and
@@ -550,7 +550,7 @@ private:
 // Decodes an image with settings. The source is the main parameter and goes in the constructor; every other setting is a call
 // that returns the loader, so they chain in any order and run() does the work:
 //
-//     image photo = stb::loader("holiday.jpg").orient().format(pixel_format::rgb).max_bytes(1 << 26).run();
+//     image photo = stb::loader("holiday.jpg").exif_orient().format(pixel_format::rgb).max_bytes(1 << 26).run();
 //     image a = stb::loader(bytes.data(), bytes.size()).flip().run();
 //
 // A loader made from memory does not copy the bytes: they must outlive the loader (a path is copied). run() throws what
@@ -566,7 +566,7 @@ public:
     loader& flip(bool on = true) &;
     // Apply the EXIF orientation stored in the file (JPEG and PNG), so a phone photo comes out upright. The result may
     // have width and height swapped relative to image_info. Combined with flip, the orientation is applied first. Default off.
-    loader& orient(bool on = true) &;
+    loader& exif_orient(bool on = true) &;
     // Refuse to decode anything whose output would exceed this many bytes. Checked from the header BEFORE any pixel
     // memory is allocated. Default default_max_decode_bytes (512 MiB).
     loader& max_bytes(std::size_t bytes) &;
@@ -574,7 +574,7 @@ public:
     // The same on a temporary, so that a chain starting from the constructor works.
     loader&& format(pixel_format f) && { format(f); return std::move(*this); }
     loader&& flip(bool on = true) && { flip(on); return std::move(*this); }
-    loader&& orient(bool on = true) && { orient(on); return std::move(*this); }
+    loader&& exif_orient(bool on = true) && { exif_orient(on); return std::move(*this); }
     loader&& max_bytes(std::size_t bytes) && { max_bytes(bytes); return std::move(*this); }
 
     // Does the work; can be called again.
@@ -587,7 +587,7 @@ private:
     bool from_file_ = false;
     std::optional<pixel_format> format_;
     bool flip_ = false;
-    bool orient_ = false;
+    bool exif_orient_ = false;
     std::size_t max_bytes_ = default_max_decode_bytes;
 };
 

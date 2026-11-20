@@ -27,7 +27,7 @@ No system libraries and no Python dependencies.
 ```python
 import libstb as stb
 
-img = stb.Image.open("photo.jpg")                  # PNG, JPEG, BMP, TGA, GIF, ... or bytes
+img = stb.Image.open("photo.jpg")                  # PNG, JPEG, BMP, TGA, GIF, ... (stb.Image.decode(data) for bytes)
 img.resize(320, 240, "cubic").write("small.png")   # the format comes from the extension
 ```
 
@@ -125,7 +125,7 @@ import libstb as stb
 info = stb.iminfo("photo.jpg")                      # header only: no pixel is decoded
 print(info.width, info.height, info.format)
 
-img = stb.Image.open("photo.jpg", orient=True)      # apply the EXIF rotation while decoding
+img = stb.Image.open("photo.jpg", exif_orient=True)      # apply the EXIF rotation while decoding
 img.resize(320, 240, "mitchell").write("small.png")           # the format comes from the extension
 img.thumbnail(256, 256).write_jpg("thumb.jpg", quality=80)    # fits the box, never enlarges
 ```
@@ -136,7 +136,7 @@ img.thumbnail(256, 256).write_jpg("thumb.jpg", quality=80)    # fits the box, ne
 const stb::image_info info = stb::image_info::read_file("photo.jpg");   // header only: no pixel is decoded
 std::cout << info.width << "x" << info.height << "\n";
 
-stb::image img = stb::loader("photo.jpg").orient().run();   // orient(): apply the EXIF rotation while decoding
+stb::image img = stb::loader("photo.jpg").exif_orient().run();   // exif_orient(): apply the EXIF rotation while decoding
 
 img.resize(320, 240, "mitchell").write("small.png");  // the format comes from the extension
 img.thumbnail(256, 256).write_jpg("thumb.jpg", 80);   // fits the box, never enlarges
@@ -156,7 +156,7 @@ import libstb as stb
 
 Path("thumbs").mkdir(exist_ok=True)
 for path in Path("photos").glob("*.jpg"):
-    thumb = stb.Image.open(path, orient=True).thumbnail(256, 256)
+    thumb = stb.Image.open(path, exif_orient=True).thumbnail(256, 256)
     thumb.write(f"thumbs/{path.stem}.png")
 ```
 
@@ -363,7 +363,7 @@ import libstb as stb
 
 data = Path("photo.jpg").read_bytes()               # say, an upload from a user
 try:
-    img = stb.Image.open(data, max_bytes=64 << 20)  # the size limit is checked from the header, before any pixel memory
+    img = stb.Image.decode(data, max_bytes=64 << 20)  # the size limit is checked from the header, before any pixel memory
 except stb.LimitError:
     print("too big")
 except stb.DecodeError:

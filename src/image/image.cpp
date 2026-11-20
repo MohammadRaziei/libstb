@@ -78,7 +78,7 @@ pixel_format pixel_format_from_name(std::string_view name) {
 namespace {
 
 // The decode of image::decode and loader::run.
-image decode_with(const void* data, std::size_t size, std::optional<pixel_format> format, bool flip, bool orient, std::size_t max_bytes) {
+image decode_with(const void* data, std::size_t size, std::optional<pixel_format> format, bool flip, bool exif_orient, std::size_t max_bytes) {
     // Size check from the header alone: no pixel memory is allocated for a
     // hostile "60000x60000" file. width/height are <= 1<<16 and channels <= 4,
     // so the uint64 product cannot overflow.
@@ -88,9 +88,9 @@ image decode_with(const void* data, std::size_t size, std::optional<pixel_format
     if (bytes > max_bytes)
         throw limit_error(sformat("image too large: %dx%dx%d exceeds max_bytes", hdr.width, hdr.height, want));
 
-    // With orient, a flip is done after the orientation (a vertical flip commutes with
+    // With exif_orient, a flip is done after the orientation (a vertical flip commutes with
     // nothing else): stb flips only when no orientation has to be applied.
-    const int orientation = orient ? exif_orientation(data, size) : 1;
+    const int orientation = exif_orient ? exif_orientation(data, size) : 1;
     const bool stb_flips = flip && orientation == 1;
 
     codec::decoded d = codec::decode(static_cast<const std::uint8_t*>(data), size, format ? channel_count(*format) : 0, stb_flips);
@@ -133,8 +133,8 @@ loader& loader::flip(bool on) & {
     return *this;
 }
 
-loader& loader::orient(bool on) & {
-    orient_ = on;
+loader& loader::exif_orient(bool on) & {
+    exif_orient_ = on;
     return *this;
 }
 
@@ -146,9 +146,9 @@ loader& loader::max_bytes(std::size_t bytes) & {
 image loader::run() const {
     if (from_file_) {
         const auto bytes = detail::read_file(path_);
-        return decode_with(bytes.data(), bytes.size(), format_, flip_, orient_, max_bytes_);
+        return decode_with(bytes.data(), bytes.size(), format_, flip_, exif_orient_, max_bytes_);
     }
-    return decode_with(data_, size_, format_, flip_, orient_, max_bytes_);
+    return decode_with(data_, size_, format_, flip_, exif_orient_, max_bytes_);
 }
 
 // ------------------------------------------------------------------ to_*

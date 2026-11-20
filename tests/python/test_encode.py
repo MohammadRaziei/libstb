@@ -17,24 +17,24 @@ def test_png_roundtrip_is_lossless(c):
     src = Image(gradient(13, 7, c))
     data = src.to_png()
     assert isinstance(data, bytes) and data[:4] == b"\x89PNG"
-    np.testing.assert_array_equal(Image.open(data).numpy(), src.numpy())
+    np.testing.assert_array_equal(Image.decode(data).numpy(), src.numpy())
 
 
 def test_png_compression_levels_all_roundtrip():
     src = Image(gradient(32, 32, 3))
     for level in range(1, 10):
-        np.testing.assert_array_equal(Image.open(src.to_png(level)).numpy(), src.numpy())
-        np.testing.assert_array_equal(Image.open(src.to_png(compression=level)).numpy(), src.numpy())
+        np.testing.assert_array_equal(Image.decode(src.to_png(level)).numpy(), src.numpy())
+        np.testing.assert_array_equal(Image.decode(src.to_png(compression=level)).numpy(), src.numpy())
 
 
 def test_bmp_and_tga_roundtrip():
     src = Image(gradient(9, 5, 3))
     data = src.to_bmp()
     assert data[:2] == b"BM"
-    np.testing.assert_array_equal(Image.open(data).numpy(), src.numpy())
+    np.testing.assert_array_equal(Image.decode(data).numpy(), src.numpy())
     for rle in (True, False):
-        np.testing.assert_array_equal(Image.open(src.to_tga(rle)).numpy(), src.numpy())
-        np.testing.assert_array_equal(Image.open(src.to_tga(rle=rle)).numpy(), src.numpy())
+        np.testing.assert_array_equal(Image.decode(src.to_tga(rle)).numpy(), src.numpy())
+        np.testing.assert_array_equal(Image.decode(src.to_tga(rle=rle)).numpy(), src.numpy())
 
 
 def test_tga_rle_shrinks_flat_images():
@@ -46,7 +46,7 @@ def test_jpg_roundtrip_is_close_and_quality_matters():
     flat = Image(np.full((16, 16, 3), 128, np.uint8))
     data = flat.to_jpg(95)
     assert data[:2] == b"\xff\xd8"
-    out = Image.open(data).numpy()
+    out = Image.decode(data).numpy()
     assert out.shape == (16, 16, 3)
     assert np.abs(out.astype(int) - 128).max() <= 4
     busy = Image(gradient(64, 64, 3))
@@ -124,7 +124,7 @@ def test_the_encoder_classes_are_gone():
 def test_encoding_accepts_non_contiguous_arrays():
     arr = gradient(8, 6, 3)
     flipped = Image(arr[::-1])  # negative strides
-    np.testing.assert_array_equal(Image.open(flipped.to_png()).numpy(), arr[::-1])
+    np.testing.assert_array_equal(Image.decode(flipped.to_png()).numpy(), arr[::-1])
 
 
 def test_concurrent_encoding_with_different_settings():
@@ -134,7 +134,7 @@ def test_concurrent_encoding_with_different_settings():
     def work(t):
         for _ in range(100):
             for data in (src.to_png(1 if t % 2 else 9), src.to_tga(t % 2 == 0)):
-                if not np.array_equal(Image.open(data).numpy(), src.numpy()):
+                if not np.array_equal(Image.decode(data).numpy(), src.numpy()):
                     errors.append(t)
                     return
 

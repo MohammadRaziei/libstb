@@ -23,7 +23,7 @@ def test_import_and_core_api_work_without_numpy():
         img = stb.Image(memoryview(raw).cast("B", shape=[2, 4, 3]))   # any buffer, no numpy
         assert img.shape == (2, 4, 3)
         png = img.to_png()
-        assert stb.Image.open(png).shape == (2, 4, 3)
+        assert stb.Image.decode(png).shape == (2, 4, 3)
         assert stb.iminfo(png) == (4, 2, stb.PixelFormat.RGB)
         assert img.resize(2, 1).shape == (1, 2, 3)
         assert len(img.to_jpg()) > 0
@@ -84,7 +84,7 @@ def test_buffer_view_is_zero_copy_and_keeps_the_image_alive():
     a = np.asarray(img)                         # numpy reads the buffer: still no copy
     assert np.shares_memory(a, src)
 
-    opened = stb.Image.open(stb.Image(src).to_png())
+    opened = stb.Image.decode(stb.Image(src).to_png())
     view = memoryview(opened)
     expected = opened.tobytes()
     del opened

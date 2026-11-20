@@ -8,7 +8,7 @@ from test_image import EXPECTED, RGB
 
 
 def test_open_bytes_and_properties():
-    img = Image.open(RGB)
+    img = Image.decode(RGB)
     assert (img.width, img.height, img.channels) == (2, 2, 3)
     assert img.shape == (2, 2, 3)
     assert img.format == stb.PixelFormat.RGB
@@ -25,16 +25,16 @@ def test_open_path(tmp_path):
 
 
 def test_open_options():
-    assert Image.open(RGB, format=stb.PixelFormat.RGBA).channels == 4
-    np.testing.assert_array_equal(Image.open(RGB, flip=True).numpy(), EXPECTED[::-1])
+    assert Image.decode(RGB, format=stb.PixelFormat.RGBA).channels == 4
+    np.testing.assert_array_equal(Image.decode(RGB, flip=True).numpy(), EXPECTED[::-1])
     with pytest.raises(stb.LimitError, match="too large"):
-        Image.open(RGB, max_bytes=1)
+        Image.decode(RGB, max_bytes=1)
     with pytest.raises(ValueError):
-        Image.open(RGB, format="cmyk")
+        Image.decode(RGB, format="cmyk")
 
 
 def test_numpy_interop():
-    img = Image.open(RGB)
+    img = Image.decode(RGB)
     np.testing.assert_array_equal(np.asarray(img), EXPECTED)
     assert np.shares_memory(np.asarray(img), img.numpy())  # no copy by default
     assert not np.shares_memory(np.array(img, copy=True), img.numpy())
@@ -59,11 +59,11 @@ def test_image_info_class():
 
 
 def test_functional_shortcuts_match_object_api():
-    np.testing.assert_array_equal(stb.imread(RGB, flip=True), Image.open(RGB, flip=True).numpy())
+    np.testing.assert_array_equal(stb.imread(RGB, flip=True), Image.decode(RGB, flip=True).numpy())
 
 
 def test_numpy_method():
-    img = Image.open(RGB)
+    img = Image.decode(RGB)
     assert np.shares_memory(img.numpy(), img.numpy())      # view by default
     assert not np.shares_memory(img.numpy(copy=True), img.numpy())
     np.testing.assert_array_equal(img.numpy(copy=True), EXPECTED)
@@ -74,10 +74,10 @@ def test_numpy_method():
 def test_array_is_a_writable_view_that_keeps_the_image_alive():
     import gc
 
-    a = Image.open(RGB).numpy()  # the Image object is gone; the view must still be valid
+    a = Image.decode(RGB).numpy()  # the Image object is gone; the view must still be valid
     gc.collect()
     np.testing.assert_array_equal(a, EXPECTED)
-    img = Image.open(RGB)
+    img = Image.decode(RGB)
     img.numpy()[0, 0, 0] = 7  # writes through to the image
     assert img.numpy()[0, 0, 0] == 7
 
@@ -138,7 +138,7 @@ def test_copy_is_explicit_and_independent():
 
 
 def test_decoded_images_own_their_pixels_and_copy_detaches():
-    img = Image.open(RGB)
+    img = Image.decode(RGB)
     dup = img.copy()
     dup.numpy()[0, 0, 0] = 0
     np.testing.assert_array_equal(img.numpy(), EXPECTED)
@@ -154,10 +154,12 @@ def test_writes_from_a_viewing_image_reach_the_array(tmp_path):
     assert img.resize(2, 2).numpy().shape == (2, 2, 3)
 
 
-def test_open_sources_bytes_bytearray_memoryview_ndarray_and_paths(tmp_path):
+def test_open_takes_paths_and_decode_takes_bytes_bytearray_memoryview_ndarray(tmp_path):
     p = tmp_path / "x.png"
     p.write_bytes(RGB)
-    for src in (RGB, bytearray(RGB), memoryview(RGB), np.frombuffer(RGB, np.uint8), p, str(p)):
+    for src in (RGB, bytearray(RGB), memoryview(RGB), np.frombuffer(RGB, np.uint8)):
+        np.testing.assert_array_equal(Image.decode(src).numpy(), EXPECTED)
+    for src in (p, str(p)):
         np.testing.assert_array_equal(Image.open(src).numpy(), EXPECTED)
 
 

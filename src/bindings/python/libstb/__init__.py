@@ -38,7 +38,7 @@ from .font import (Atlas, AtlasGlyph, DesignMetrics, Font, FontAxis, FontFaceInf
                    ShapedGlyph, SystemFont, TextSize, estimate_metrics, estimate_text)
 from .compress import DEFAULT_ZLIB_LEVEL, DEFAULT_ZLIB_MAX_BYTES, zlib_compress, zlib_decompress
 from .libstb_py import (Align, BlendMode, PremultipliedImage, CompositeOp, Canvas, CanvasImage, CanvasOutline, CanvasShape, CanvasText, DecodeError, EncodeError,
-                        Error, LimitError, Matrix, Outline, Resizer)
+                        Error, LimitError, Loader, Matrix, Outline, Resizer)
 from .libstb_py import exif_orientation_bytes as _native_exif_orientation
 from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
 from .libstb_py import logging_bridge, set_threads, thread_count
@@ -88,23 +88,22 @@ def iminfo(source):
 def exif_orientation(source):
     """The EXIF orientation (1..8) stored in a JPEG or PNG, or 1 (upright) if there is
     none. `source` is a path or the encoded bytes. Apply it with Image.orient(), or let
-    Image.open(..., orient=True) / imread(..., orient=True) do it while decoding.
+    Image.open(..., exif_orient=True) / imread(..., exif_orient=True) do it while decoding.
     """
     from .image import _read
 
     return _native_exif_orientation(_read(source))
 
 
-def imread(source, *, format=None, flip=False, max_bytes=DEFAULT_MAX_BYTES, orient=False):
+def imread(source, *, format=None, flip=False, max_bytes=DEFAULT_MAX_BYTES, exif_orient=False):
     """Decode an image file (path) or encoded bytes straight to a uint8 ndarray
     of shape (height, width, channels). Needs numpy; use Image.open without it.
 
-    Same options as Image.open: format (None keeps the file's), flip, max_bytes, orient
-    (apply the EXIF orientation).
+    Same settings as Image.open: format (None keeps the file's), flip, max_bytes, exif_orient
+    (apply the EXIF orientation). `source` is a path (Image.open) or bytes-like (Image.decode).
     """
-    return Image.open(
-        source, format=format, flip=flip, max_bytes=max_bytes, orient=orient
-    ).numpy()
+    load = Image.decode if isinstance(source, (bytes, bytearray, memoryview)) else Image.open
+    return load(source, format=format, flip=flip, max_bytes=max_bytes, exif_orient=exif_orient).numpy()
 
 
 def imresize(array, width, height, resizer=None):
@@ -177,7 +176,7 @@ def get_cmake_dir():
 
 
 __all__ = [
-    "Image", "PremultipliedImage", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "logging_bridge", "imresize",
+    "Image", "Loader", "PremultipliedImage", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "exif_orientation", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "logging_bridge", "imresize",
     "Resizer",
     "EdgeMode", "SuperpixelMethod", "SuperpixelMap", "gaussian_blur", "box_blur", "convolve", "gaussian_kernel", "sobel", "magnitude", "superpixels", "to_f32", "to_8u",
     "ToneMode", "histogram", "equalize", "auto_contrast", "clahe", "match_histogram", "gamma", "levels", "gamma_lut", "levels_lut", "apply_lut",

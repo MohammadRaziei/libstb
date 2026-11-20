@@ -70,7 +70,7 @@ def test_an_image_reads_a_pillow_image_directly(c):
     img = stb.Image(pil)
     assert (img.width, img.height, img.channels) == (7, 5, c)
     np.testing.assert_array_equal(img.numpy(), a)
-    np.testing.assert_array_equal(stb.Image.open(img.to_png()).numpy(), a)
+    np.testing.assert_array_equal(stb.Image.decode(img.to_png()).numpy(), a)
 
 
 @pytest.mark.parametrize("mode", ["1", "I;16", "I", "F"])

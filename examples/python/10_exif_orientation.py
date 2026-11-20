@@ -51,20 +51,20 @@ print("no tag           :", stb.exif_orientation(upright.to_png()), "(1 means up
 raw = stb.imread(photo)
 print("stored size      :", raw.shape[1], "x", raw.shape[0])
 
-# ... and orient=True gives the picture the way it was meant to be seen.
-fixed = stb.imread(photo, orient=True)
+# ... and exif_orient=True gives the picture the way it was meant to be seen.
+fixed = stb.imread(photo, exif_orient=True)
 print("orient=True      :", fixed.shape[1], "x", fixed.shape[0], "| upright again:",
       np.array_equal(fixed, upright.numpy()))
 
 # 3. Or do it in two steps, to look at the tag first. Works on any Image.
 turn = stb.exif_orientation(photo)
-img = stb.Image.open(photo).orient(turn)
+img = stb.Image.decode(photo).orient(turn)
 print("open + orient    :", img.width, "x", img.height)
 
-# 4. orient=True works for JPEG too, and combines with flip=True (the flip comes last).
-jpg = stb.Image.open(OUT / "photo_orientation6.jpg", orient=True)
+# 4. exif_orient=True works for JPEG too, and combines with flip=True (the flip comes last).
+jpg = stb.Image.open(OUT / "photo_orientation6.jpg", exif_orient=True)
 print("jpeg             :", jpg.width, "x", jpg.height)
-flipped = stb.imread(photo, orient=True, flip=True)
+flipped = stb.imread(photo, exif_orient=True, flip=True)
 print("orient + flip    :", np.array_equal(flipped, fixed[::-1]))
 
 # 5. All eight values: the same stored picture seen with each tag.

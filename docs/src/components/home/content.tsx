@@ -27,7 +27,7 @@ export const START: Record<string, Start> = {
       title: 'python',
       code: `import libstb as stb
 
-img = stb.Image.open("photo.jpg", orient=True)      # apply the EXIF orientation
+img = stb.Image.open("photo.jpg", exif_orient=True)      # apply the EXIF orientation
 small = img.resize(320, 240, "cubic")               # filter by name
 gray = small.convert(1)                             # editing returns a new Image
 gray.write("photo_gray.png")                        # format from the extension

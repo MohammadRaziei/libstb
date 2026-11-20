@@ -199,12 +199,30 @@ stb::pixel_format to_format(nb::handle h) {
     throw nb::type_error("format must be a PixelFormat or one of 'gray', 'gray_alpha', 'rgb', 'rgba'");
 }
 
-// The settings of Image.open() as a loader's: the format is read here, with the GIL.
+// The settings of Image.open(), Image.decode() and Loader as a loader's: the format is read here, with the GIL.
 template <class Loader>
-Loader&& apply_settings(Loader&& l, nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
+Loader&& apply_settings(Loader&& l, nb::handle format, bool flip, std::size_t max_bytes, bool exif_orient) {
     if (!format.is_none()) l.format(to_format(format));
-    return std::move(l.flip(flip).orient(orient).max_bytes(max_bytes));
+    return std::move(l.flip(flip).exif_orient(exif_orient).max_bytes(max_bytes));
 }
+
+// A file path given as str or os.PathLike. Needs the GIL.
+std::filesystem::path path_of(nb::handle source) {
+    std::filesystem::path p;
+    if (!nb::try_cast(source, p, /*convert=*/true))
+        throw nb::type_error("source must be a path (str or os.PathLike)");
+    return p;
+}
+
+// stb::loader as libstb.Loader. A loader made from memory does not copy the bytes, so this keeps the
+// buffer next to it: the ndarray holds the buffer export, which stops a bytearray from being resized
+// under the loader, and keeps the object alive.
+struct py_loader {
+    std::optional<bytes_in> bytes;
+    stb::loader ld;
+    explicit py_loader(std::filesystem::path path) : ld(std::move(path)) {}
+    explicit py_loader(bytes_in b) : bytes(std::move(b)), ld(bytes->data(), bytes->size()) {}
+};
 
 // Buffer protocol: memoryview(img) is a writable 3-D (height, width, channels)
 // uint8 view of the pixels, no copy, no numpy. The view holds a reference to the
@@ -499,7 +517,7 @@ void bind_image(nb::module_& m) {
                       "C-contiguous array is used in place, not copied (the image and the array then\n"
                       "share their pixels); any other array (read-only, strided) is copied. Call\n"
                       "img.copy() for an independent image.\n"
-                      "Image.open(source) decodes a path or encoded bytes. memoryview(img) is a no-copy\n"
+                      "Image.open(path) decodes a file and Image.decode(data) encoded bytes. memoryview(img) is a no-copy\n"
                       "3-D view of the pixels; `.numpy()` is the same as a numpy ndarray (needs numpy).")
         .def(
             "__init__", [](image* self, nb::handle array) { new (self) image(image_from_array(array)); },
@@ -511,35 +529,42 @@ void bind_image(nb::module_& m) {
         .def("__copy__", &image::copy, release())
         .def("__deepcopy__", [](const image& i, nb::handle) { return i.copy(); }, "memo"_a)
 
-        // --- decoding: open(bytes-like | path, *, format, flip, max_bytes) ---
+        // --- decoding: open(path, *, ...) and decode(bytes-like, *, ...) ---
         // The format is read (needs the GIL) before the decode, which runs without it.
         .def_static(
             "open",
-            [](const bytes_in& data, nb::handle format, bool flip, std::size_t max_bytes, bool orient) {
-                const stb::loader ld = apply_settings(stb::loader(data.data(), data.size()), format, flip, max_bytes, orient);
+            [](nb::handle source, nb::handle format, bool flip, std::size_t max_bytes, bool exif_orient) {
+                // bytes, bytearray, memoryview, an array: the encoded image itself, not a path.
+                if (PyObject_CheckBuffer(source.ptr()))
+                    throw nb::type_error("Image.open takes a path (str or os.PathLike); for encoded bytes use Image.decode");
+                const stb::loader ld = apply_settings(stb::loader(path_of(source)), format, flip, max_bytes, exif_orient);
                 nb::gil_scoped_release unlock;
                 return ld.run();
             },
             "source"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
-            "max_bytes"_a = stb::default_max_decode_bytes, "orient"_a = false,
-            "Decode an image from encoded bytes (bytes, bytearray, memoryview) or from a file path.\n\n"
-            "format    : None keeps the file's format; a PixelFormat (or its name) converts.\n"
-            "flip      : flip vertically while decoding.\n"
-            "orient    : apply the EXIF orientation of a JPEG or PNG, so a phone photo comes out\n"
-            "            upright (width and height may swap; a flip is applied after it).\n"
-            "max_bytes : refuse images whose decoded size would exceed this (checked from the\n"
-            "            header, before any pixel allocation).\n\n"
-            "Raises ValueError (bad arguments), DecodeError, LimitError, OSError (unreadable file).")
+            "max_bytes"_a = stb::default_max_decode_bytes, "exif_orient"_a = false,
+            "Decode an image from a file path (str or os.PathLike). For encoded bytes use Image.decode.\n\n"
+            "format      : None keeps the file's format; a PixelFormat (or its name) converts.\n"
+            "flip        : flip vertically while decoding.\n"
+            "exif_orient : apply the EXIF orientation of a JPEG or PNG, so a phone photo comes out\n"
+            "              upright (width and height may swap; a flip is applied after it).\n"
+            "max_bytes   : refuse images whose decoded size would exceed this (checked from the\n"
+            "              header, before any pixel allocation).\n\n"
+            "The same settings as Loader(source).format(..).flip(..).exif_orient(..).max_bytes(..).run().\n"
+            "Raises TypeError (not a path), ValueError (bad arguments), DecodeError, LimitError,\n"
+            "OSError (unreadable file).")
         .def_static(
-            "open",
-            [](const std::filesystem::path& path, nb::handle format, bool flip, std::size_t max_bytes,
-               bool orient) {
-                const stb::loader ld = apply_settings(stb::loader(path), format, flip, max_bytes, orient);
+            "decode",
+            [](const bytes_in& data, nb::handle format, bool flip, std::size_t max_bytes, bool exif_orient) {
+                const stb::loader ld = apply_settings(stb::loader(data.data(), data.size()), format, flip, max_bytes, exif_orient);
                 nb::gil_scoped_release unlock;
                 return ld.run();
             },
-            "source"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
-            "max_bytes"_a = stb::default_max_decode_bytes, "orient"_a = false)
+            "data"_a, nb::kw_only(), "format"_a = nb::none(), "flip"_a = false,
+            "max_bytes"_a = stb::default_max_decode_bytes, "exif_orient"_a = false,
+            "Decode an image from encoded bytes (bytes, bytearray, memoryview). For a file use Image.open.\n\n"
+            "The settings are those of Image.open.\n"
+            "Raises TypeError (not bytes-like), ValueError (bad arguments), DecodeError, LimitError.")
 
         // --- DLPack import: Image.from_dlpack(x), the mirror of np.from_dlpack(img) ---
         .def_static(
@@ -861,4 +886,59 @@ void bind_image(nb::module_& m) {
         .def("__repr__", [](const stb::premultiplied_image& p) {
             return stb::sformat("PremultipliedImage(width=%d, height=%d)", p.width(), p.height());
         });
+
+    // Decoding with settings: the source goes in the constructor, every other setting is a call that
+    // returns the loader, and run() does the work (and can be called again).
+    nb::class_<py_loader>(
+        m, "Loader",
+        "Decodes an image with settings. The source (a path, or encoded bytes) goes in the constructor;\n"
+        "every other setting is a call that returns the loader, so they chain, and run() decodes:\n\n"
+        "    photo = Loader(\"holiday.jpg\").exif_orient().format(\"rgb\").max_bytes(1 << 26).run()\n\n"
+        "A loader made from bytes keeps them alive (and a bytearray cannot be resized meanwhile).\n"
+        "Image.open(path) and Image.decode(data) are the same with the settings as keyword arguments.")
+        .def(
+            "__init__",
+            [](py_loader* self, nb::handle source) {
+                bytes_in b;
+                if (nb::try_cast(source, b, /*convert=*/false)) new (self) py_loader(std::move(b));
+                else new (self) py_loader(path_of(source));
+            },
+            "source"_a,
+            "source is a path (str or os.PathLike) or the encoded bytes (bytes, bytearray, memoryview).\n"
+            "Raises TypeError for anything else.")
+        .def(
+            "format",
+            [](py_loader& self, nb::handle format) -> py_loader& {
+                self.ld.format(to_format(format));
+                return self;
+            },
+            "format"_a, nb::rv_policy::none, "Convert to this PixelFormat (or its name). Default: keep the file's.")
+        .def(
+            "flip",
+            [](py_loader& self, bool on) -> py_loader& {
+                self.ld.flip(on);
+                return self;
+            },
+            "on"_a = true, nb::rv_policy::none, "Flip vertically while decoding. Default off.")
+        .def(
+            "exif_orient",
+            [](py_loader& self, bool on) -> py_loader& {
+                self.ld.exif_orient(on);
+                return self;
+            },
+            "on"_a = true, nb::rv_policy::none,
+            "Apply the EXIF orientation of a JPEG or PNG, so a phone photo comes out upright. Width and height\n"
+            "may swap; with flip, the orientation is applied first. Default off.")
+        .def(
+            "max_bytes",
+            [](py_loader& self, std::size_t bytes) -> py_loader& {
+                self.ld.max_bytes(bytes);
+                return self;
+            },
+            "bytes"_a, nb::rv_policy::none,
+            "Refuse images whose decoded size would exceed this (checked from the header, before any pixel\n"
+            "allocation). Default DEFAULT_MAX_BYTES.")
+        .def(
+            "run", [](const py_loader& self) { return self.ld.run(); }, release(),
+            "Decode. Raises ValueError, DecodeError, LimitError, OSError (unreadable file).");
 }

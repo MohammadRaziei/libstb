@@ -26,7 +26,7 @@ def fake_png(width, height):
 def try_open(what, data, **options):
     """Image.open of a file's bytes: what happened is an exception you can name."""
     try:
-        img = stb.Image.open(data, **options)
+        img = stb.Image.decode(data, **options)
         print(f"{what}: decoded {img.width}x{img.height}")
     except stb.LimitError as e:
         print(f"{what}: LimitError ({e})")

@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
         std::cout << info.width << "x" << info.height << " " << stb::pixel_format_name(info.format) << '\n';
 
         // 2. Load. The source goes in the constructor, the settings are calls: here, upright (EXIF) and always RGB.
-        stb::image photo = stb::loader(photo_path).orient().format(stb::pixel_format::rgb).run();
+        stb::image photo = stb::loader(photo_path).exif_orient().format(stb::pixel_format::rgb).run();
 
         // 3. Geometry: every call returns a new image. A temporary is moved, not copied.
         stb::image turned = photo.rotate90(1);                // 1 quarter turn counter-clockwise

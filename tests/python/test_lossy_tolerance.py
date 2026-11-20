@@ -86,7 +86,7 @@ def test_jpeg_decode_agrees_with_libjpeg(c, subsampling, quality):
     buf = io.BytesIO()
     pil_image(photo(97, 131, c, seed=2)).save(buf, "JPEG", quality=quality, subsampling=subsampling)
     data = buf.getvalue()
-    mine, ref = Image.open(data).numpy().astype(int), pil_array(data)
+    mine, ref = Image.decode(data).numpy().astype(int), pil_array(data)
     assert mine.shape == ref.shape
     assert nmae(mine, ref) <= JPEG_NMAE
     assert np.abs(mine - ref).max() <= JPEG_MAX_DIFF

@@ -109,7 +109,7 @@ def _info_one(path: str, as_json: bool) -> None:
 
 
 def _convert(a: argparse.Namespace) -> None:
-    img = Image.open(a.src, format=a.pixel_format, orient=a.orient)
+    img = Image.open(a.src, format=a.pixel_format, exif_orient=a.orient)
     if a.resize is not None:
         w, h = a.resize
         if w is None:

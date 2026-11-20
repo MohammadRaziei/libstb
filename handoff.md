@@ -2,7 +2,14 @@
 
 تاریخ: 2026-11-17. این بخش خلاصه‌ی خودکفا برای چت بعدی است؛ زیرش جزئیات هر دور (جدیدترین اول) و تاریخچه‌ی قدیمی‌تر است.
 
-## ۰. آخرین کار: فونت variable (2026-11-18)
+## ۰. آخرین کار: یکی‌کردن open/decode/loader بین C++ و Python (2026-11-20)
+
+- **C++**: `loader::orient()` شد `loader::exif_orient()` (`image::orient(int)` همان ماند: عدد EXIF را می‌گیرد). `image::open(path)` و `image::decode(data, size)` ماندند.
+- **Python**: `Image.open(path)` فقط مسیر می‌گیرد (با bytes، `TypeError` که می‌گوید `Image.decode`)؛ `Image.decode(data)` جدید است؛ کلاس `Loader` (همان زنجیره‌ی C++: `format`, `flip`, `exif_orient`, `max_bytes`, `run`) به `stb::loader` وصل شد و بافر bytes را نگه می‌دارد؛ کلیدواژه‌ی `orient=` در `open`/`decode`/`imread` شد `exif_orient=`. هیچ alias قدیمی نگه داشته نشد (کاربر گفت سازگاری مهم نیست، فقط خودش استفاده می‌کند).
+- فلگ CLI `libstb convert --orient` عمداً دست نخورد (اگر خواستید، `--exif-orient`).
+- تست: `tests/python/test_loader.py` (جدید)؛ gate: C++ 746 تست، Python 1880 پاس و 16 skip، بدون warning؛ ساخت با CMake (`build_python`، `stb_test_cpp`، `STB_BUILD_EXAMPLES=ON`).
+
+## ۰ب. کار قبلی: فونت variable (2026-11-18)
 
 `font::axes()`، `with_variation(tag, value)`، `with_weight(weight)` و `font_face_info::weight_min/weight_max` (پایتون: `Font.axes`، `with_variation`، `with_weight`، `FontAxis`). کد در `src/font/truetype/variation.cpp`: `fvar`، `avar`، `gvar` (با IUP) و `HVAR` (یا نقاط فانتوم `gvar`). `face` فقط نمای بایت‌ها را نگه می‌دارد، پس نمونه‌ی جدید با `impl::base` بایت‌های فونت اصلی را زنده نگه می‌دارد. تست: `tests/cpp/test_font_variable.cpp` (هر glyph در برابر نمونه‌های static ی fontTools، به‌علاوه‌ی تست جدول خراب) و `tests/python/test_font_variable.py`؛ فونت‌ها subset ی Open Sans (OFL) در `tests/data`. نتیجه: 743 تست C++ و 1853 تست Python پاس، ASAN/UBSAN روی 101 تست فونت سبز (کل مجموعه زیر sanitizer اجرا نشد).
 اعمال نمی‌شود: kerning (GPOS)، `MVAR`، left side bearing، CFF2. advance ی `.notdef` در فایل `instancer` با HVAR نمی‌خواند: مرجع‌ها از HVAR ی خود فونت (fontTools `getGlyphSet(location=...)`) تصحیح شده‌اند.

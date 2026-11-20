@@ -118,7 +118,7 @@ def test_the_library_logs_its_calls_at_debug_under_its_areas(caplog):
     img = stb.Image(np.zeros((6, 8, 3), np.uint8))
     with caplog.at_level(logging.DEBUG, logger="libstb"):
         png = img.to_png()
-        back = stb.Image.open(png)
+        back = stb.Image.decode(png)
         back.resize(4, 3)
         stb.zlib_decompress(stb.zlib_compress(png))
     names = [r.name for r in caplog.records if r.name.startswith("libstb")]
@@ -132,7 +132,7 @@ def test_the_library_says_nothing_at_the_default_level(caplog):
 
     with caplog.at_level(logging.WARNING, logger="libstb"):
         img = stb.Image(np.zeros((6, 8, 3), np.uint8))
-        stb.Image.open(img.to_png()).resize(4, 3)
+        stb.Image.decode(img.to_png()).resize(4, 3)
     assert [r for r in caplog.records if r.name.startswith("libstb")] == []
 
 

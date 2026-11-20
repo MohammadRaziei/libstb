@@ -11,7 +11,7 @@ filters, errors, design notes, source layout, and build and test. The short vers
 import numpy as np
 import libstb as stb
 
-img = stb.Image.open("photo.png")                   # or bytes; also: format=stb.PixelFormat.RGBA, flip=True
+img = stb.Image.open("photo.png")                   # bytes: stb.Image.decode(data); also: format=stb.PixelFormat.RGBA, flip=True
 img.width, img.height, img.channels                 # 640, 480, 3
 img.numpy()                                         # uint8 pixels (H, W, C), no copy; np.asarray(img) works too
 np.from_dlpack(img)                                 # DLPack: also torch/jax/cupy.from_dlpack(img), zero-copy
@@ -177,8 +177,8 @@ already runs one worker per CPU, or calls libstb from a thread pool of its own, 
 `set_threads(1)` so that libstb does not add threads on top of those.
 
 **EXIF orientation.** Phone photos are stored sideways and carry an EXIF tag
-saying how to turn them; stb ignores it. `Image.open(path, orient=True)` (and
-`imread(..., orient=True)`) applies it while decoding, for JPEG and PNG (`eXIf`
+saying how to turn them; stb ignores it. `Image.open(path, exif_orient=True)` (and
+`imread(..., exif_orient=True)`) applies it while decoding, for JPEG and PNG (`eXIf`
 chunk); width and height may swap, and `flip=True` is applied after it. It is
 off by default so decoding keeps returning the stored pixels, and `iminfo` keeps
 reporting the stored size. `stb.exif_orientation(source)` returns the 1..8
@@ -186,7 +186,7 @@ value (1 when there is none or the data is unreadable; it never throws on bad
 input and is safe on untrusted files) and `img.orient(value)` applies one:
 
 ```python
-img = stb.Image.open("IMG_0001.jpg", orient=True)     # upright
+img = stb.Image.open("IMG_0001.jpg", exif_orient=True)     # upright
 turn = stb.exif_orientation("IMG_0001.jpg")               # or ask first...
 img = stb.Image.open("IMG_0001.jpg").orient(turn)         # ...and apply it yourself
 ```
@@ -438,9 +438,8 @@ img.fill("red", 10, 10, 50, 20);                       // overwrite a rectangle 
 stb::image mask = logo.alpha();                        // the alpha channel as a gray image; with_alpha(mask) sets it
 stb::image strip = stb::image::hstack({&a, &b, &c}, 8, "white", stb::align::center);   // also vstack
 
-stb::image up = stb::loader("photo.jpg").orient().run();  // EXIF orientation: JPEG APP1 / PNG eXIf; .format(pixel_format::rgb) converts
-lo.orient = true;                                      //   upright while decoding (then `flip` goes after it)
-stb::image photo = stb::image::open("IMG_0001.jpg", lo);
+stb::image up = stb::loader("photo.jpg").exif_orient().run();  // EXIF orientation: JPEG APP1 / PNG eXIf; .format(pixel_format::rgb) converts
+                                                       //   upright while decoding (then `flip` goes after it); Python: stb.Loader, same calls
 int turn = stb::exif_orientation(bytes.data(), bytes.size());   // 1..8, 1 if none; never throws
 stb::image upright = raw.orient(turn);                 // or apply it yourself
 

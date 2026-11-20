@@ -41,7 +41,7 @@ flipped = stb.Image.open(src, flip=True)
 print("flipped: top-left is now", flipped.numpy()[0, 0])
 
 # Open from bytes works too (an upload, a socket, a database column), and the format is found from the bytes.
-again = stb.Image.open((DATA / "images" / "rocket.jpg").read_bytes())
+again = stb.Image.decode((DATA / "images" / "rocket.jpg").read_bytes())
 print("bytes  :", again.width, again.height, again.channels, "(a JPEG)")
 
 # Write a copy: the format follows the extension.

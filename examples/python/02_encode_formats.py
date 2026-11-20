@@ -37,11 +37,11 @@ except ValueError as e:
     print("ValueError:", e)
 
 # PNG is lossless: decoding it gives back exactly the same pixels.
-back = stb.Image.open(img.to_png())
+back = stb.Image.decode(img.to_png())
 print("png round trip exact:", np.array_equal(back.numpy(), img.numpy()))
 
 # JPEG is not: the difference is what the quality setting trades for size.
 for quality in (20, 90):
-    jpeg = stb.Image.open(img.to_jpg(quality=quality))
+    jpeg = stb.Image.decode(img.to_jpg(quality=quality))
     worst = int(np.abs(jpeg.numpy().astype(int) - img.numpy().astype(int)).max())
     print(f"jpeg quality {quality}: the worst channel is off by {worst}")

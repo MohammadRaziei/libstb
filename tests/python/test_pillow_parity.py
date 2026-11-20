@@ -83,22 +83,22 @@ def pil_array(data):
 def test_png_decode_is_pixel_exact(c):
     src = photo(c)
     data = pil_bytes(src, "PNG")
-    np.testing.assert_array_equal(Image.open(data).numpy(), pil_array(data))
-    np.testing.assert_array_equal(Image.open(data).numpy(), src)
+    np.testing.assert_array_equal(Image.decode(data).numpy(), pil_array(data))
+    np.testing.assert_array_equal(Image.decode(data).numpy(), src)
 
 
 @pytest.mark.parametrize("c,fmt", [(3, "BMP"), (3, "TGA"), (4, "TGA"), (1, "TGA")])
 def test_bmp_and_tga_decode_is_pixel_exact(c, fmt):
     src = photo(c)
     data = pil_bytes(src, fmt)
-    np.testing.assert_array_equal(Image.open(data).numpy(), pil_array(data))
+    np.testing.assert_array_equal(Image.decode(data).numpy(), pil_array(data))
 
 
 @pytest.mark.parametrize("c", [3, 4])
 def test_rle_tga_decode_is_pixel_exact(c):
     src = photo(c)
     data = pil_bytes(src, "TGA", compression="tga_rle")
-    np.testing.assert_array_equal(Image.open(data).numpy(), src)
+    np.testing.assert_array_equal(Image.decode(data).numpy(), src)
 
 
 def test_palette_and_one_bit_pngs_expand_like_pillow():
@@ -106,20 +106,20 @@ def test_palette_and_one_bit_pngs_expand_like_pillow():
     pal = PIL.Image.fromarray(rgb).quantize(64)
     buf = io.BytesIO()
     pal.save(buf, "PNG")
-    np.testing.assert_array_equal(Image.open(buf.getvalue()).numpy(), np.asarray(pal.convert("RGB")))
+    np.testing.assert_array_equal(Image.decode(buf.getvalue()).numpy(), np.asarray(pal.convert("RGB")))
 
     with_trns = pal.copy()
     with_trns.info["transparency"] = 3                  # palette entry 3 is fully transparent
     buf = io.BytesIO()
     with_trns.save(buf, "PNG", transparency=3)
-    mine = Image.open(buf.getvalue()).numpy()
+    mine = Image.decode(buf.getvalue()).numpy()
     np.testing.assert_array_equal(mine, np.asarray(with_trns.convert("RGBA")))
     assert (mine[..., 3] == 0).any()
 
     bw = PIL.Image.fromarray(photo(1)[..., 0]).convert("1")
     buf = io.BytesIO()
     bw.save(buf, "PNG")
-    np.testing.assert_array_equal(Image.open(buf.getvalue()).numpy()[..., 0],
+    np.testing.assert_array_equal(Image.decode(buf.getvalue()).numpy()[..., 0],
                                   np.asarray(bw).astype(np.uint8) * 255)
 
 
@@ -127,14 +127,14 @@ def test_palette_and_one_bit_pngs_expand_like_pillow():
 @pytest.mark.parametrize("quality", [50, 75, 90, 100])
 def test_jpeg_decode_matches_pillow(quality, subsampling):
     data = pil_bytes(photo(3), "JPEG", quality=quality, subsampling=subsampling)
-    mine, ref = Image.open(data).numpy(), pil_array(data)
+    mine, ref = Image.decode(data).numpy(), pil_array(data)
     assert nmae(mine, ref) < JPEG_NMAE
     assert max_diff(mine, ref) <= JPEG_MAX_DIFF
 
 
 def test_grayscale_jpeg_decode_matches_pillow():
     data = pil_bytes(photo(1), "JPEG", quality=90)
-    mine = Image.open(data)
+    mine = Image.decode(data)
     assert mine.channels == 1
     assert nmae(mine.numpy(), pil_array(data)) < JPEG_NMAE
     assert max_diff(mine.numpy(), pil_array(data)) <= JPEG_MAX_DIFF
@@ -152,7 +152,7 @@ def test_info_and_load_agree_with_pillow(fmt, c, tmp_path):
     path = tmp_path / f"x.{fmt.lower()}"
     path.write_bytes(data)
     np.testing.assert_array_equal(stb.imread(path), Image.open(path).numpy())
-    np.testing.assert_array_equal(stb.imread(path), Image.open(data).numpy())
+    np.testing.assert_array_equal(stb.imread(path), Image.decode(data).numpy())
 
 
 # ------------------------------------------------------------------ encode --
@@ -209,8 +209,8 @@ def test_jpeg_grayscale_encode_matches_pillows_loss():
 
 def test_both_decoders_agree_on_libstbs_own_jpeg():
     data = Image(photo(3)).to_jpg(quality=90)
-    assert nmae(Image.open(data).numpy(), pil_array(data)) < JPEG_NMAE
-    assert max_diff(Image.open(data).numpy(), pil_array(data)) <= JPEG_MAX_DIFF
+    assert nmae(Image.decode(data).numpy(), pil_array(data)) < JPEG_NMAE
+    assert max_diff(Image.decode(data).numpy(), pil_array(data)) <= JPEG_MAX_DIFF
 
 
 # ------------------------------------------------------------------ resize --

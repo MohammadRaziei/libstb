@@ -75,7 +75,7 @@ def test_collecting_does_not_touch_images_that_are_still_in_use():
 
 def test_decoded_and_copied_images_are_unaffected_by_collection():
     png = stb.Image(pixels()).to_png()
-    img = stb.Image.open(png)
+    img = stb.Image.decode(png)
     other = img.copy()
     gc.collect()
     np.testing.assert_array_equal(img.numpy(), pixels())

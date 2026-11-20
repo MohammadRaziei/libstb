@@ -33,7 +33,7 @@ def test_header_says_what_the_decoded_picture_is(name):
 
 @pytest.mark.parametrize("name", NAMES)
 def test_decoding_from_bytes_is_decoding_from_the_file(name):
-    assert np.array_equal(stb.Image.open((IMAGES / name).read_bytes()).numpy(), load(name).numpy())
+    assert np.array_equal(stb.Image.decode((IMAGES / name).read_bytes()).numpy(), load(name).numpy())
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -89,7 +89,7 @@ def test_lossless_writers_give_back_every_pixel(name, writer_name, writer):
     img = load(name)
     if writer_name == "bmp" and img.channels in (1, 2):
         pytest.skip("BMP holds colour: a gray picture comes back as RGB (see test_roundtrip.py)")
-    back = stb.Image.open(writer(img))
+    back = stb.Image.decode(writer(img))
     assert back.width == img.width and back.height == img.height
     if back.channels == img.channels:
         assert np.array_equal(back.numpy(), img.numpy())
@@ -102,7 +102,7 @@ def test_lossless_writers_give_back_every_pixel(name, writer_name, writer):
 def test_jpeg_writer_keeps_the_picture_close(name, quality, ceiling):
     img = load(name)
     # the writer stores a gray picture as three equal components: ask for gray back to compare like with like
-    back = stb.Image.open(img.to_jpg(quality=quality), format="gray" if img.channels == 1 else "rgb")
+    back = stb.Image.decode(img.to_jpg(quality=quality), format="gray" if img.channels == 1 else "rgb")
     assert back.numpy().shape == img.numpy().shape
     assert nmae(back.numpy(), img.numpy()) < ceiling
 
@@ -113,7 +113,7 @@ def test_higher_jpeg_quality_is_bigger_and_closer():
     for quality in (20, 60, 95):
         data = img.to_jpg(quality=quality)
         sizes.append(len(data))
-        errors.append(np.abs(stb.Image.open(data).numpy().astype(int) - img.numpy().astype(int)).mean())
+        errors.append(np.abs(stb.Image.decode(data).numpy().astype(int) - img.numpy().astype(int)).mean())
     assert sizes == sorted(sizes) and errors == sorted(errors, reverse=True)
 
 

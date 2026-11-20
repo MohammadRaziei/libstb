@@ -7,7 +7,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 
 ## [Unreleased]
 
+### Changed
+- **One way to open an image, in C++ and in Python.** `loader::orient()` is now `loader::exif_orient()` (and the `orient=` keyword of Python's `Image.open` / `imread` is `exif_orient=`): the old name said neither what is oriented nor from where, and
+  `image::orient(int)` already meant something else (apply the orientation you give it). `Image.open` takes a path only, as `image::open` does; encoded bytes go to the new `Image.decode(data)`, as `image::decode(data, size)`
+  does in C++. `Image.open(some_bytes)` raises `TypeError` that says so, instead of guessing between a path and data. No alias is kept for the old names.
+
 ### Added
+- **`libstb.Loader`**: `stb::loader` in Python, with the same calls (`Loader(source).format(f).flip().exif_orient().max_bytes(n).run()`); `source` is a path or encoded bytes (a loader made from bytes keeps them alive, and a `bytearray` cannot
+  be resized under it). `Image.open(path, ...)` and `Image.decode(data, ...)` take the same settings as keyword arguments. `Image.decode` is new.
 - **Variable fonts** (OpenType font variations, TrueType outlines): `font::axes()`, `font::with_variation(tag, value)`,
   `font::with_weight(weight)` and `font_face_info::weight_min` / `weight_max` (`libstb.Font.axes`, `with_variation`,
   `with_weight`, `FontAxis`, `FontFaceInfo.weight_min` / `weight_max`). A variable font (Open Sans, Inter, Roboto Flex) used to
@@ -122,7 +129,7 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 - **Options structs are gone; settings are builder calls** (the library is not released, so nothing is kept for compatibility). The main parameters of an operation go in the constructor of a small class and every optional
   setting is a call that returns it, so they chain in any order and one last call does the work; a bad value throws `invalid_argument` at the call that gives it. `superpixel_options` and `superpixels(src, options)` are now
   `stb::superpixel(src, count).method(m).compactness(c).iterations(n).enforce_connectivity(b).run()`; `load_options` and `image::decode/open(.., options)` are
-  `stb::loader(path)` or `stb::loader(data, size)` with `.format(f)`, `.flip()`, `.orient()`, `.max_bytes(n)` and `.run()` (`image::decode(data, size)` and `image::open(path)` stay as the no-settings shortcuts, and
+  `stb::loader(path)` or `stb::loader(data, size)` with `.format(f)`, `.flip()`, `.exif_orient()`, `.max_bytes(n)` and `.run()` (`image::decode(data, size)` and `image::open(path)` stay as the no-settings shortcuts, and
   `stb::default_max_decode_bytes` is the default limit); `resize_options` is folded into `stb::resizer`, which is `resizer(filter)` or `resizer("name")` plus `.filter()`, `.edge()`, `.srgb()`, `.max_bytes()` (and the same
   getters); `draw_options` is `stb::painter(img, outline, color)` with `.transform()`, `.blend()`, `.opacity()`, `.composite()` and the final `.fill(rule)` or `.stroke(style)` (`stb::fill` and `stb::stroke` stay as the
   shortcuts, `canvas` uses the painter); `shape_options` and `font::shape(text, options)` are `stb::shaping(font, text)` with `.range()`, `.direction()`, `.kerning()`, `.ligatures()` and `.run()` (`font::shape(text)` stays). A

@@ -39,12 +39,12 @@ def test_reading_only_the_header_is_fine_and_cheap(bomb):
 
 def test_decoding_the_bomb_raises_limit_error_not_a_crash(bomb):
     with pytest.raises(stb.LimitError, match="too large"):
-        stb.Image.open(bomb)
+        stb.Image.decode(bomb)
     with pytest.raises(stb.LimitError, match="too large"):
         stb.imread(bomb)
     # It is the size guard speaking, not the decoder giving up on a bad file:
     with pytest.raises(stb.Error) as e:
-        stb.Image.open(bomb)
+        stb.Image.decode(bomb)
     assert type(e.value) is stb.LimitError and not isinstance(e.value, stb.DecodeError)
 
 
@@ -53,20 +53,20 @@ def test_the_refusal_is_quick(bomb):
     start = time.perf_counter()
     for _ in range(20):
         with pytest.raises(stb.LimitError):
-            stb.Image.open(bomb)
+            stb.Image.decode(bomb)
     assert time.perf_counter() - start < 1.0
 
 
 def test_the_same_construction_decodes_when_it_is_small(bomb):
     """Control: the limit is what stops the bomb, not a flaw in how the file is built."""
     small = pngbomb.make_png(64, 48, channels=4)
-    img = stb.Image.open(small)
+    img = stb.Image.decode(small)
     assert (img.width, img.height, img.channels) == (64, 48, 4)
     assert img.tobytes() == bytes(64 * 48 * 4)
 
 
 def test_a_lower_limit_stops_ordinary_sized_images_too():
     png = pngbomb.make_png(1000, 1000, channels=3)           # 3 MB decoded
-    assert stb.Image.open(png).width == 1000
+    assert stb.Image.decode(png).width == 1000
     with pytest.raises(stb.LimitError):
-        stb.Image.open(png, max_bytes=1_000_000)
+        stb.Image.decode(png, max_bytes=1_000_000)
