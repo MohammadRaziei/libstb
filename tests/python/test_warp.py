@@ -1,4 +1,4 @@
-"""warp_affine, warp_perspective, Homography and Interpolation. The C++ tests (tests/cpp/test_warp.cpp) work the small cases out by
+"""warp_affine, warp_perspective, Homography and InterpolationMethod. The C++ tests (tests/cpp/test_warp.cpp) work the small cases out by
 hand and compare every kernel with a sampler in doubles; here the values are compared with scipy where it has the same thing
 (map_coordinates, bilinear and nearest), a linear ramp (which bilinear and Catmull-Rom reproduce exactly), and the Python surface
 is checked: Image and float32 array forms, Matrix and number sequences, strings and enums, errors. scipy is optional."""
@@ -41,20 +41,20 @@ def test_bilinear_matches_scipy_map_coordinates():
     ndimage = pytest.importorskip("scipy.ndimage")
     f = randf(21, 25, seed=51)
     m = turn_about(12, 10, 0.4).scale(1.2, 0.9)
-    got = stb.warp_affine(f, m, size=(27, 23), interpolation="bilinear", edge="zero")
+    got = stb.warp_affine(f, m, out_width=27, out_height=23, interpolation="bilinear", edge="zero")
     px, py = source_points(m, 27, 23)
     want = ndimage.map_coordinates(f.astype(np.float64), [py, px], order=1, mode="grid-constant", cval=0.0)
     assert got.shape == (23, 27) and got.dtype == np.float32
     assert np.abs(got - want).max() < 2e-4
     img = rand8(21, 25, 1, seed=52)
-    got8 = np.asarray(stb.warp_affine(stb.Image(img), m, size=(27, 23)))[..., 0].astype(np.float64)
+    got8 = np.asarray(stb.warp_affine(stb.Image(img), m, out_width=27, out_height=23))[..., 0].astype(np.float64)
     want8 = ndimage.map_coordinates(img[..., 0].astype(np.float64), [py, px], order=1, mode="grid-constant", cval=0.0)
     assert np.abs(got8 - want8).max() <= 1.0
 
 
 def test_nearest_reads_the_pixel_the_point_falls_in():
     img = rand8(6, 8, 3, seed=53)
-    out = np.asarray(stb.warp_affine(stb.Image(img), stb.Matrix.scaling(2), size=(16, 12), interpolation="nearest", edge="clamp"))
+    out = np.asarray(stb.warp_affine(stb.Image(img), stb.Matrix.scaling(2), out_width=16, out_height=12, interpolation="nearest", edge="clamp"))
     assert np.array_equal(out, np.repeat(np.repeat(img, 2, axis=0), 2, axis=1))  # every pixel twice, both ways
 
 
@@ -70,17 +70,17 @@ def test_a_linear_ramp_is_reproduced_exactly_inside(interp):
 def test_forms_strings_enums_and_number_sequences_agree():
     img = stb.Image(rand8(14, 18, 4, seed=54))
     m = turn_about(9, 7, 0.3)
-    a = np.asarray(stb.warp_affine(img, m, size=(20, 16), interpolation="bicubic", edge="mirror"))
-    assert np.array_equal(a, np.asarray(img.warp_affine(m, size=(20, 16), interpolation=stb.Interpolation.BICUBIC, edge=stb.EdgeMode.MIRROR)))
-    assert np.array_equal(a, np.asarray(stb.warp_affine(img, tuple(m), size=[20, 16], interpolation="bicubic", edge="mirror")))  # six numbers
-    assert np.array_equal(a, np.asarray(stb.warp_perspective(img, m, size=(20, 16), interpolation="bicubic", edge="mirror")))  # a Matrix is a homography
-    assert np.array_equal(a, np.asarray(stb.warp_perspective(img, stb.Homography(m), size=(20, 16), interpolation="bicubic", edge="mirror")))
-    assert np.array_equal(a, np.asarray(img.warp_perspective(list(stb.Homography(m)), size=(20, 16), interpolation="bicubic", edge="mirror")))
+    a = np.asarray(stb.warp_affine(img, m, out_width=20, out_height=16, interpolation="bicubic", edge="mirror"))
+    assert np.array_equal(a, np.asarray(img.warp_affine(m, out_width=20, out_height=16, interpolation=stb.InterpolationMethod.BICUBIC, edge=stb.EdgeMode.MIRROR)))
+    assert np.array_equal(a, np.asarray(stb.warp_affine(img, tuple(m), out_width=20, out_height=16, interpolation="bicubic", edge="mirror")))  # six numbers
+    assert np.array_equal(a, np.asarray(stb.warp_perspective(img, m, out_width=20, out_height=16, interpolation="bicubic", edge="mirror")))  # a Matrix is a homography
+    assert np.array_equal(a, np.asarray(stb.warp_perspective(img, stb.Homography(m), out_width=20, out_height=16, interpolation="bicubic", edge="mirror")))
+    assert np.array_equal(a, np.asarray(img.warp_perspective(list(stb.Homography(m)), out_width=20, out_height=16, interpolation="bicubic", edge="mirror")))
     # the size defaults to the picture's; the identity gives the picture back
     assert np.array_equal(np.asarray(stb.warp_affine(img, stb.Matrix())), np.asarray(img))
     f = randf(10, 12, 3, seed=55)
     assert stb.warp_affine(f, m).shape == (10, 12, 3)
-    assert stb.warp_affine(f, m, size=(5, 4)).shape == (4, 5, 3)
+    assert stb.warp_affine(f, m, out_width=5, out_height=4).shape == (4, 5, 3)
     assert np.array_equal(stb.warp_affine(f, stb.Matrix()), f)
 
 
@@ -131,11 +131,11 @@ def test_warp_errors():
             with pytest.raises(ValueError):
                 call(pic, stb.Matrix.scaling(0, 1))  # no inverse
             with pytest.raises(ValueError):
-                call(pic, stb.Matrix(), size=(-1, 4))
+                call(pic, stb.Matrix(), out_width=-1, out_height=4)
             with pytest.raises(ValueError):
-                call(pic, stb.Matrix(), size=(100000, 100000))
+                call(pic, stb.Matrix(), out_width=100000, out_height=100000)
             with pytest.raises(ValueError):
-                call(pic, stb.Matrix(), size=(3,))  # not (width, height)
+                call(pic, stb.Matrix(), out_width=-1)
             with pytest.raises(ValueError):
                 call(pic, stb.Matrix(), interpolation="spline")
             with pytest.raises(ValueError):
@@ -144,3 +144,27 @@ def test_warp_errors():
                 call(pic, "not a transform")
     with pytest.raises(ValueError):
         stb.warp_affine(img, (1, 0, 0, 1, 0))  # five numbers
+
+
+def test_each_size_that_is_zero_is_the_size_of_the_source_on_its_own():
+    img = stb.Image(rand8(10, 12, 3, seed=58))
+    f = randf(10, 12, 3, seed=59)
+    for call in (stb.warp_affine, stb.warp_perspective):
+        for pic in (img, f):
+            assert np.asarray(call(pic, stb.Matrix(), out_width=20)).shape == (10, 20, 3)  # only the width
+            assert np.asarray(call(pic, stb.Matrix(), out_height=7)).shape == (7, 12, 3)  # only the height
+            assert np.asarray(call(pic, stb.Matrix(), out_width=0, out_height=0)).shape == (10, 12, 3)
+    assert np.asarray(img.warp_affine(stb.Matrix(), out_height=7)).shape == (7, 12, 3)
+    assert np.asarray(img.warp_perspective(stb.Matrix(), out_width=5, out_height=4)).shape == (4, 5, 3)
+
+
+def test_the_old_names_are_gone():
+    img = stb.Image(rand8(8, 6, 3, seed=60))
+    with pytest.raises(TypeError):
+        stb.warp_affine(img, stb.Matrix(), size=(4, 4))
+    with pytest.raises(TypeError):
+        img.warp_affine(stb.Matrix(), size=(4, 4))
+    with pytest.raises(TypeError):
+        stb.warp_affine(img, stb.Matrix(), interp="nearest")
+    assert not hasattr(stb, "Interpolation")
+    assert {m.name for m in stb.InterpolationMethod} == {"NEAREST", "BILINEAR", "BICUBIC"}

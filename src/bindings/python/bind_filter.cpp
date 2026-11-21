@@ -62,9 +62,9 @@ stb::edge_mode edge_of(nb::handle h) {
                               "edge");
 }
 
-stb::interpolation interp_of(nb::handle h) {
-    using stb::interpolation;
-    return to_enum<interpolation>(h, {{"nearest", interpolation::nearest}, {"bilinear", interpolation::bilinear}, {"bicubic", interpolation::bicubic}},
+stb::interpolation_method interpolation_of(nb::handle h) {
+    using stb::interpolation_method;
+    return to_enum<interpolation_method>(h, {{"nearest", interpolation_method::nearest}, {"bilinear", interpolation_method::bilinear}, {"bicubic", interpolation_method::bicubic}},
                                   "interpolation");
 }
 
@@ -90,14 +90,6 @@ stb::homography homography_of(nb::handle h) {
         if (v.size() == 6) return stb::homography(stb::matrix{v[0], v[1], v[2], v[3], v[4], v[5]});
     }
     throw std::invalid_argument("expected a Homography, a Matrix, or a sequence of 9 numbers (by rows)");
-}
-
-// size=None is (0, 0): the size of the picture.
-std::pair<int, int> size_of(nb::handle h) {
-    if (h.is_none()) return {0, 0};
-    std::tuple<int, int> t;
-    if (!nb::try_cast(h, t, /*convert=*/true)) throw std::invalid_argument("size must be (width, height) or None");
-    return {std::get<0>(t), std::get<1>(t)};
 }
 
 stb::superpixel_method method_of(nb::handle h) {
@@ -617,12 +609,12 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
         "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp", "A new Image: the guided filter of this one.");
 
     // ---- warp_affine, warp_perspective
-    nb::enum_<stb::interpolation>(m, "Interpolation",
-                                  "How a warp reads a value between pixel centres. Functions that take an Interpolation also take its\n"
+    nb::enum_<stb::interpolation_method>(m, "InterpolationMethod",
+                                  "How a warp reads a value between pixel centres. Functions that take an InterpolationMethod also take its\n"
                                   "lower-case name: \"nearest\", \"bilinear\" (the default) or \"bicubic\" (Catmull-Rom).")
-        .value("NEAREST", stb::interpolation::nearest)
-        .value("BILINEAR", stb::interpolation::bilinear)
-        .value("BICUBIC", stb::interpolation::bicubic);
+        .value("NEAREST", stb::interpolation_method::nearest)
+        .value("BILINEAR", stb::interpolation_method::bilinear)
+        .value("BICUBIC", stb::interpolation_method::bicubic);
 
     nb::class_<stb::homography>(
         m, "Homography",
@@ -665,69 +657,67 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
     const std::string warp_doc =
         std::string("A picture seen through a transform that takes a point of the source to a point of the result, in the canvas / SVG\n"
                     "convention of Matrix: the centre of pixel (x, y) is the point (x + 0.5, y + 0.5), so the identity returns the picture\n"
-                    "and a whole-number translation moves it by exactly that. `size` is the (width, height) of the result (default: the\n"
-                    "size of the picture). `edge` is what is read where the transform reaches outside the picture; the default is \"zero\"\n"
+                    "and a whole-number translation moves it by exactly that. `out_width` and `out_height` are the size of the result (0, the\n"
+                    "default, is that of the picture, for each of them on its own). `edge` is what is read where the transform reaches outside the picture; the default is \"zero\"\n"
                     "(transparent black on RGBA), not \"clamp\". `interpolation` is \"nearest\", \"bilinear\" (the default) or \"bicubic\".\n"
                     "Every channel is sampled on its own (alpha too). ValueError for a transform that cannot be inverted or a bad size.\n"
                     "Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array); 1 to 4 channels.\n");
     const std::string affine_doc = warp_doc + "`transform` is a Matrix or the six numbers a, b, c, d, e, f.\n";
     const std::string persp_doc = warp_doc + "`transform` is a Homography, a Matrix, or 9 numbers by rows.\n";
-    const auto warp_image = [](const stb::image& img, const stb::homography& h, nb::handle size, nb::handle interp, nb::handle edge) -> stb::image {
-        const auto [ow, oh] = size_of(size);
-        const stb::interpolation ip = interp_of(interp);
+    const auto warp_image = [](const stb::image& img, const stb::homography& h, int out_width, int out_height, nb::handle interpolation, nb::handle edge) -> stb::image {
+        const stb::interpolation_method ip = interpolation_of(interpolation);
         const stb::edge_mode e = edge_of(edge);
         nb::gil_scoped_release release;
-        return stb::warp_perspective(img, h, ow, oh, ip, e);
+        return stb::warp_perspective(img, h, out_width, out_height, ip, e);
     };
-    const auto warp_array = [](const f32_array& src, const stb::homography& h, nb::handle size, nb::handle interp, nb::handle edge) -> f32_result {
-        const auto [ow, oh] = size_of(size);
-        const stb::interpolation ip = interp_of(interp);
+    const auto warp_array = [](const f32_array& src, const stb::homography& h, int out_width, int out_height, nb::handle interpolation, nb::handle edge) -> f32_result {
+        const stb::interpolation_method ip = interpolation_of(interpolation);
         const stb::edge_mode e = edge_of(edge);
         const bool with_channels = src.ndim() == 3;
         const stb::mat32f in = view_of(src);
         stb::mat32f out;
         {
             nb::gil_scoped_release release;
-            out = stb::warp_perspective(in, h, ow, oh, ip, e);
+            out = stb::warp_perspective(in, h, out_width, out_height, ip, e);
         }
         return to_array(std::move(out), with_channels);
     };
     m.def(
         "warp_affine",
-        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
-            return warp_image(img, stb::homography(matrix_of(transform)), size, interp, edge);
+        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
+            return warp_image(img, stb::homography(matrix_of(transform)), out_width, out_height, interpolation, edge);
         },
-        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", affine_doc.c_str());
+        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", affine_doc.c_str());
     m.def(
         "warp_affine",
-        [=](const f32_array& src, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
-            return warp_array(src, stb::homography(matrix_of(transform)), size, interp, edge);
+        [=](const f32_array& src, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
+            return warp_array(src, stb::homography(matrix_of(transform)), out_width, out_height, interpolation, edge);
         },
-        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
+        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
     m.def(
         "warp_perspective",
-        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
-            return warp_image(img, homography_of(transform), size, interp, edge);
+        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
+            return warp_image(img, homography_of(transform), out_width, out_height, interpolation, edge);
         },
-        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", persp_doc.c_str());
+        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", persp_doc.c_str());
     m.def(
         "warp_perspective",
-        [=](const f32_array& src, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
-            return warp_array(src, homography_of(transform), size, interp, edge);
+        [=](const f32_array& src, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
+            return warp_array(src, homography_of(transform), out_width, out_height, interpolation, edge);
         },
-        "src"_a, "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
+        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
     image_cls.def(
         "warp_affine",
-        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
-            return warp_image(img, stb::homography(matrix_of(transform)), size, interp, edge);
+        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
+            return warp_image(img, stb::homography(matrix_of(transform)), out_width, out_height, interpolation, edge);
         },
-        "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by an affine transform (see warp_affine).");
+        "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by an affine transform (see warp_affine).");
     image_cls.def(
         "warp_perspective",
-        [=](const stb::image& img, nb::handle transform, nb::handle size, nb::handle interp, nb::handle edge) {
-            return warp_image(img, homography_of(transform), size, interp, edge);
+        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
+            return warp_image(img, homography_of(transform), out_width, out_height, interpolation, edge);
         },
-        "transform"_a, "size"_a = nb::none(), nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by a perspective transform (see warp_perspective).");
+        "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by a perspective transform (see warp_perspective).");
 
     // ---- unsharp_mask
     const std::string unsharp_doc =

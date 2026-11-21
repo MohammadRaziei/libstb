@@ -8,6 +8,9 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Changed
+- **`warp_affine` / `warp_perspective` are named the same in C++ and Python.** The enum `interpolation` is `interpolation_method` (like `adaptive_method` and `edge_mode`: the type has a qualifier, the parameter is the plain word), so the parameter
+  is `interpolation` instead of the abbreviation `interp`; in Python the enum is `InterpolationMethod` (was `Interpolation`). The size of the result is `out_width` and `out_height` in Python too (0, the default, is the size of the
+  source, for each of them on its own), as in C++ and as every other size of the library (`resize(width, height)`, `crop(...)`): the `size=(w, h)` tuple, which only the warps had, is gone. No alias is kept for the old names.
 - **`canny_mat`, `threshold_mat`, `otsu_threshold_mat` and `adaptive_threshold_mat` are in `namespace detail`.** They are the exported work (for `std::uint8_t` and `float`) behind `canny`, `threshold`, `otsu_threshold` and `adaptive_threshold`, which
   are the API (they take any image-like type). The `_mat` names read as a second API next to them, and a call with another element type compiled and failed only at link time. Calling the plain names is unchanged.
 - **One way to open an image, in C++ and in Python.** `loader::orient()` is now `loader::exif_orient()` (and the `orient=` keyword of Python's `Image.open` / `imread` is `exif_orient=`): the old name said neither what is oriented nor from where, and

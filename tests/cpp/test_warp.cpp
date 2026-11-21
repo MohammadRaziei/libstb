@@ -17,7 +17,7 @@ namespace {
 using stb::edge_mode;
 using stb::homography;
 using stb::image8u;
-using stb::interpolation;
+using stb::interpolation_method;
 using stb::mat32f;
 using stb::mat8u;
 using stb::matrix;
@@ -54,7 +54,7 @@ bool same_bits(const mat32f& a, const mat32f& b) {
            std::memcmp(a.data(), b.data(), a.size_bytes()) == 0;
 }
 
-const interpolation all_interp[] = {interpolation::nearest, interpolation::bilinear, interpolation::bicubic};
+const interpolation_method all_interp[] = {interpolation_method::nearest, interpolation_method::bilinear, interpolation_method::bicubic};
 const edge_mode all_edges[] = {edge_mode::clamp, edge_mode::reflect, edge_mode::mirror, edge_mode::wrap, edge_mode::zero};
 
 // A value of `m` under an edge mode: 0 where the mode says "zero" (testutil::edge_index is -1 there).
@@ -66,14 +66,14 @@ double sample(const M& m, int x, int y, int k, edge_mode mode) {
 
 // The warp in doubles: for each pixel of the result, the source point from the inverse matrix, then the kernel.
 template <class M>
-double brute_warp(const M& src, const matrix& inv, int x, int y, int k, interpolation interp, edge_mode mode) {
+double brute_warp(const M& src, const matrix& inv, int x, int y, int k, interpolation_method interp, edge_mode mode) {
     const point p = inv.map(float(x) + 0.5f, float(y) + 0.5f);
     const double sx = double(p.x), sy = double(p.y);
-    if (interp == interpolation::nearest) return sample(src, int(std::floor(sx)), int(std::floor(sy)), k, mode);
+    if (interp == interpolation_method::nearest) return sample(src, int(std::floor(sx)), int(std::floor(sy)), k, mode);
     const double u = sx - 0.5, v = sy - 0.5;
     const int x0 = int(std::floor(u)), y0 = int(std::floor(v));
     const double fx = u - x0, fy = v - y0;
-    if (interp == interpolation::bilinear) {
+    if (interp == interpolation_method::bilinear) {
         const double top = (1 - fx) * sample(src, x0, y0, k, mode) + fx * sample(src, x0 + 1, y0, k, mode);
         const double bottom = (1 - fx) * sample(src, x0, y0 + 1, k, mode) + fx * sample(src, x0 + 1, y0 + 1, k, mode);
         return (1 - fy) * top + fy * bottom;
@@ -102,7 +102,7 @@ static_assert(std::is_same_v<decltype(stb::warp_perspective(std::declval<const m
 UTEST(libstb_warp_tests, test_identity_returns_the_picture_for_every_kernel_and_edge_mode) {
     const image8u u = patterned8(13, 9, stb::pixel_format::rgba);
     const mat32f f = patterned_f(11, 8, 3);
-    for (interpolation ip : all_interp)
+    for (interpolation_method ip : all_interp)
         for (edge_mode e : all_edges) {
             ASSERT_TRUE(same_bytes(stb::warp_affine(u, matrix(), 0, 0, ip, e), u));
             ASSERT_TRUE(same_bits(stb::warp_affine(f, matrix(), 0, 0, ip, e), f));
@@ -115,7 +115,7 @@ UTEST(libstb_warp_tests, test_whole_pixel_shifts_and_the_edge_modes_as_computed_
     const image8u img = gray_row({10, 20, 30, 40});
     matrix right;
     right.translate(1, 0);
-    for (interpolation ip : all_interp) {
+    for (interpolation_method ip : all_interp) {
         const image8u zero = stb::warp_affine(img, right, 0, 0, ip, edge_mode::zero);
         const image8u clamp = stb::warp_affine(img, right, 0, 0, ip, edge_mode::clamp);
         const image8u wrap = stb::warp_affine(img, right, 0, 0, ip, edge_mode::wrap);
@@ -142,8 +142,8 @@ UTEST(libstb_warp_tests, test_half_a_pixel_and_a_doubling_as_computed_by_hand) {
     // pixels are the source points 0.25, 0.75, 1.25, 1.75, i.e. 10, 10 + 0.25 * 10 = 12.5, 10 + 0.75 * 10 = 17.5 and 20,
     // and the halves are rounded up: 10 13 18 20.
     const image8u two = gray_row({10, 20});
-    const image8u n = stb::warp_affine(two, matrix::scaling(2), 4, 1, interpolation::nearest, edge_mode::clamp);
-    const image8u b = stb::warp_affine(two, matrix::scaling(2), 4, 1, interpolation::bilinear, edge_mode::clamp);
+    const image8u n = stb::warp_affine(two, matrix::scaling(2), 4, 1, interpolation_method::nearest, edge_mode::clamp);
+    const image8u b = stb::warp_affine(two, matrix::scaling(2), 4, 1, interpolation_method::bilinear, edge_mode::clamp);
     const std::uint8_t wn[4] = {10, 10, 20, 20}, wb[4] = {10, 13, 18, 20};
     for (int x = 0; x < 4; ++x) {
         ASSERT_EQ(int(n(x, 0, 0)), int(wn[x]));
@@ -155,8 +155,8 @@ UTEST(libstb_warp_tests, test_a_quarter_turn_about_the_centre_is_rotate90) {
     const image8u img = patterned8(7, 7, stb::pixel_format::rgb);
     matrix m;
     m.translate(3.5f, 3.5f).rotate(1.57079632679f).translate(-3.5f, -3.5f);  // the last call acts first: centre to origin, turn, back
-    ASSERT_TRUE(same_bytes(stb::warp_affine(img, m, 0, 0, interpolation::nearest), img.rotate90(-1)));
-    ASSERT_TRUE(same_bytes(stb::warp_affine(img, m, 0, 0, interpolation::bilinear), img.rotate90(-1)));
+    ASSERT_TRUE(same_bytes(stb::warp_affine(img, m, 0, 0, interpolation_method::nearest), img.rotate90(-1)));
+    ASSERT_TRUE(same_bytes(stb::warp_affine(img, m, 0, 0, interpolation_method::bilinear), img.rotate90(-1)));
 }
 
 UTEST(libstb_warp_tests, test_the_result_size_defaults_to_the_picture_and_can_be_changed) {
@@ -167,7 +167,7 @@ UTEST(libstb_warp_tests, test_the_result_size_defaults_to_the_picture_and_can_be
     ASSERT_EQ(crop.width(), 6);
     ASSERT_EQ(crop.height(), 3);
     ASSERT_TRUE(same_bytes(crop, img.crop(0, 0, 6, 3)));
-    const image8u big = stb::warp_affine(img, matrix(), 14, 11, interpolation::nearest, edge_mode::zero);  // outside: 0
+    const image8u big = stb::warp_affine(img, matrix(), 14, 11, interpolation_method::nearest, edge_mode::zero);  // outside: 0
     ASSERT_EQ(int(big(13, 10, 0)) + int(big(10, 2, 1)), 0);
 }
 
@@ -177,7 +177,7 @@ UTEST(libstb_warp_tests, test_every_kernel_matches_a_sampler_in_doubles_for_ever
     matrix m;
     m.translate(-8, -6).rotate(0.4f).scale(1.3f, 0.9f).translate(9, 7);
     const matrix inv = *m.inverse();
-    for (interpolation ip : all_interp)
+    for (interpolation_method ip : all_interp)
         for (edge_mode e : all_edges) {
             const image8u gu = stb::warp_affine(u, m, 18, 14, ip, e);
             const mat32f gf = stb::warp_affine(f, m, 18, 14, ip, e);
@@ -220,7 +220,7 @@ UTEST(libstb_warp_tests, test_homography_from_four_points_maps_them_and_composes
     const image8u img = patterned8(12, 9, stb::pixel_format::rgb);
     matrix shift;
     shift.translate(2, 0);
-    ASSERT_TRUE(same_bytes(stb::warp_perspective(img, *t, 0, 0, interpolation::nearest), stb::warp_affine(img, shift, 0, 0, interpolation::nearest)));
+    ASSERT_TRUE(same_bytes(stb::warp_perspective(img, *t, 0, 0, interpolation_method::nearest), stb::warp_affine(img, shift, 0, 0, interpolation_method::nearest)));
     ASSERT_TRUE(same_bytes(stb::warp_perspective(img, homography(shift)), stb::warp_affine(img, shift)));
 }
 
@@ -257,7 +257,7 @@ UTEST(libstb_warp_tests, test_bad_arguments_throw_and_empty_pictures_stay_empty)
     ASSERT_THROWS(stb::warp_affine(img, matrix(), -1, 4), std::invalid_argument);
     ASSERT_THROWS(stb::warp_affine(img, matrix(), 4, -1), std::invalid_argument);
     ASSERT_THROWS(stb::warp_affine(img, matrix(), 100000, 100000), std::invalid_argument);         // too large
-    ASSERT_THROWS(stb::warp_affine(img, matrix(), 0, 0, static_cast<interpolation>(9)), std::invalid_argument);
+    ASSERT_THROWS(stb::warp_affine(img, matrix(), 0, 0, static_cast<interpolation_method>(9)), std::invalid_argument);
     ASSERT_THROWS(stb::warp_affine(mat8u(4, 4, 5), matrix()), std::invalid_argument);
     ASSERT_THROWS(stb::warp_perspective(mat32f(4, 4, 5), homography()), std::invalid_argument);
     ASSERT_TRUE(stb::warp_affine(mat8u(), matrix()).empty());
@@ -273,13 +273,13 @@ UTEST(libstb_warp_tests, test_the_result_is_the_same_on_any_number_of_threads) {
     mat32f one_f, many_f;
     {
         stb::thread_scope scope(1);
-        one = stb::warp_affine(src, m, 320, 220, interpolation::bicubic);
-        one_f = stb::warp_affine(srcf, m, 160, 130, interpolation::bilinear);
+        one = stb::warp_affine(src, m, 320, 220, interpolation_method::bicubic);
+        one_f = stb::warp_affine(srcf, m, 160, 130, interpolation_method::bilinear);
     }
     {
         stb::thread_scope scope(4);
-        many = stb::warp_affine(src, m, 320, 220, interpolation::bicubic);
-        many_f = stb::warp_affine(srcf, m, 160, 130, interpolation::bilinear);
+        many = stb::warp_affine(src, m, 320, 220, interpolation_method::bicubic);
+        many_f = stb::warp_affine(srcf, m, 160, 130, interpolation_method::bilinear);
     }
     ASSERT_TRUE(same_bytes(one, many));
     ASSERT_TRUE(same_bits(one_f, many_f));

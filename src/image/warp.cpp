@@ -88,8 +88,8 @@ inline T store_value(float v) noexcept {
 }
 
 template <class T>
-mat<T> warp_run(const mat<T>& src, const homography& h, int ow, int oh, interpolation interp, edge_mode edge) {
-    if (interp != interpolation::nearest && interp != interpolation::bilinear && interp != interpolation::bicubic)
+mat<T> warp_run(const mat<T>& src, const homography& h, int ow, int oh, interpolation_method interpolation, edge_mode edge) {
+    if (interpolation != interpolation_method::nearest && interpolation != interpolation_method::bilinear && interpolation != interpolation_method::bicubic)
         throw std::invalid_argument("interpolation must be nearest, bilinear or bicubic");
     if (ow < 0 || oh < 0) throw std::invalid_argument("the size of the result must not be negative");
     if (src.empty()) return mat<T>();
@@ -110,7 +110,7 @@ mat<T> warp_run(const mat<T>& src, const homography& h, int ow, int oh, interpol
         const int rx = resolve(ix, w, edge), ry = resolve(iy, hh, edge);
         return rx < 0 || ry < 0 ? nullptr : src.row(ry) + std::size_t(rx) * std::size_t(c);
     };
-    const int taps = interp == interpolation::nearest ? 1 : (interp == interpolation::bilinear ? 4 : 16);
+    const int taps = interpolation == interpolation_method::nearest ? 1 : (interpolation == interpolation_method::bilinear ? 4 : 16);
 
     parallel_for(std::size_t(oh), double(ow) * double(c) * double(taps) * warp_tap_ns, [&](std::size_t y0, std::size_t y1) {
         for (std::size_t yy = y0; yy < y1; ++yy) {
@@ -130,7 +130,7 @@ mat<T> warp_run(const mat<T>& src, const homography& h, int ow, int oh, interpol
                     for (int k = 0; k < c; ++k) o[k] = T(0);
                     continue;
                 }
-                if (interp == interpolation::nearest) {
+                if (interpolation == interpolation_method::nearest) {
                     const T* p = at(int(std::floor(sx)), int(std::floor(sy)));
                     for (int k = 0; k < c; ++k) o[k] = p ? p[k] : T(0);
                     continue;
@@ -139,7 +139,7 @@ mat<T> warp_run(const mat<T>& src, const homography& h, int ow, int oh, interpol
                 const double fux = std::floor(u), fvy = std::floor(v);
                 const int x0 = int(fux), y0i = int(fvy);
                 const float fx = float(u - fux), fy = float(v - fvy);
-                if (interp == interpolation::bilinear) {
+                if (interpolation == interpolation_method::bilinear) {
                     const T* p00 = at(x0, y0i);
                     const T* p10 = at(x0 + 1, y0i);
                     const T* p01 = at(x0, y0i + 1);
@@ -249,12 +249,12 @@ std::optional<homography> homography::inverse() const noexcept {
 namespace detail {
 
 template <class T>
-mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation interp, edge_mode edge) {
-    return warp_run(src, h, out_width, out_height, interp, edge);
+mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation_method interpolation, edge_mode edge) {
+    return warp_run(src, h, out_width, out_height, interpolation, edge);
 }
 
-template STB_API mat<std::uint8_t> warp_core<std::uint8_t>(const mat<std::uint8_t>&, const homography&, int, int, interpolation, edge_mode);
-template STB_API mat<float> warp_core<float>(const mat<float>&, const homography&, int, int, interpolation, edge_mode);
+template STB_API mat<std::uint8_t> warp_core<std::uint8_t>(const mat<std::uint8_t>&, const homography&, int, int, interpolation_method, edge_mode);
+template STB_API mat<float> warp_core<float>(const mat<float>&, const homography&, int, int, interpolation_method, edge_mode);
 
 }  // namespace detail
 }  // namespace stb

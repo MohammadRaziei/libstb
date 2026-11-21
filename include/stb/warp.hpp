@@ -25,7 +25,7 @@
 namespace stb {
 
 // How a value is read between pixel centres.
-enum class interpolation : std::uint8_t {
+enum class interpolation_method : std::uint8_t {
     nearest,   // the pixel the point falls in
     bilinear,  // a mix of the 4 nearest pixels (the default)
     bicubic,   // Catmull-Rom over 4 x 4 pixels, sharper; 8-bit results are clamped to 0..255, floats are not
@@ -57,7 +57,7 @@ struct STB_API homography {
 namespace detail {
 // The one implementation, instantiated for std::uint8_t and float. out_width or out_height 0 means the size of `src`.
 template <class T>
-STB_API mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation interp, edge_mode edge);
+STB_API mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation_method interpolation, edge_mode edge);
 }  // namespace detail
 
 // ---- warp_perspective: `h` takes a source point to a point of the result. out_width and out_height are the size of the result
@@ -68,15 +68,15 @@ STB_API mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, 
 // picture gives an empty one. The result is the same bits on every number of threads.
 template <class M>
 traits::if_image_t<M> warp_perspective(const M& src, const homography& h, int out_width = 0, int out_height = 0,
-                                       interpolation interp = interpolation::bilinear, edge_mode edge = edge_mode::zero) {
-    return M(detail::warp_core<traits::mat_value_t<M>>(src, h, out_width, out_height, interp, edge));
+                                       interpolation_method interpolation = interpolation_method::bilinear, edge_mode edge = edge_mode::zero) {
+    return M(detail::warp_core<traits::mat_value_t<M>>(src, h, out_width, out_height, interpolation, edge));
 }
 
 // ---- warp_affine: the same for a stb::matrix.
 template <class M>
 traits::if_image_t<M> warp_affine(const M& src, const matrix& m, int out_width = 0, int out_height = 0,
-                                  interpolation interp = interpolation::bilinear, edge_mode edge = edge_mode::zero) {
-    return warp_perspective(src, homography(m), out_width, out_height, interp, edge);
+                                  interpolation_method interpolation = interpolation_method::bilinear, edge_mode edge = edge_mode::zero) {
+    return warp_perspective(src, homography(m), out_width, out_height, interpolation, edge);
 }
 
 }  // namespace stb
