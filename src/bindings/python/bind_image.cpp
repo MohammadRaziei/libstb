@@ -396,20 +396,29 @@ void bind_image(nb::module_& m) {
         .value("CENTER", stb::align::center)
         .value("END", stb::align::end);
 
-    // plain tuple; the Python package wraps it in ImageInfo.
+    // plain tuples (width, height, format, orientation); the Python package wraps them in ImageInfo.
     m.def(
         "info_bytes",
-        [](nb::bytes data) {
-            const char* p = data.c_str();
-            const std::size_t n = data.size();
+        [](const bytes_in& data) {
             stb::image_info i;
             {
-                nb::gil_scoped_release unlock;  // decode without holding the GIL
-                i = stb::image_info::read(p, n);
+                nb::gil_scoped_release unlock;  // read without holding the GIL
+                i = stb::image_info::read_bytes(data.data(), data.size());
             }
-            return std::make_tuple(i.width, i.height, i.format);
+            return std::make_tuple(i.width, i.height, i.format, i.orientation);
         },
         "data"_a);
+    m.def(
+        "info_file",
+        [](const std::filesystem::path& path) {
+            stb::image_info i;
+            {
+                nb::gil_scoped_release unlock;
+                i = stb::image_info::read_file(path);
+            }
+            return std::make_tuple(i.width, i.height, i.format, i.orientation);
+        },
+        "path"_a);
 
     m.def("simd_backends", &stb::simd_backends,
           "The SIMD backends convert / composite / flatten can run on this CPU, best first, e.g.\n"
@@ -499,16 +508,6 @@ void bind_image(nb::module_& m) {
             c.scope.reset();
             return false;
         });
-
-    m.def(
-        "exif_orientation_bytes",
-        [](nb::bytes data) {
-            const char* p = data.c_str();
-            const std::size_t n = data.size();
-            nb::gil_scoped_release unlock;
-            return stb::exif_orientation(p, n);
-        },
-        "data"_a);
 
     // The native Image *is* stb::image: every method below is the C++ member.
     nb::class_<image>(m, "Image", nb::type_slots(image_slots),

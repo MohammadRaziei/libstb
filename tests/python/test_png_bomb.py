@@ -33,7 +33,7 @@ def test_the_bomb_is_a_real_png_and_really_is_small(bomb):
 
 
 def test_reading_only_the_header_is_fine_and_cheap(bomb):
-    info = stb.ImageInfo.read(bomb)
+    info = stb.ImageInfo.read_bytes(bomb)
     assert (info.width, info.height, info.channels) == (pngbomb.WIDTH, pngbomb.HEIGHT, pngbomb.CHANNELS)
 
 

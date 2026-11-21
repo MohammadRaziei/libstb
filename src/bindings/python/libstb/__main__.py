@@ -21,7 +21,6 @@ from . import (
     DEFAULT_ZLIB_LEVEL,
     Image,
     __version__,
-    exif_orientation,
     get_cmake_dir,
     get_include_dir,
     get_lib_dir,
@@ -96,7 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def _info_one(path: str, as_json: bool) -> None:
     i = iminfo(path)
     fmt = i.format.name.lower()
-    orientation = exif_orientation(path)
+    orientation = i.orientation
     size = os.path.getsize(path)
     if as_json:
         print(json.dumps({

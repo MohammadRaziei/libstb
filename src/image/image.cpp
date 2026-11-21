@@ -55,15 +55,27 @@ void check_encodable(const image& img) {
 
 // ---------------------------------------------------------------- image_info
 
-image_info image_info::read(const void* data, std::size_t size) {
+namespace {
+
+// The header facts without the orientation: the decode path needs only these (and scans the EXIF block only
+// when it was asked to apply it).
+image_info header_of(const void* data, std::size_t size) {
     check_input(data, size);
     const codec::image_header h = codec::read_header(static_cast<const std::uint8_t*>(data), size);
-    return image_info{h.width, h.height, pixel_format_from_channels(h.channels)};
+    return image_info{h.width, h.height, pixel_format_from_channels(h.channels), 1};
+}
+
+}  // namespace
+
+image_info image_info::read_bytes(const void* data, std::size_t size) {
+    image_info info = header_of(data, size);
+    info.orientation = detail::exif_orientation(data, size);
+    return info;
 }
 
 image_info image_info::read_file(const std::filesystem::path& path) {
     const auto bytes = detail::read_file(path);
-    return read(bytes.data(), bytes.size());
+    return read_bytes(bytes.data(), bytes.size());
 }
 
 // --------------------------------------------------------------------- image
@@ -82,7 +94,7 @@ image decode_with(const void* data, std::size_t size, std::optional<pixel_format
     // Size check from the header alone: no pixel memory is allocated for a
     // hostile "60000x60000" file. width/height are <= 1<<16 and channels <= 4,
     // so the uint64 product cannot overflow.
-    const image_info hdr = image_info::read(data, size);
+    const image_info hdr = header_of(data, size);
     const int want = format ? channel_count(*format) : hdr.channels();
     const std::uint64_t bytes = std::uint64_t(hdr.width) * std::uint64_t(hdr.height) * std::uint64_t(want);
     if (bytes > max_bytes)
@@ -90,7 +102,7 @@ image decode_with(const void* data, std::size_t size, std::optional<pixel_format
 
     // With exif_orient, a flip is done after the orientation (a vertical flip commutes with
     // nothing else): stb flips only when no orientation has to be applied.
-    const int orientation = exif_orient ? exif_orientation(data, size) : 1;
+    const int orientation = exif_orient ? detail::exif_orientation(data, size) : 1;
     const bool stb_flips = flip && orientation == 1;
 
     codec::decoded d = codec::decode(static_cast<const std::uint8_t*>(data), size, format ? channel_count(*format) : 0, stb_flips);

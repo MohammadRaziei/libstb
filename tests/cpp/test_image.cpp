@@ -10,7 +10,7 @@ using testutil::red_over_green;
 
 UTEST(libstb_image_tests, test_info_reads_header) {
     const std::string d = red_over_green();
-    stb::image_info i = stb::image_info::read(d.data(), d.size());
+    stb::image_info i = stb::image_info::read_bytes(d.data(), d.size());
     ASSERT_EQ(1, i.width);
     ASSERT_EQ(2, i.height);
     ASSERT_EQ(3, i.channels());
@@ -60,7 +60,7 @@ UTEST(libstb_image_tests, test_flip_swaps_rows) {
 UTEST(libstb_image_tests, test_garbage_throws_decode_error) {
     const std::string d = "definitely not an image";
     ASSERT_THROWS(stb::image::decode(d.data(), d.size()), stb::decode_error);
-    ASSERT_THROWS(stb::image_info::read(d.data(), d.size()), stb::decode_error);
+    ASSERT_THROWS(stb::image_info::read_bytes(d.data(), d.size()), stb::decode_error);
 }
 
 UTEST(libstb_image_tests, test_truncated_and_empty_input_throw_decode_error) {
@@ -101,7 +101,7 @@ UTEST(libstb_image_tests, test_a_real_png_bomb_is_refused_from_its_header) {
     ASSERT_TRUE(png.size() < 1024 * 1024);              // a file you would happily accept...
     ASSERT_TRUE(std::uint64_t(6000) * 6000 * 4 / png.size() > 500);   // ...at a ratio of ~1000
 
-    const stb::image_info info = stb::image_info::read(png.data(), png.size());
+    const stb::image_info info = stb::image_info::read_bytes(png.data(), png.size());
     ASSERT_EQ(6000, info.width);
     ASSERT_EQ(6000, info.height);
 

@@ -11,6 +11,10 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 - **One way to open an image, in C++ and in Python.** `loader::orient()` is now `loader::exif_orient()` (and the `orient=` keyword of Python's `Image.open` / `imread` is `exif_orient=`): the old name said neither what is oriented nor from where, and
   `image::orient(int)` already meant something else (apply the orientation you give it). `Image.open` takes a path only, as `image::open` does; encoded bytes go to the new `Image.decode(data)`, as `image::decode(data, size)`
   does in C++. `Image.open(some_bytes)` raises `TypeError` that says so, instead of guessing between a path and data. No alias is kept for the old names.
+- **`image_info` carries the EXIF orientation.** `image_info::orientation` (1..8; 1 when there is none or the EXIF block is unreadable, and a damaged block never throws) replaces the free function `exif_orientation`, which
+  is now `detail::exif_orientation` (the scanner behind it and behind `loader::exif_orient()`). `image_info::read(data, size)` is `image_info::read_bytes(data, size)`, next to `read_file(path)`. In Python, `ImageInfo` has a fourth
+  field `orientation` (so `iminfo(x)` is `(width, height, format, orientation)`), `ImageInfo.read(source)` is `ImageInfo.read_file(path)` / `ImageInfo.read_bytes(data)` (each raises `TypeError` for the other kind of source),
+  `iminfo(source)` stays as the shortcut that picks by type, and `libstb.exif_orientation` is gone: use `iminfo(source).orientation`.
 
 ### Added
 - **`libstb.Loader`**: `stb::loader` in Python, with the same calls (`Loader(source).format(f).flip().exif_orient().max_bytes(n).run()`); `source` is a path or encoded bytes (a loader made from bytes keeps them alive, and a `bytearray` cannot

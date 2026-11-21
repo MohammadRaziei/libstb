@@ -19,7 +19,7 @@ stb.Image.from_dlpack(tensor)                       # and back: a torch/jax/cupy
 pixels = stb.imread("photo.png")                    # just the ndarray (same options as Image.open)
 stb.imwrite("out.jpg", pixels, quality=80)          # an ndarray or an Image; format from the extension
 small = stb.imresize(pixels, 320, 240)              # resize an ndarray, get an ndarray (no Image needed)
-stb.ImageInfo.read("photo.png")                     # header only: (width, height, format)
+stb.ImageInfo.read_file("photo.png")                # header only: (width, height, format, orientation); read_bytes(data) for bytes
 stb.Image(np.zeros((8, 8, 4), np.uint8))            # from your own uint8 array (no copy, see below)
 img.copy()                                          # an independent image (deep copy)
 
@@ -50,7 +50,7 @@ font.render_glyph("A", 32)                          # Glyph(bitmap, x_offset, y_
 atlas = font.make_atlas("ABCabc123", 32, 256, 256)  # Atlas: .image and atlas["A"] -> AtlasGlyph
 stb.estimate_text("Hello", 16, family="sans")        # TextSize, no font file needed (sans / serif / mono tables)
 
-stb.iminfo("photo.png")                             # shortcut: ImageInfo.read(...)
+stb.iminfo("photo.png")                             # shortcut: read_file(path) or read_bytes(data), by type
 ```
 
 **Encoding.** Every format has a pair of methods with its own settings, all
@@ -181,13 +181,13 @@ saying how to turn them; stb ignores it. `Image.open(path, exif_orient=True)` (a
 `imread(..., exif_orient=True)`) applies it while decoding, for JPEG and PNG (`eXIf`
 chunk); width and height may swap, and `flip=True` is applied after it. It is
 off by default so decoding keeps returning the stored pixels, and `iminfo` keeps
-reporting the stored size. `stb.exif_orientation(source)` returns the 1..8
-value (1 when there is none or the data is unreadable; it never throws on bad
-input and is safe on untrusted files) and `img.orient(value)` applies one:
+reporting the stored size. `ImageInfo.orientation` (and so `iminfo(source).orientation`)
+is the 1..8 value (1 when there is none or the EXIF block is unreadable: a damaged
+block never throws, and it is safe on untrusted files), and `img.orient(value)` applies one:
 
 ```python
 img = stb.Image.open("IMG_0001.jpg", exif_orient=True)     # upright
-turn = stb.exif_orientation("IMG_0001.jpg")               # or ask first...
+turn = stb.iminfo("IMG_0001.jpg").orientation            # or ask first...
 img = stb.Image.open("IMG_0001.jpg").orient(turn)         # ...and apply it yourself
 ```
 
@@ -440,7 +440,7 @@ stb::image strip = stb::image::hstack({&a, &b, &c}, 8, "white", stb::align::cent
 
 stb::image up = stb::loader("photo.jpg").exif_orient().run();  // EXIF orientation: JPEG APP1 / PNG eXIf; .format(pixel_format::rgb) converts
                                                        //   upright while decoding (then `flip` goes after it); Python: stb.Loader, same calls
-int turn = stb::exif_orientation(bytes.data(), bytes.size());   // 1..8, 1 if none; never throws
+int turn = stb::image_info::read_bytes(bytes.data(), bytes.size()).orientation;   // 1..8, 1 if none (read_file(path) too)
 stb::image upright = raw.orient(turn);                 // or apply it yourself
 
 stb::font f = stb::font::open("font.ttf");          // cheap to copy, thread-safe

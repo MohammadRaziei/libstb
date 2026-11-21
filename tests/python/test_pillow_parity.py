@@ -145,7 +145,7 @@ def test_info_and_load_agree_with_pillow(fmt, c, tmp_path):
     src = photo(c, 83, 61)
     data = pil_bytes(src, fmt)
     ref = PIL.Image.open(io.BytesIO(data))
-    width, height, format = stb.iminfo(data)
+    width, height, format, _orientation = stb.iminfo(data)
     assert (width, height) == ref.size
     assert format.value == len(ref.getbands())
 

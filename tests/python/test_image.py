@@ -38,7 +38,7 @@ def test_load_png_bytes():
 
 def test_info():
     i = stb.iminfo(RGB)
-    assert i == (2, 2, stb.PixelFormat.RGB)
+    assert i == (2, 2, stb.PixelFormat.RGB, 1)
     assert (i.width, i.height, i.channels) == (2, 2, 3)
 
 
@@ -47,7 +47,7 @@ def test_load_from_str_and_pathlib_paths(tmp_path):
     p.write_bytes(RGB)
     np.testing.assert_array_equal(stb.imread(p), EXPECTED)
     np.testing.assert_array_equal(stb.imread(str(p)), EXPECTED)
-    assert stb.iminfo(p) == (2, 2, stb.PixelFormat.RGB)
+    assert stb.iminfo(p) == (2, 2, stb.PixelFormat.RGB, 1)
 
 
 def test_load_from_bytearray_and_memoryview():

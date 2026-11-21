@@ -44,8 +44,8 @@ photo = png_with_orientation(sideways.to_png(), 6)
 (OUT / "photo_orientation6.jpg").write_bytes(jpeg_with_orientation(sideways.to_jpg(quality=95), 6))
 
 # 1. Read the tag.
-print("exif_orientation :", stb.exif_orientation(OUT / "photo_orientation6.png"))
-print("no tag           :", stb.exif_orientation(upright.to_png()), "(1 means upright)")
+print("orientation      :", stb.iminfo(OUT / "photo_orientation6.png").orientation)
+print("no tag           :", stb.iminfo(upright.to_png()).orientation, "(1 means upright)")
 
 # 2. By default decoding gives the stored pixels, sideways ...
 raw = stb.imread(photo)
@@ -57,7 +57,7 @@ print("orient=True      :", fixed.shape[1], "x", fixed.shape[0], "| upright agai
       np.array_equal(fixed, upright.numpy()))
 
 # 3. Or do it in two steps, to look at the tag first. Works on any Image.
-turn = stb.exif_orientation(photo)
+turn = stb.iminfo(photo).orientation
 img = stb.Image.decode(photo).orient(turn)
 print("open + orient    :", img.width, "x", img.height)
 

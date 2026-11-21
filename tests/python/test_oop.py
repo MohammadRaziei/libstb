@@ -53,9 +53,10 @@ def test_constructor_from_array():
 
 
 def test_image_info_class():
-    i = ImageInfo.read(RGB)
+    i = ImageInfo.read_bytes(RGB)
     assert isinstance(i, ImageInfo)
-    assert i == (2, 2, stb.PixelFormat.RGB) == stb.iminfo(RGB)
+    assert i == (2, 2, stb.PixelFormat.RGB, 1) == stb.iminfo(RGB)
+    assert (i.width, i.height, i.format, i.orientation) == (2, 2, stb.PixelFormat.RGB, 1)
 
 
 def test_functional_shortcuts_match_object_api():

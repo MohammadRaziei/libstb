@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "test_common.hpp"
@@ -75,7 +76,7 @@ bytes real_jpeg_with(const stb::image& img, const bytes& tiff_data) {
     return j;
 }
 
-int orientation_of(const bytes& b) { return stb::exif_orientation(b.data(), b.size()); }
+int orientation_of(const bytes& b) { return stb::detail::exif_orientation(b.data(), b.size()); }
 
 }  // namespace
 
@@ -106,7 +107,7 @@ UTEST(libstb_exif_tests, test_no_exif_or_nothing_usable_means_upright) {
     ASSERT_EQ(1, orientation_of(img.to_bmp()));
     ASSERT_EQ(1, orientation_of(bytes{}));
     ASSERT_EQ(1, orientation_of(bytes{1, 2, 3, 4, 5, 6, 7, 8, 9}));
-    ASSERT_EQ(1, stb::exif_orientation(nullptr, 100));
+    ASSERT_EQ(1, stb::detail::exif_orientation(nullptr, 100));
     ASSERT_EQ(1, orientation_of(jpeg_with(tiff(0, false))));  // values outside 1..8
     ASSERT_EQ(1, orientation_of(jpeg_with(tiff(9, false))));
     ASSERT_EQ(1, orientation_of(jpeg_with(tiff(6, false, 4))));     // not a SHORT
@@ -181,4 +182,35 @@ UTEST(libstb_exif_tests, test_decode_orient_keeps_the_channel_conversion_and_siz
     ASSERT_EQ(3, r.width());
     l.max_bytes(10);
     ASSERT_THROWS(l.run(), stb::limit_error);
+}
+
+UTEST(libstb_exif_tests, test_image_info_reports_the_orientation_next_to_the_stored_size) {
+    const stb::image src = gradient(5, 3, 3);
+    for (unsigned k = 1; k <= 8; ++k) {
+        const bytes p = png_with(src, tiff(k, k % 2 == 0));
+        const stb::image_info pi = stb::image_info::read_bytes(p.data(), p.size());
+        ASSERT_EQ(int(k), pi.orientation);
+        ASSERT_EQ(5, pi.width);  // as stored: the upright picture of 5..8 has them swapped
+        ASSERT_EQ(3, pi.height);
+
+        const bytes j = real_jpeg_with(src, tiff(k, false));
+        ASSERT_EQ(int(k), stb::image_info::read_bytes(j.data(), j.size()).orientation);
+    }
+}
+
+UTEST(libstb_exif_tests, test_image_info_orientation_is_1_without_a_tag_and_a_bad_header_still_throws) {
+    const stb::image src = gradient(5, 3, 3);
+    const bytes plain = src.to_png();
+    ASSERT_EQ(1, stb::image_info::read_bytes(plain.data(), plain.size()).orientation);
+
+    // A damaged EXIF block never throws: the header is fine, so the orientation falls back to 1.
+    bytes damaged = png_with(src, tiff(6, false));
+    for (std::size_t i = 0; i + 4 < damaged.size(); ++i)
+        if (std::memcmp(damaged.data() + i, "eXIf", 4) == 0) damaged[i + 4] = 0xFF;  // the byte-order mark of the TIFF data
+    const int o = stb::image_info::read_bytes(damaged.data(), damaged.size()).orientation;
+    ASSERT_TRUE(o >= 1 && o <= 8);
+
+    // A damaged header does: the orientation of something that is not an image is not asked for.
+    const bytes junk(64, std::uint8_t(7));
+    ASSERT_THROWS(stb::image_info::read_bytes(junk.data(), junk.size()), stb::decode_error);
 }

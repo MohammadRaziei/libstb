@@ -1,6 +1,7 @@
-"""EXIF orientation: reading it, exif_orientation(), and decoding with exif_orient=True."""
+"""EXIF orientation: reading it (ImageInfo.orientation), and decoding with exif_orient=True."""
 
 import io
+import pathlib
 
 import pytest
 np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
@@ -24,43 +25,71 @@ def encode(fmt, orientation=None, arr=ARR):
 
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG"])
 @pytest.mark.parametrize("orientation", range(1, 9))
-def test_exif_orientation_reads_what_pillow_wrote(fmt, orientation):
-    assert stb.exif_orientation(encode(fmt, orientation)) == orientation
+def test_info_reads_the_orientation_pillow_wrote(fmt, orientation):
+    info = stb.iminfo(encode(fmt, orientation))
+    assert info.orientation == orientation
+    assert (info.width, info.height) == (ARR.shape[1], ARR.shape[0])  # as stored, whatever the orientation
 
 
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "BMP"])
 def test_no_exif_means_upright(fmt):
     buf = io.BytesIO()
     PIL.Image.fromarray(ARR).save(buf, fmt)
-    assert stb.exif_orientation(buf.getvalue()) == 1
+    assert stb.iminfo(buf.getvalue()).orientation == 1
 
 
 @pytest.mark.parametrize("junk", [b"", b"not an image", b"\xff\xd8", b"\x89PNG\r\n\x1a\n", bytes(100)])
-def test_exif_orientation_of_junk_is_one(junk):
-    assert stb.exif_orientation(junk) == 1
+def test_info_of_junk_is_an_error_not_an_orientation(junk):
+    with pytest.raises((stb.DecodeError, ValueError)):
+        stb.iminfo(junk)
 
 
-def test_exif_orientation_accepts_paths_and_every_bytes_like(tmp_path):
+def test_info_takes_paths_and_every_bytes_like(tmp_path):
     data = encode("PNG", 6)
     p = tmp_path / "a.png"
     p.write_bytes(data)
     for src in (data, bytearray(data), memoryview(data), str(p), p):
-        assert stb.exif_orientation(src) == 6
-    with pytest.raises(FileNotFoundError):
-        stb.exif_orientation(tmp_path / "missing.png")
+        assert stb.iminfo(src).orientation == 6
+    assert stb.ImageInfo.read_file(p).orientation == 6
+    assert stb.ImageInfo.read_file(str(p)).orientation == 6
+    for make in (bytes, bytearray, memoryview):
+        assert stb.ImageInfo.read_bytes(make(data)).orientation == 6
+    with pytest.raises(OSError):
+        stb.ImageInfo.read_file(tmp_path / "missing.png")
 
 
-def test_exif_orientation_survives_truncation_and_corruption():
+def test_read_file_and_read_bytes_say_which_one_to_use():
+    data = encode("PNG", 6)
+    with pytest.raises(TypeError, match="read_bytes"):
+        stb.ImageInfo.read_file(data)
+    with pytest.raises(TypeError, match="read_file"):
+        stb.ImageInfo.read_bytes("photo.png")
+    with pytest.raises(TypeError, match="read_file"):
+        stb.ImageInfo.read_bytes(pathlib.Path("photo.png"))
+    assert not hasattr(stb.ImageInfo, "read")
+    assert not hasattr(stb, "exif_orientation")
+
+
+def test_info_orientation_survives_truncation_and_corruption():
+    """A damaged EXIF block never makes the orientation something else than 1..8; a damaged header is an error."""
+    def orientation_or_none(data):
+        try:
+            return stb.iminfo(bytes(data)).orientation
+        except (stb.DecodeError, stb.LimitError, ValueError):
+            return None
+
     for fmt in ("JPEG", "PNG"):
         data = encode(fmt, 6)
         for n in range(len(data)):
-            assert 1 <= stb.exif_orientation(data[:n]) <= 8
+            o = orientation_or_none(data[:n])
+            assert o is None or 1 <= o <= 8
         rng = np.random.default_rng(1)
         for _ in range(1500):
             m = bytearray(data[:300])
             for _ in range(4):
                 m[rng.integers(0, len(m))] = rng.integers(0, 256)
-            assert 1 <= stb.exif_orientation(bytes(m)) <= 8
+            o = orientation_or_none(m)
+            assert o is None or 1 <= o <= 8
 
 
 @pytest.mark.parametrize("orientation", range(1, 9))

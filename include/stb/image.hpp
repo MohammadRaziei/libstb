@@ -94,25 +94,30 @@ enum class align : std::uint8_t { start, center, end };
 
 // Header-only facts about an encoded image (no pixel decoding).
 struct STB_API image_info {
-    int width = 0;
+    int width = 0;   // as stored: with an orientation of 5..8 the upright picture has them swapped
     int height = 0;
     pixel_format format = pixel_format::gray;  // what the source file holds
+    // The EXIF orientation (1..8, as the standard numbers them) stored in a JPEG or PNG, or 1 ("upright") when there is
+    // none, the format has none, or the tag is not readable: a damaged EXIF block never throws. Apply it with
+    // image::orient(), or let loader::exif_orient() do it while decoding.
+    int orientation = 1;
     int channels() const noexcept { return channel_count(format); }
 
-    // Throws: invalid_argument (null data), decode_error, limit_error.
-    static image_info read(const void* data, std::size_t size);
-    // Also throws io_error.
+    // From encoded bytes. Throws: invalid_argument (null data), decode_error, limit_error.
+    static image_info read_bytes(const void* data, std::size_t size);
+    // From a file. Also throws io_error.
     static image_info read_file(const std::filesystem::path& path);
 };
 
 // The default of loader::max_bytes: refuse to decode anything whose output would exceed 512 MiB.
 inline constexpr std::size_t default_max_decode_bytes = std::size_t(1) << 29;
 
-// The EXIF orientation (1..8, as the standard numbers them) stored in an encoded
-// JPEG or PNG, or 1 ("upright") when there is none, the format has none, or the
-// data is not readable. Never throws and never reads out of bounds, so it is safe
-// on untrusted input. Apply it with image::orient(), or let loader::exif_orient() do it while decoding.
+namespace detail {
+// The scanner behind image_info::orientation and loader::exif_orient(): the Orientation tag of the EXIF block of an
+// encoded JPEG or PNG, or 1 when there is none or the data is not readable. Never throws and never reads out of
+// bounds, so it is safe on untrusted input (the data need not even be a valid image).
 STB_API int exif_orientation(const void* data, std::size_t size) noexcept;
+}  // namespace detail
 
 // SIMD backends. libstb's own conversion and compositing loops (convert, composite, flatten, and
 // the premultiply conversions further down)
@@ -305,7 +310,7 @@ public:
     // Swap rows and columns (mirror across the main diagonal); width and height swap.
     image transpose() const;
     // The upright version of an image stored with this EXIF orientation (1..8,
-    // see exif_orientation): the transform a viewer applies. 1 is a copy (a move on a temporary).
+    // see image_info::orientation): the transform a viewer applies. 1 is a copy (a move on a temporary).
     image orient(int orientation) const&;
     image orient(int orientation) &&;
     // A larger image with this one in the middle of a border of the given widths

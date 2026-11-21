@@ -69,7 +69,7 @@ int main() {
 
         // 2. Header only: the size and format, with no pixel memory at all.
         const std::vector<std::uint8_t> bomb = fake_png(15000, 15000);   // would be 675 MB of RGB
-        const stb::image_info info = stb::image_info::read(bomb.data(), bomb.size());
+        const stb::image_info info = stb::image_info::read_bytes(bomb.data(), bomb.size());
         std::cout << "the header of the bomb says " << info.width << "x" << info.height << " "
                   << stb::pixel_format_name(info.format) << ", read without decoding anything\n";
 

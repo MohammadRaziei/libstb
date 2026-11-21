@@ -116,6 +116,8 @@ int png_orientation(const bytes& d) {
 
 }  // namespace
 
+namespace detail {
+
 int exif_orientation(const void* data, std::size_t size) noexcept {
     if (!data) return 1;
     const bytes d{static_cast<const std::uint8_t*>(data), size};
@@ -124,4 +126,5 @@ int exif_orientation(const void* data, std::size_t size) noexcept {
     return o ? o : 1;
 }
 
+}  // namespace detail
 }  // namespace stb

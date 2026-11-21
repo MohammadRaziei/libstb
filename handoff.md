@@ -6,8 +6,9 @@
 
 - **C++**: `loader::orient()` شد `loader::exif_orient()` (`image::orient(int)` همان ماند: عدد EXIF را می‌گیرد). `image::open(path)` و `image::decode(data, size)` ماندند.
 - **Python**: `Image.open(path)` فقط مسیر می‌گیرد (با bytes، `TypeError` که می‌گوید `Image.decode`)؛ `Image.decode(data)` جدید است؛ کلاس `Loader` (همان زنجیره‌ی C++: `format`, `flip`, `exif_orient`, `max_bytes`, `run`) به `stb::loader` وصل شد و بافر bytes را نگه می‌دارد؛ کلیدواژه‌ی `orient=` در `open`/`decode`/`imread` شد `exif_orient=`. هیچ alias قدیمی نگه داشته نشد (کاربر گفت سازگاری مهم نیست، فقط خودش استفاده می‌کند).
+- **`image_info`** حالا فیلد `orientation` دارد (جهت EXIF؛ ۱ اگر نباشد یا خراب باشد، و هرگز نمی‌اندازد). تابع آزاد `exif_orientation` رفت و شد `detail::exif_orientation` (اسکنر پشت `image_info` و `loader::exif_orient()`). `image_info::read` شد `read_bytes`، کنار `read_file`. در Python: `ImageInfo.read_file(path)` / `ImageInfo.read_bytes(data)` (خطای `TypeError` برای نوع اشتباه)، فیلد چهارم `orientation` (پس `iminfo(x)` چهارتایی است)، `iminfo` میان‌بُر چندریخت ماند، و `libstb.exif_orientation` حذف شد.
 - فلگ CLI `libstb convert --orient` عمداً دست نخورد (اگر خواستید، `--exif-orient`).
-- تست: `tests/python/test_loader.py` (جدید)؛ gate: C++ 746 تست، Python 1880 پاس و 16 skip، بدون warning؛ ساخت با CMake (`build_python`، `stb_test_cpp`، `STB_BUILD_EXAMPLES=ON`).
+- تست: `tests/python/test_loader.py` (جدید)؛ gate: C++ 748 تست، Python 1881 پاس و 16 skip، بدون warning؛ ساخت با CMake (`build_python`، `stb_test_cpp`، `STB_BUILD_EXAMPLES=ON`).
 
 ## ۰ب. کار قبلی: فونت variable (2026-11-18)
 

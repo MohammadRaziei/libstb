@@ -91,7 +91,7 @@ def test_imread_missing_file_and_garbage():
 
 def test_iminfo_is_header_only(tmp_path):
     data = stb.Image(SRC).to_png()
-    assert stb.iminfo(data) == (6, 4, stb.PixelFormat.RGB)
+    assert stb.iminfo(data) == (6, 4, stb.PixelFormat.RGB, 1)
     assert stb.iminfo(data).channels == 3
 
 

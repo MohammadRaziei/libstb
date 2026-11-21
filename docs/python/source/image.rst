@@ -23,7 +23,6 @@ Functions
 .. autofunction:: libstb.imwrite
 .. autofunction:: libstb.imresize
 .. autofunction:: libstb.iminfo
-.. autofunction:: libstb.exif_orientation
 
 Classes
 -------

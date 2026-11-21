@@ -105,11 +105,17 @@ Image.from_pil = classmethod(_from_pil)
 
 
 class ImageInfo(NamedTuple):
-    """Header-only facts about an image file."""
+    """Header-only facts about an image file (no pixel decoding).
+
+    width and height are as stored; `orientation` is the EXIF orientation (1..8) of a JPEG or PNG, 1 when there
+    is none or it is not readable. With 5..8 the upright picture has width and height swapped: apply it with
+    Image.orient(), or let Image.open(..., exif_orient=True) do it while decoding.
+    """
 
     width: int
     height: int
     format: PixelFormat
+    orientation: int = 1
 
     @property
     def channels(self) -> int:
@@ -117,9 +123,24 @@ class ImageInfo(NamedTuple):
         return int(self.format.value)
 
     @classmethod
-    def read(cls, source: Source) -> "ImageInfo":
-        """Read just the header (no pixel decoding)."""
-        return cls(*_native.info_bytes(_read(source)))
+    def read_file(cls, path: "Union[str, os.PathLike[str]]") -> "ImageInfo":
+        """Read just the header of the image file at `path`. For encoded bytes use read_bytes.
+
+        Raises TypeError (not a path), DecodeError, LimitError, OSError (unreadable file).
+        """
+        if isinstance(path, (bytes, bytearray, memoryview)):
+            raise TypeError("ImageInfo.read_file takes a path (str or os.PathLike); for encoded bytes use ImageInfo.read_bytes")
+        return cls(*_native.info_file(path))
+
+    @classmethod
+    def read_bytes(cls, data: Union[bytes, bytearray, memoryview]) -> "ImageInfo":
+        """Read just the header of an encoded image held in memory. For a file use read_file.
+
+        Raises TypeError (not bytes-like), DecodeError, LimitError.
+        """
+        if isinstance(data, str) or hasattr(data, "__fspath__"):
+            raise TypeError("ImageInfo.read_bytes takes encoded bytes; for a file use ImageInfo.read_file")
+        return cls(*_native.info_bytes(data))
 
 
 __all__ = ["DEFAULT_MAX_BYTES", "Image", "ImageInfo", "PixelFormat", "Source"]
