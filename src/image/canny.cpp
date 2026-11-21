@@ -41,6 +41,8 @@ mat32f unit_gray(const mat<T>& src) {
 
 }  // namespace
 
+namespace detail {
+
 template <class T>
 mat8u canny_mat(const mat<T>& src, float low, float high, float sigma) {
     if (!(low >= 0.0f) || !(high >= low) || !std::isfinite(high)) throw std::invalid_argument("canny needs 0 <= low <= high");
@@ -118,4 +120,5 @@ mat8u canny_mat(const mat<T>& src, float low, float high, float sigma) {
 template STB_API mat8u canny_mat<std::uint8_t>(const mat<std::uint8_t>&, float, float, float);
 template STB_API mat8u canny_mat<float>(const mat<float>&, float, float, float);
 
+}  // namespace detail
 }  // namespace stb

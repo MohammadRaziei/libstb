@@ -60,6 +60,8 @@ std::size_t best_split(const std::vector<double>& counts, Pos pos) {
 
 }  // namespace
 
+namespace detail {
+
 template <class T>
 mat8u threshold_mat(const mat<T>& src, T t, bool invert) {
     need_one_channel(src);
@@ -165,4 +167,5 @@ template STB_API float otsu_threshold_mat<float>(const mat<float>&);
 template STB_API mat8u adaptive_threshold_mat<std::uint8_t>(const mat<std::uint8_t>&, int, float, adaptive_method, bool, edge_mode);
 template STB_API mat8u adaptive_threshold_mat<float>(const mat<float>&, int, float, adaptive_method, bool, edge_mode);
 
+}  // namespace detail
 }  // namespace stb

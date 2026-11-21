@@ -8,6 +8,8 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Changed
+- **`canny_mat`, `threshold_mat`, `otsu_threshold_mat` and `adaptive_threshold_mat` are in `namespace detail`.** They are the exported work (for `std::uint8_t` and `float`) behind `canny`, `threshold`, `otsu_threshold` and `adaptive_threshold`, which
+  are the API (they take any image-like type). The `_mat` names read as a second API next to them, and a call with another element type compiled and failed only at link time. Calling the plain names is unchanged.
 - **One way to open an image, in C++ and in Python.** `loader::orient()` is now `loader::exif_orient()` (and the `orient=` keyword of Python's `Image.open` / `imread` is `exif_orient=`): the old name said neither what is oriented nor from where, and
   `image::orient(int)` already meant something else (apply the orientation you give it). `Image.open` takes a path only, as `image::open` does; encoded bytes go to the new `Image.decode(data)`, as `image::decode(data, size)`
   does in C++. `Image.open(some_bytes)` raises `TypeError` that says so, instead of guessing between a path and data. No alias is kept for the old names.

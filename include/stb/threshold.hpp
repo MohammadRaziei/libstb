@@ -25,8 +25,9 @@ enum class adaptive_method {
     gaussian,  // a Gaussian window of sigma 0.3 * radius + 0.5 (the one of OpenCV for that size), the middle counts most
 };
 
-// ---- the work, for std::uint8_t and float (the functions below call these)
+// ---- the work, for std::uint8_t and float (the functions below call these: they are not an API of their own)
 
+namespace detail {
 template <class T>
 STB_API mat8u threshold_mat(const mat<T>& src, T t, bool invert);
 template <class T>
@@ -34,12 +35,13 @@ STB_API T otsu_threshold_mat(const mat<T>& src);
 template <class T>
 STB_API mat8u adaptive_threshold_mat(const mat<T>& src, int radius, float offset, adaptive_method method, bool invert,
                                      edge_mode edge);
+}  // namespace detail
 
 // 255 where src > t (a value equal to t is 0), 0 elsewhere; `invert` swaps the two (so a NaN, which is never > t, is
 // 255 in the inverted mask). For an image8u or mat8u `t` is a level (0 to 255), for a mat32f a value of the 0 to 1 range.
 template <class M>
 traits::if_image_t<M, mat8u> threshold(const M& src, traits::mat_value_t<M> t, bool invert = false) {
-    return threshold_mat<traits::mat_value_t<M>>(src, t, invert);
+    return detail::threshold_mat<traits::mat_value_t<M>>(src, t, invert);
 }
 
 // Otsu's level: the one that makes the variance between the two classes it splits the histogram into as large as
@@ -50,7 +52,7 @@ traits::if_image_t<M, mat8u> threshold(const M& src, traits::mat_value_t<M> t, b
 // invalid_argument for an empty picture or one without a finite value.
 template <class M>
 traits::if_image_t<M, traits::mat_value_t<M>> otsu_threshold(const M& src) {
-    return otsu_threshold_mat<traits::mat_value_t<M>>(src);
+    return detail::otsu_threshold_mat<traits::mat_value_t<M>>(src);
 }
 
 // The mask of the values that stand above the local level of their neighbourhood: 255 where
@@ -64,7 +66,7 @@ template <class M>
 traits::if_image_t<M, mat8u> adaptive_threshold(const M& src, int radius, float offset = 0.0f,
                                                 adaptive_method method = adaptive_method::gaussian, bool invert = false,
                                                 edge_mode edge = edge_mode::clamp) {
-    return adaptive_threshold_mat<traits::mat_value_t<M>>(src, radius, offset, method, invert, edge);
+    return detail::adaptive_threshold_mat<traits::mat_value_t<M>>(src, radius, offset, method, invert, edge);
 }
 
 }  // namespace stb
