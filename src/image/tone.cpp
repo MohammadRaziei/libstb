@@ -718,18 +718,18 @@ image8u apply_lut(const mat8u& src, const mat8u& lut) {
 // ============================================================================================ adjustments
 
 template <class T>
-traits::if_image_t<mat<T>, void> equalize_inplace(mat<T>& img, tone_mode mode) {
+traits::if_image_t<mat<T>, void> detail::equalize_inplace_mat(mat<T>& img, tone_mode mode) {
     remap_from_histogram(img, mode, [](std::size_t, const auto& s) { return tone_kernel<T>::equalize(s); });
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> auto_contrast_inplace(mat<T>& img, float cutoff_percent, tone_mode mode) {
+traits::if_image_t<mat<T>, void> detail::auto_contrast_inplace_mat(mat<T>& img, float cutoff_percent, tone_mode mode) {
     check_cutoff(cutoff_percent);
     remap_from_histogram(img, mode, [&](std::size_t, const auto& s) { return tone_kernel<T>::auto_contrast(s, cutoff_percent); });
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> match_histogram_inplace(mat<T>& img, const mat<T>& reference, tone_mode mode) {
+traits::if_image_t<mat<T>, void> detail::match_histogram_inplace_mat(mat<T>& img, const mat<T>& reference, tone_mode mode) {
     using kernel = tone_kernel<T>;
     if (reference.empty()) throw std::invalid_argument("the reference is empty");
     if (img.empty()) return;
@@ -742,7 +742,7 @@ traits::if_image_t<mat<T>, void> match_histogram_inplace(mat<T>& img, const mat<
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> clahe_inplace(mat<T>& img, float clip_limit, int tiles_x, int tiles_y, tone_mode mode) {
+traits::if_image_t<mat<T>, void> detail::clahe_inplace_mat(mat<T>& img, float clip_limit, int tiles_x, int tiles_y, tone_mode mode) {
     check_clahe(clip_limit, tiles_x, tiles_y);
     if (tiles_y == 0) tiles_y = tiles_x;
     if (img.empty()) return;
@@ -753,13 +753,13 @@ traits::if_image_t<mat<T>, void> clahe_inplace(mat<T>& img, float clip_limit, in
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> gamma_inplace(mat<T>& img, float g) {
+traits::if_image_t<mat<T>, void> detail::gamma_inplace_mat(mat<T>& img, float g) {
     check_gamma(g);
     tone_kernel<T>::gamma(img, g);
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> levels_inplace(mat<T>& img, float in_black, float in_white, float g, float out_black,
+traits::if_image_t<mat<T>, void> detail::levels_inplace_mat(mat<T>& img, float in_black, float in_white, float g, float out_black,
                                                 float out_white) {
     check_levels(in_black, in_white, g, out_black, out_white);
     tone_kernel<T>::levels(img, in_black, in_white, g, out_black, out_white);
@@ -767,17 +767,31 @@ traits::if_image_t<mat<T>, void> levels_inplace(mat<T>& img, float in_black, flo
 
 // The element types libstb is built for (tone_kernel<T> is defined for these two). The templates are declared in
 // stb/tone.hpp without a body, so these lines are what the rest of the program links to.
-template STB_API void equalize_inplace<std::uint8_t>(mat<std::uint8_t>&, tone_mode);
-template STB_API void equalize_inplace<float>(mat<float>&, tone_mode);
-template STB_API void auto_contrast_inplace<std::uint8_t>(mat<std::uint8_t>&, float, tone_mode);
-template STB_API void auto_contrast_inplace<float>(mat<float>&, float, tone_mode);
-template STB_API void match_histogram_inplace<std::uint8_t>(mat<std::uint8_t>&, const mat<std::uint8_t>&, tone_mode);
-template STB_API void match_histogram_inplace<float>(mat<float>&, const mat<float>&, tone_mode);
-template STB_API void clahe_inplace<std::uint8_t>(mat<std::uint8_t>&, float, int, int, tone_mode);
-template STB_API void clahe_inplace<float>(mat<float>&, float, int, int, tone_mode);
-template STB_API void gamma_inplace<std::uint8_t>(mat<std::uint8_t>&, float);
-template STB_API void gamma_inplace<float>(mat<float>&, float);
-template STB_API void levels_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, float, float);
-template STB_API void levels_inplace<float>(mat<float>&, float, float, float, float, float);
+template STB_API void detail::equalize_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, tone_mode);
+template STB_API void detail::equalize_inplace_mat<float>(mat<float>&, tone_mode);
+template STB_API void detail::auto_contrast_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, float, tone_mode);
+template STB_API void detail::auto_contrast_inplace_mat<float>(mat<float>&, float, tone_mode);
+template STB_API void detail::match_histogram_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, const mat<std::uint8_t>&, tone_mode);
+template STB_API void detail::match_histogram_inplace_mat<float>(mat<float>&, const mat<float>&, tone_mode);
+template STB_API void detail::clahe_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, float, int, int, tone_mode);
+template STB_API void detail::clahe_inplace_mat<float>(mat<float>&, float, int, int, tone_mode);
+template STB_API void detail::gamma_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, float);
+template STB_API void detail::gamma_inplace_mat<float>(mat<float>&, float);
+template STB_API void detail::levels_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, float, float, float, float, float);
+template STB_API void detail::levels_inplace_mat<float>(mat<float>&, float, float, float, float, float);
+
+std::string_view tone_mode_name(tone_mode m) noexcept {
+    switch (m) {
+        case tone_mode::luma: return "luma";
+        case tone_mode::per_channel: return "per_channel";
+    }
+    return {};
+}
+
+tone_mode tone_mode_from_name(std::string_view name) {
+    for (const tone_mode m : {tone_mode::luma, tone_mode::per_channel})
+        if (name == tone_mode_name(m)) return m;
+    throw std::invalid_argument("unknown tone mode \"" + std::string(name) + "\": use luma or per_channel");
+}
 
 }  // namespace stb

@@ -129,25 +129,25 @@ mat8u structuring_element(morph_shape shape, int width, int height) {
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> erode_inplace(mat<T>& img, const mat8u& se, edge_mode edge) {
+traits::if_image_t<mat<T>, void> detail::erode_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     const mat<T> r = apply(img, se, edge, false);
     if (!img.empty()) store(img, r);
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> dilate_inplace(mat<T>& img, const mat8u& se, edge_mode edge) {
+traits::if_image_t<mat<T>, void> detail::dilate_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     const mat<T> r = apply(img, se, edge, true);
     if (!img.empty()) store(img, r);
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> morph_gradient_inplace(mat<T>& img, const mat8u& se, edge_mode edge) {
+traits::if_image_t<mat<T>, void> detail::morph_gradient_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     const mat<T> d = apply(img, se, edge, true), e = apply(img, se, edge, false);
     if (!img.empty()) subtract_into(img, d, e);
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> top_hat_inplace(mat<T>& img, const mat8u& se, edge_mode edge) {
+traits::if_image_t<mat<T>, void> detail::top_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     const mat<T> opened = apply(apply(img, se, edge, false), se, edge, true);
     if (!img.empty()) {
         const mat<T> original = img.copy();
@@ -156,7 +156,7 @@ traits::if_image_t<mat<T>, void> top_hat_inplace(mat<T>& img, const mat8u& se, e
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> black_hat_inplace(mat<T>& img, const mat8u& se, edge_mode edge) {
+traits::if_image_t<mat<T>, void> detail::black_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     const mat<T> closed = apply(apply(img, se, edge, true), se, edge, false);
     if (!img.empty()) {
         const mat<T> original = img.copy();
@@ -167,11 +167,11 @@ traits::if_image_t<mat<T>, void> black_hat_inplace(mat<T>& img, const mat8u& se,
 #define STB_MORPH_INSTANTIATE(name)                                                                          \
     template STB_API void name<std::uint8_t>(mat<std::uint8_t>&, const mat8u&, edge_mode);                   \
     template STB_API void name<float>(mat<float>&, const mat8u&, edge_mode);
-STB_MORPH_INSTANTIATE(erode_inplace)
-STB_MORPH_INSTANTIATE(dilate_inplace)
-STB_MORPH_INSTANTIATE(morph_gradient_inplace)
-STB_MORPH_INSTANTIATE(top_hat_inplace)
-STB_MORPH_INSTANTIATE(black_hat_inplace)
+STB_MORPH_INSTANTIATE(detail::erode_inplace_mat)
+STB_MORPH_INSTANTIATE(detail::dilate_inplace_mat)
+STB_MORPH_INSTANTIATE(detail::morph_gradient_inplace_mat)
+STB_MORPH_INSTANTIATE(detail::top_hat_inplace_mat)
+STB_MORPH_INSTANTIATE(detail::black_hat_inplace_mat)
 #undef STB_MORPH_INSTANTIATE
 
 }  // namespace stb

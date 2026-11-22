@@ -118,15 +118,23 @@ STB_API image8u guided_filter(const mat8u& src, const mat8u& guide, int radius, 
 // given (see tone.hpp for the three forms and the rules). The alpha channel is never changed. Floats are read as 0 to 1.
 // The work is done by the *_inplace templates, which libstb has built for std::uint8_t and for float.
 
+namespace detail {
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> unsharp_mask_inplace_mat(mat<T>& img, float sigma, float amount,
+                                                                  float threshold, edge_mode edge);
+}  // namespace detail
+
 // ---- unsharp_mask: out = src + amount * (src - blur), where blur is gaussian_blur(src, sigma, edge), and a value whose
 // difference |src - blur| is below `threshold` (a fraction of the whole range, 0 to 1) is left alone. The result is
 // clamped to [0, 1] (a NaN stays NaN). amount 1 is "100 %" of Pillow's UnsharpMask; 0 changes nothing. Throws
 // invalid_argument for a sigma that is not a positive finite number, an amount that is not finite and >= 0, or a
 // threshold outside [0, 1]. Needs a float copy of the image while it works.
-template <class T>
-STB_API traits::if_image_t<mat<T>, void> unsharp_mask_inplace(mat<T>& img, float sigma, float amount = 1.0f,
-                                                              float threshold = 0.0f,
-                                                              edge_mode edge = edge_mode::clamp);
+template <class M>
+traits::if_image_mutable_t<M> unsharp_mask_inplace(M& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
+                                               edge_mode edge = edge_mode::clamp) {
+    detail::unsharp_mask_inplace_mat<traits::mat_value_t<M>>(img, sigma, amount, threshold, edge);
+    return img;
+}
 
 template <class M>
 traits::if_image_rvalue_t<M> unsharp_mask(M&& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
@@ -140,14 +148,22 @@ traits::if_image_t<M> unsharp_mask(const M& src, float sigma, float amount = 1.0
     return unsharp_mask(src.copy(), sigma, amount, threshold, edge);
 }
 
+namespace detail {
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> pixelize_inplace_mat(mat<T>& img, int block_w, int block_h);
+}  // namespace detail
+
 // ---- pixelize: the picture is cut into blocks of block_w x block_h values (block_h 0 means the same as block_w),
 // starting at the top left, and every block is filled with its mean (the blocks at the right and bottom edges are
 // smaller and only use their own values). The colour of gray + alpha and RGBA images is the mean weighted by alpha
 // (a transparent pixel does not tint its block; a block with no opacity at all gets the plain mean), and the alpha of
 // a block becomes the plain mean of its alpha, so here the alpha channel does change. On 8 bits the means are exact
 // integer arithmetic rounded to the nearest. Throws invalid_argument for block_w below 1 or block_h below 0.
-template <class T>
-STB_API traits::if_image_t<mat<T>, void> pixelize_inplace(mat<T>& img, int block_w, int block_h = 0);
+template <class M>
+traits::if_image_mutable_t<M> pixelize_inplace(M& img, int block_w, int block_h = 0) {
+    detail::pixelize_inplace_mat<traits::mat_value_t<M>>(img, block_w, block_h);
+    return img;
+}
 
 template <class M>
 traits::if_image_rvalue_t<M> pixelize(M&& img, int block_w, int block_h = 0) {

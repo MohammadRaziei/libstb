@@ -146,7 +146,7 @@ inline std::uint8_t encode(float v, bool hue) noexcept {
 }  // namespace
 
 template <class T>
-traits::if_image_t<mat<T>, void> convert_color_inplace(mat<T>& img, color_space from, color_space to) {
+traits::if_image_t<mat<T>, void> detail::convert_color_inplace_mat(mat<T>& img, color_space from, color_space to) {
     const conversion into_rgb = to_rgb_of(from), out_of_rgb = from_rgb_of(to);  // throw for an unknown space
     if (img.empty()) return;
     const int c = img.channels();
@@ -183,7 +183,23 @@ traits::if_image_t<mat<T>, void> convert_color_inplace(mat<T>& img, color_space 
     });
 }
 
-template STB_API void convert_color_inplace<std::uint8_t>(mat<std::uint8_t>&, color_space, color_space);
-template STB_API void convert_color_inplace<float>(mat<float>&, color_space, color_space);
+template STB_API void detail::convert_color_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, color_space, color_space);
+template STB_API void detail::convert_color_inplace_mat<float>(mat<float>&, color_space, color_space);
+
+std::string_view color_space_name(color_space s) noexcept {
+    switch (s) {
+        case color_space::rgb: return "rgb";
+        case color_space::hsv: return "hsv";
+        case color_space::hsl: return "hsl";
+        case color_space::ycbcr: return "ycbcr";
+    }
+    return {};
+}
+
+color_space color_space_from_name(std::string_view name) {
+    for (const color_space s : {color_space::rgb, color_space::hsv, color_space::hsl, color_space::ycbcr})
+        if (name == color_space_name(s)) return s;
+    throw std::invalid_argument("unknown color space \"" + std::string(name) + "\": use rgb, hsv, hsl or ycbcr");
+}
 
 }  // namespace stb

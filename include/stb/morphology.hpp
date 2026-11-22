@@ -41,27 +41,62 @@ enum class morph_shape {
 // invalid_argument. Its members are 255 and the rest 0.
 STB_API mat8u structuring_element(morph_shape shape, int width, int height = 0);
 
+// The work of the five operations that are not made of others, for std::uint8_t and float: call the functions below.
+namespace detail {
 template <class T>
-STB_API traits::if_image_t<mat<T>, void> erode_inplace(mat<T>& img, const mat8u& se, edge_mode edge = edge_mode::clamp);
+STB_API traits::if_image_t<mat<T>, void> erode_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
 template <class T>
-STB_API traits::if_image_t<mat<T>, void> dilate_inplace(mat<T>& img, const mat8u& se, edge_mode edge = edge_mode::clamp);
+STB_API traits::if_image_t<mat<T>, void> dilate_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
 template <class T>
-STB_API traits::if_image_t<mat<T>, void> morph_gradient_inplace(mat<T>& img, const mat8u& se,
-                                                                edge_mode edge = edge_mode::clamp);
+STB_API traits::if_image_t<mat<T>, void> morph_gradient_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
 template <class T>
-STB_API traits::if_image_t<mat<T>, void> top_hat_inplace(mat<T>& img, const mat8u& se, edge_mode edge = edge_mode::clamp);
+STB_API traits::if_image_t<mat<T>, void> top_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
 template <class T>
-STB_API traits::if_image_t<mat<T>, void> black_hat_inplace(mat<T>& img, const mat8u& se, edge_mode edge = edge_mode::clamp);
+STB_API traits::if_image_t<mat<T>, void> black_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
+}  // namespace detail
 
-template <class T>
-traits::if_image_t<mat<T>, void> morph_open_inplace(mat<T>& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
-    erode_inplace(img, se, edge);
-    dilate_inplace(img, se, edge);
+template <class M>
+traits::if_image_mutable_t<M> erode_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+    detail::erode_inplace_mat<traits::mat_value_t<M>>(img, se, edge);
+    return img;
 }
-template <class T>
-traits::if_image_t<mat<T>, void> morph_close_inplace(mat<T>& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+
+template <class M>
+traits::if_image_mutable_t<M> dilate_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+    detail::dilate_inplace_mat<traits::mat_value_t<M>>(img, se, edge);
+    return img;
+}
+
+template <class M>
+traits::if_image_mutable_t<M> morph_gradient_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+    detail::morph_gradient_inplace_mat<traits::mat_value_t<M>>(img, se, edge);
+    return img;
+}
+
+template <class M>
+traits::if_image_mutable_t<M> top_hat_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+    detail::top_hat_inplace_mat<traits::mat_value_t<M>>(img, se, edge);
+    return img;
+}
+
+template <class M>
+traits::if_image_mutable_t<M> black_hat_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+    detail::black_hat_inplace_mat<traits::mat_value_t<M>>(img, se, edge);
+    return img;
+}
+
+template <class M>
+traits::if_image_mutable_t<M> morph_open_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
+    erode_inplace(img, se, edge);
+    dilate_inplace(img, se, edge);
+    return img;
+}
+
+template <class M>
+traits::if_image_mutable_t<M> morph_close_inplace(M& img, const mat8u& se, edge_mode edge = edge_mode::clamp) {
     dilate_inplace(img, se, edge);
     erode_inplace(img, se, edge);
+    return img;
 }
 
 // The rvalue and copy forms of each operation, the same for all seven.

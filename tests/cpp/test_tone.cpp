@@ -77,8 +77,8 @@ static_assert(std::is_same_v<decltype(stb::equalize(std::declval<const image8u&>
 static_assert(std::is_same_v<decltype(stb::equalize(std::declval<const mat32f&>())), mat32f>);
 static_assert(std::is_same_v<decltype(stb::equalize(std::declval<image8u>())), image8u>);
 static_assert(std::is_same_v<decltype(stb::gamma(std::declval<mat32f>(), 2.0f)), mat32f>);
-static_assert(std::is_same_v<decltype(stb::equalize_inplace(std::declval<image8u&>())), void>);
-static_assert(std::is_same_v<decltype(stb::clahe_inplace(std::declval<image8u&>())), void>);
+static_assert(std::is_same_v<decltype(stb::equalize_inplace(std::declval<image8u&>())), image8u&>);
+static_assert(std::is_same_v<decltype(stb::clahe_inplace(std::declval<image8u&>())), image8u&>);
 static_assert(std::is_same_v<decltype(stb::clahe(std::declval<const image8u&>())), image8u>);
 static_assert(std::is_same_v<decltype(stb::clahe(std::declval<const mat32f&>(), 3.0f, 4, 2)), mat32f>);
 static_assert(std::is_same_v<decltype(stb::clahe(std::declval<image8u>())), image8u>);

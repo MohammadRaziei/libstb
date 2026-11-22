@@ -833,7 +833,7 @@ inline float mean_value(double num, double den) { return float(num / den); }
 }  // namespace
 
 template <class T>
-traits::if_image_t<mat<T>, void> unsharp_mask_inplace(mat<T>& img, float sigma, float amount, float threshold,
+traits::if_image_t<mat<T>, void> detail::unsharp_mask_inplace_mat(mat<T>& img, float sigma, float amount, float threshold,
                                                       edge_mode edge) {
     const mat32f g = gaussian_kernel(sigma);  // throws for a bad sigma
     if (!(amount >= 0.0f) || !std::isfinite(amount)) throw std::invalid_argument("amount must be a finite number >= 0");
@@ -868,7 +868,7 @@ traits::if_image_t<mat<T>, void> unsharp_mask_inplace(mat<T>& img, float sigma, 
 }
 
 template <class T>
-traits::if_image_t<mat<T>, void> pixelize_inplace(mat<T>& img, int block_w, int block_h) {
+traits::if_image_t<mat<T>, void> detail::pixelize_inplace_mat(mat<T>& img, int block_w, int block_h) {
     if (block_w < 1) throw std::invalid_argument("block_w must be >= 1");
     if (block_h < 0) throw std::invalid_argument("block_h must be >= 0");
     if (block_h == 0) block_h = block_w;
@@ -912,9 +912,9 @@ traits::if_image_t<mat<T>, void> pixelize_inplace(mat<T>& img, int block_w, int 
     });
 }
 
-template STB_API void unsharp_mask_inplace<std::uint8_t>(mat<std::uint8_t>&, float, float, float, edge_mode);
-template STB_API void unsharp_mask_inplace<float>(mat<float>&, float, float, float, edge_mode);
-template STB_API void pixelize_inplace<std::uint8_t>(mat<std::uint8_t>&, int, int);
-template STB_API void pixelize_inplace<float>(mat<float>&, int, int);
+template STB_API void detail::unsharp_mask_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, float, float, float, edge_mode);
+template STB_API void detail::unsharp_mask_inplace_mat<float>(mat<float>&, float, float, float, edge_mode);
+template STB_API void detail::pixelize_inplace_mat<std::uint8_t>(mat<std::uint8_t>&, int, int);
+template STB_API void detail::pixelize_inplace_mat<float>(mat<float>&, int, int);
 
 }  // namespace stb

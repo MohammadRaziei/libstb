@@ -44,11 +44,24 @@ enum class color_space {
     ycbcr,  // luma and the blue and red differences, as in JPEG
 };
 
+// The name of a colour space ("rgb", "hsv", "hsl", "ycbcr") and back. color_space_from_name throws
+// std::invalid_argument for another name.
+STB_API std::string_view color_space_name(color_space s) noexcept;
+STB_API color_space color_space_from_name(std::string_view name);
+
+namespace detail {
+template <class T>
+STB_API traits::if_image_t<mat<T>, void> convert_color_inplace_mat(mat<T>& img, color_space from, color_space to);
+}  // namespace detail
+
 // img is converted from the space `from` to the space `to` (the same space is a no-op that still checks the
 // channels). Throws invalid_argument unless img has 3 or 4 channels; an empty image is left as it is, and a call
 // that throws leaves img as it was.
-template <class T>
-STB_API traits::if_image_t<mat<T>, void> convert_color_inplace(mat<T>& img, color_space from, color_space to);
+template <class M>
+traits::if_image_mutable_t<M> convert_color_inplace(M& img, color_space from, color_space to) {
+    detail::convert_color_inplace_mat<traits::mat_value_t<M>>(img, from, to);
+    return img;
+}
 
 template <class M>
 traits::if_image_rvalue_t<M> convert_color(M&& img, color_space from, color_space to) {

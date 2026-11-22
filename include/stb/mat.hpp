@@ -64,6 +64,11 @@ enum class edge_mode : std::uint8_t {
     zero,     // 000|abcd|000  everything outside is 0
 };
 
+// The name of an edge mode ("clamp", "reflect", "mirror", "wrap", "zero") and back. edge_mode_from_name throws
+// std::invalid_argument for another name.
+STB_API std::string_view edge_mode_name(edge_mode e) noexcept;
+STB_API edge_mode edge_mode_from_name(std::string_view name);
+
 template <class T>
 class mat;
 using mat8u = mat<std::uint8_t>;

@@ -625,6 +625,12 @@ using if_image_t = std::enable_if_t<is_image_input_v<M>, R>;
 template <class M, class R = M>
 using if_image_rvalue_t = std::enable_if_t<is_image_input_v<M> && !std::is_lvalue_reference_v<M>, R>;
 
+// For the in-place functions: they take `M& img` (a non-const lvalue: M would be deduced as const for a const one)
+// and give it back, so the type is M& and the call chains. The same drop-out for anything that is not an image input.
+//   template <class M> traits::if_image_mutable_t<M> equalize_inplace(M& img, tone_mode mode);
+template <class M>
+using if_image_mutable_t = std::enable_if_t<is_image_input_v<M> && !std::is_const_v<M>, M&>;
+
 }  // namespace traits
 
 }  // namespace stb

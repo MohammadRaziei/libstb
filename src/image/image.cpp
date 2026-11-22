@@ -219,4 +219,21 @@ void image::write(const std::filesystem::path& path) const {
                                 "' (supported: .png .jpg .jpeg .bmp .tga)");
 }
 
+std::string_view edge_mode_name(edge_mode e) noexcept {
+    switch (e) {
+        case edge_mode::clamp: return "clamp";
+        case edge_mode::reflect: return "reflect";
+        case edge_mode::mirror: return "mirror";
+        case edge_mode::wrap: return "wrap";
+        case edge_mode::zero: return "zero";
+    }
+    return {};
+}
+
+edge_mode edge_mode_from_name(std::string_view name) {
+    for (const edge_mode e : {edge_mode::clamp, edge_mode::reflect, edge_mode::mirror, edge_mode::wrap, edge_mode::zero})
+        if (name == edge_mode_name(e)) return e;
+    throw std::invalid_argument("unknown edge mode \"" + std::string(name) + "\": use clamp, reflect, mirror, wrap or zero");
+}
+
 }  // namespace stb

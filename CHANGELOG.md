@@ -8,6 +8,14 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Changed
+- **The `*_inplace` functions give their argument back.** `equalize_inplace`, `auto_contrast_inplace`, `match_histogram_inplace`, `clahe_inplace`, `gamma_inplace`, `levels_inplace`, `convert_color_inplace`, `pixelize_inplace`,
+  `unsharp_mask_inplace`, `erode_inplace`, `dilate_inplace`, `morph_open_inplace`, `morph_close_inplace`, `morph_gradient_inplace`, `top_hat_inplace` and `black_hat_inplace` return a reference to the image they were given, with its exact
+  type (`image&` for an `image`, `mat32f&` for a `mat32f`) instead of `void`, so the calls chain: `gamma_inplace(equalize_inplace(img), 2.2f)`. As with `canny` and `threshold`, the work is in `detail::..._inplace_mat<T>` (for
+  `std::uint8_t` and `float`) and the plain name is a thin template over it that drops out for a const argument (`traits::if_image_mutable_t`).
+
+### Added
+- **`edge_mode_name` / `edge_mode_from_name`, `tone_mode_name` / `tone_mode_from_name`, `color_space_name` / `color_space_from_name`**, in the pattern of `pixel_format_from_name`: the name of an enum value and back; an unknown name throws
+  `std::invalid_argument` that lists the valid ones. The Python binding keeps its own string tables for now.
 - **`warp_affine` / `warp_perspective` are named the same in C++ and Python.** The enum `interpolation` is `interpolation_method` (like `adaptive_method` and `edge_mode`: the type has a qualifier, the parameter is the plain word), so the parameter
   is `interpolation` instead of the abbreviation `interp`; in Python the enum is `InterpolationMethod` (was `Interpolation`). The size of the result is `out_width` and `out_height` in Python too (0, the default, is the size of the
   source, for each of them on its own), as in C++ and as every other size of the library (`resize(width, height)`, `crop(...)`): the `size=(w, h)` tuple, which only the warps had, is gone. No alias is kept for the old names.
