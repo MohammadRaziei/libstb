@@ -160,7 +160,7 @@ def test_open_removes_a_speck_and_close_fills_a_hole_and_the_forms_agree():
     out = img.erode(se)
     assert np.array_equal(np.asarray(out), np.asarray(stb.erode(img, se)))
     same = img.copy()
-    assert same.dilate(se, inplace=True) is same
+    assert same.dilate_inplace(se) is same
     assert np.array_equal(np.asarray(same), np.asarray(stb.dilate(img, se)))
     for name in ("erode", "dilate", "morph_open", "morph_close", "morph_gradient", "top_hat", "black_hat"):
         assert np.array_equal(np.asarray(getattr(img, name)(se, edge="mirror")), np.asarray(getattr(stb, name)(img, se, edge="mirror")))

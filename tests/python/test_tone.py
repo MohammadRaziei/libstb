@@ -72,11 +72,11 @@ def test_module_function_and_method_agree_and_leave_the_source_alone():
 def test_inplace_changes_the_image_and_returns_it():
     img = stb.Image(rand8(12, 12, 3, seed=2))
     want = np.asarray(stb.equalize(img)).copy()
-    out = img.equalize(inplace=True)
+    out = img.equalize_inplace()
     assert out is img
     assert np.array_equal(np.asarray(img), want)
-    for call in (lambda i: i.auto_contrast(1.0, inplace=True), lambda i: i.gamma(1.4, inplace=True),
-                 lambda i: i.levels(0.1, 0.9, 1.2, inplace=True), lambda i: i.match_histogram(stb.Image(rand8(5, 5, 3)), inplace=True)):
+    for call in (lambda i: i.auto_contrast_inplace(1.0), lambda i: i.gamma_inplace(1.4),
+                 lambda i: i.levels_inplace(0.1, 0.9, 1.2), lambda i: i.match_histogram_inplace(stb.Image(rand8(5, 5, 3)))):
         before = np.asarray(img).copy()
         assert call(img) is img
         assert not np.array_equal(np.asarray(img), before)
@@ -239,7 +239,7 @@ def test_clahe_forms_strings_and_inplace():
     assert np.array_equal(np.asarray(new), np.asarray(stb.clahe(img, 2.0, 3, 2)))
     assert np.array_equal(np.asarray(img.clahe(2.0, 3, 2, "per_channel")), np.asarray(stb.clahe(img, 2.0, 3, 2, stb.ToneMode.PER_CHANNEL)))
     before = np.asarray(img).copy()
-    again = img.clahe(2.0, 3, 2, inplace=True)
+    again = img.clahe_inplace(2.0, 3, 2)
     assert again is img and np.array_equal(np.asarray(img), np.asarray(new)) and not np.array_equal(np.asarray(img), before)
     # defaults: clip_limit 2, 8 x 8 tiles (tiles_y 0 is the same as tiles_x)
     big = stb.Image(rand8(32, 40, 1, seed=23))

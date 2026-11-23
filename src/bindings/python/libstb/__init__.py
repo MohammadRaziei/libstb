@@ -44,6 +44,10 @@ from .libstb_py import logging_bridge, set_threads, thread_count
 from .libstb_py import (EdgeMode, SuperpixelMap, SuperpixelMethod, box_blur, convolve, gaussian_blur, gaussian_kernel, magnitude, sobel,
                         superpixels, to_8u, to_f32)
 from .libstb_py import (Homography, InterpolationMethod, warp_affine, warp_perspective)
+from .libstb_py import (
+    equalize_inplace, auto_contrast_inplace, match_histogram_inplace, clahe_inplace, gamma_inplace, levels_inplace, convert_color_inplace, pixelize_inplace,
+    unsharp_mask_inplace, erode_inplace, dilate_inplace, morph_open_inplace, morph_close_inplace, morph_gradient_inplace, top_hat_inplace, black_hat_inplace,
+)
 from .libstb_py import (ToneMode, apply_lut, auto_contrast, clahe, equalize, gamma, gamma_lut, histogram, levels, levels_lut, match_histogram)
 from .libstb_py import (ColorSpace, bilateral_filter, convert_color, guided_filter, mae, median_filter, mse, pixelize, psnr, ssim, ssim_map, unsharp_mask)
 from .libstb_py import (AdaptiveMethod, Components, Connectivity, MorphShape, adaptive_threshold, black_hat, canny, connected_components,
@@ -170,6 +174,8 @@ def get_cmake_dir():
 
 
 __all__ = [
+    "equalize_inplace", "auto_contrast_inplace", "match_histogram_inplace", "clahe_inplace", "gamma_inplace", "levels_inplace", "convert_color_inplace", "pixelize_inplace",
+    "unsharp_mask_inplace", "erode_inplace", "dilate_inplace", "morph_open_inplace", "morph_close_inplace", "morph_gradient_inplace", "top_hat_inplace", "black_hat_inplace",
     "Image", "Loader", "PremultipliedImage", "ImageInfo", "PixelFormat", "DEFAULT_MAX_BYTES", "imread", "imwrite", "iminfo", "simd_name", "simd_backends", "set_simd", "simd", "thread_count", "set_threads", "threads", "logging_bridge", "imresize",
     "Resizer",
     "EdgeMode", "SuperpixelMethod", "SuperpixelMap", "gaussian_blur", "box_blur", "convolve", "gaussian_kernel", "sobel", "magnitude", "superpixels", "to_f32", "to_8u",

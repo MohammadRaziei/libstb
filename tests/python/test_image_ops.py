@@ -70,7 +70,7 @@ def test_unsharp_mask_forms_alpha_and_errors():
     out = stb.unsharp_mask(img, 1.0, 1.2, 0.01)
     assert np.array_equal(np.asarray(out)[..., 3], np.asarray(img)[..., 3])  # alpha is never changed
     same = img.copy()
-    assert same.unsharp_mask(1.0, 1.2, 0.01, inplace=True) is same
+    assert same.unsharp_mask_inplace(1.0, 1.2, 0.01) is same
     assert np.array_equal(np.asarray(same), np.asarray(out))
     assert np.array_equal(np.asarray(stb.unsharp_mask(img, 1.0, 0.0)), np.asarray(img))  # amount 0
     for bad in ({"sigma": 0.0}, {"sigma": 1.0, "amount": -1.0}, {"sigma": 1.0, "threshold": 2.0}):
@@ -98,7 +98,7 @@ def test_pixelize_float_forms_and_errors():
     img = stb.Image(rand8(9, 9, 3, seed=8))
     assert np.array_equal(np.asarray(img.pixelize(2, 4)), np.asarray(stb.pixelize(img, 2, 4)))
     same = img.copy()
-    assert same.pixelize(3, inplace=True) is same
+    assert same.pixelize_inplace(3) is same
     with pytest.raises(ValueError):
         stb.pixelize(img, 0)
     with pytest.raises(ValueError):
@@ -137,7 +137,7 @@ def test_convert_color_round_trips_and_forms(space):
     back = np.asarray(stb.convert_color(there, space, "rgb")).astype(int)
     assert np.abs(back - np.asarray(img).astype(int)).max() <= 6
     same = img.copy()
-    assert same.convert_color("rgb", space, inplace=True) is same
+    assert same.convert_color_inplace("rgb", space) is same
     assert np.array_equal(np.asarray(same), np.asarray(there))
     assert np.array_equal(np.asarray(img.convert_color(stb.ColorSpace.RGB, space)), np.asarray(there))
 

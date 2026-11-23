@@ -1,0 +1,5 @@
+polybind 0.0.0
+
+14c1ecc7a9a53b9648fb35d26c95f5016c9a92b9d3444624f80f275ac799788a  dispatch.hpp
+05538fc5d6a5b83c3393cdb36acd9ab0556a05e9d0f88c67fb61de4761a75a17  nanobind.hpp
+51ea8bd249ad41380ae09bd74bbeaa407f1473c1c252b775e50b015f2af2f1e2  polybind-config.cmake

@@ -8,6 +8,15 @@ This file was generated from the git history (61 commits, tags `v0.3.0`, `v0.4.0
 ## [Unreleased]
 
 ### Changed
+- **In Python the in-place forms are functions of their own, not `inplace=True`.** The keyword is gone from `Image.equalize`, `auto_contrast`, `clahe`, `match_histogram`, `gamma`, `levels`, `convert_color`, `pixelize`, `unsharp_mask`,
+  `erode`, `dilate`, `morph_open`, `morph_close`, `morph_gradient`, `top_hat` and `black_hat`; those methods return a new Image. The functions are `equalize_inplace`, ... `black_hat_inplace` (the names of C++), each a module function
+  and an `Image` method. No alias is kept.
+
+### Added
+- **The sixteen `*_inplace` functions in Python take an `Image`, a uint8 array or a float32 array** (an array `(H, W)` or `(H, W, C)`, writable and C-contiguous) and give their argument back (the same object), so calls chain:
+  `stb.gamma_inplace(stb.equalize_inplace(arr), 2.2)`, `img.equalize_inplace().gamma_inplace(2.2)`. An array is received without conversion: a float64, int32, read-only or non-contiguous array is a `TypeError`, never a silent copy
+  or cast. An enum is given by name (any case) or as itself; a bad name is a `ValueError` listing the valid ones. They are registered with `polybind::def_dispatch` (`src/bindings/python/polybind/`, a copy made by `polybind vendor`) from one generic
+  lambda each, with `src/bindings/python/stb_kinds.hpp` saying how the three kinds are seen from Python; the GIL is released around every call. See `binding.md`.
 - **The `*_inplace` functions give their argument back.** `equalize_inplace`, `auto_contrast_inplace`, `match_histogram_inplace`, `clahe_inplace`, `gamma_inplace`, `levels_inplace`, `convert_color_inplace`, `pixelize_inplace`,
   `unsharp_mask_inplace`, `erode_inplace`, `dilate_inplace`, `morph_open_inplace`, `morph_close_inplace`, `morph_gradient_inplace`, `top_hat_inplace` and `black_hat_inplace` return a reference to the image they were given, with its exact
   type (`image&` for an `image`, `mat32f&` for a `mat32f`) instead of `void`, so the calls chain: `gamma_inplace(equalize_inplace(img), 2.2f)`. As with `canny` and `threshold`, the work is in `detail::..._inplace_mat<T>` (for
