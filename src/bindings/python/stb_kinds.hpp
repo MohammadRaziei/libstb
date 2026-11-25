@@ -33,6 +33,24 @@ stb::mat<T> view_of_array(const A& a) {
     return stb::mat<T>::wrap(int(w), int(h), int(c), const_cast<T*>(a.data()));
 }
 
+// What polybind::array_kind needs to know about stb::mat<T>
+struct mat_traits {
+    template <class T>
+    using matrix = stb::mat<T>;
+    template <class T, class A>
+    static stb::mat<T> view(const A& a) { return view_of_array<T>(a); }
+    template <class T>
+    static T* data(stb::mat<T>& m) { return m.data(); }
+    template <class T>
+    static std::size_t height(const stb::mat<T>& m) { return std::size_t(m.height()); }
+    template <class T>
+    static std::size_t width(const stb::mat<T>& m) { return std::size_t(m.width()); }
+    template <class T>
+    static std::size_t channels(const stb::mat<T>& m) { return std::size_t(m.channels()); }
+    template <class T>
+    static bool empty(const stb::mat<T>& m) { return m.empty(); }
+};
+
 }  // namespace stb_py
 
 namespace polybind {
@@ -53,64 +71,13 @@ struct enum_names<stb::color_space> {
     static stb::color_space from_name(std::string_view n) { return stb::color_space_from_name(n); }
 };
 
-template <class T>
-struct stb_array_kind {
-    using array_rw = strict<nanobind::ndarray<T, nanobind::c_contig, nanobind::device::cpu>>;
-    using array_ro = strict<nanobind::ndarray<const T, nanobind::c_contig, nanobind::device::cpu>>;
-    using const_arg = array_ro;
-    using mutable_arg = array_rw;
-    using mutable_ret = array_rw;
-    static constexpr auto policy = nanobind::rv_policy::automatic;
-    struct holder {
-        stb::mat<T> view;
-        stb::mat<T>& get() { return view; }
-    };
-    struct const_holder {
-        stb::mat<T> view;
-        bool three_d;  // the argument is (H, W, C): a result of one channel is (H, W, 1), not (H, W)
-        explicit const_holder(const array_ro& a) : view(stb_py::view_of_array<T>(a.value)), three_d(a.value.ndim() == 3) {}
-        const stb::mat<T>& get() { return view; }
-    };
-    static holder mutable_holder(const array_rw& a) { return holder{stb_py::view_of_array<T>(a.value)}; }
-    static array_rw give_back(const array_rw& a) { return a; }
+template <>
+struct nanobind_backend::kind<stb::mat8u> : array_kind<stb_py::mat_traits, std::uint8_t> {};
+template <>
+struct nanobind_backend::kind<stb::mat32f> : array_kind<stb_py::mat_traits, float> {};
 
-    // a new array: the matrix moves to the heap and a capsule frees it with the array
-    using new_ret = nanobind::ndarray<nanobind::numpy, T>;
-    static constexpr auto new_policy = nanobind::rv_policy::automatic;
-    static new_ret make(stb::mat<T>&& m, bool three_d) {
-        if (m.empty()) throw std::runtime_error("the result is empty");
-        auto* owned = new stb::mat<T>(std::move(m));
-        nanobind::capsule owner(owned, [](void* p) noexcept { delete static_cast<stb::mat<T>*>(p); });
-        const std::size_t shape[3] = {std::size_t(owned->height()), std::size_t(owned->width()), std::size_t(owned->channels())};
-        return new_ret(owned->data(), three_d || owned->channels() != 1 ? 3 : 2, shape, owner);
-    }
-    // the result of a function has the shape of its argument (one channel: (H, W) for (H, W), (H, W, 1) for (H, W, 1))
-    template <class H, class = decltype(std::declval<const H&>().three_d)>
-    static new_ret wrap(stb::mat<T>&& m, const H& like) {
-        return make(std::move(m), like.three_d);
-    }
-    static new_ret wrap(stb::mat<T>&& m) { return make(std::move(m), false); }
-};
-
-template <>
-struct nanobind_backend::kind<stb::mat8u> : stb_array_kind<std::uint8_t> {};
-template <>
-struct nanobind_backend::kind<stb::mat32f> : stb_array_kind<float> {};
-
-// Kinds that are only ever the result of a function: a level (int for 8 bits, double for floats), and the pair of derivatives of
-// sobel() and scharr(): a tuple (dx, dy) of float32 arrays.
-template <>
-struct nanobind_backend::kind<int> {
-    using new_ret = int;
-    static constexpr auto new_policy = nanobind::rv_policy::automatic;
-    static int wrap(int&& v) { return v; }
-};
-template <>
-struct nanobind_backend::kind<double> {
-    using new_ret = double;
-    static constexpr auto new_policy = nanobind::rv_policy::automatic;
-    static double wrap(double&& v) { return v; }
-};
+// A kind that is only ever the result of a function: the pair of derivatives of sobel() and scharr(): a tuple (dx, dy) of float32
+// arrays. (A number, an int level or a double, is a ready-made kind of polybind.)
 template <>
 struct nanobind_backend::kind<stb::gradients> {
     using new_ret = nanobind::tuple;
@@ -150,7 +117,6 @@ struct nanobind_backend::kind<stb::image> {
     static constexpr auto new_policy = nanobind::rv_policy::automatic;
     static stb::image wrap(stb::image&& x) { return std::move(x); }
 };
-
 
 }  // namespace polybind
 
