@@ -30,6 +30,9 @@ using namespace nb::literals;
 
 namespace {
 
+using polybind::def_dispatch;
+using stb_py::stb_kinds;
+
 using f32_array = nb::ndarray<const float, nb::c_contig, nb::device::cpu>;
 using f32_result = nb::ndarray<nb::numpy, float>;
 
@@ -227,8 +230,9 @@ stb::mat8u lut_of(const lut_array& a) {
 }
 
 constexpr const char* tone_doc =
-    "Takes an Image (gives a new Image) or a float32 array of shape (H, W) or (H, W, C) with values 0 to 1 (gives a new\n"
-    "array). 1 to 4 channels: gray, gray + alpha, RGB, RGBA; the alpha channel is never changed.";
+    "Takes an Image, a uint8 array (0 to 255) or a float32 array (0 to 1) of shape (H, W) or (H, W, C) and gives a new one of the same\n"
+    "kind; the argument is not changed and an array is not converted (any other type is a TypeError). 1 to 4 channels: gray,\n"
+    "gray + alpha, RGB, RGBA; the alpha channel is never changed.";
 constexpr const char* mode_doc =
     "`mode` is \"luma\" (the default: only the brightness changes, so the colours do not shift) or \"per_channel\"\n"
     "(or a ToneMode).";
@@ -272,59 +276,17 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
     const std::string equalize_doc =
         std::string("Spreads the levels so that each one is used about as often (histogram equalisation). A picture of one value\n"
                     "is returned unchanged.\n") + tone_doc + "\n" + mode_doc;
-    m.def(
-        "equalize",
-        [](const stb::image& img, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::equalize(img, t);
-        },
-        "src"_a, "mode"_a = "luma", equalize_doc.c_str());
-    m.def(
-        "equalize",
-        [](const f32_array& src, nb::handle mode) -> f32_result {
-            const stb::tone_mode t = tone_mode_of(mode);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::equalize(in, t); });
-        },
-        "src"_a, "mode"_a = "luma");
-    image_cls.def(
-        "equalize",
-        [](const stb::image& self, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::equalize(self, t);
-        },
-        "mode"_a = "luma",
-        "Equalizes the histogram: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "equalize", stb_kinds,
+                 [](const auto& x, stb::tone_mode mode) { return stb::equalize(x, mode); },
+                 "src"_a, "mode"_a = "luma", equalize_doc.c_str());
 
     // ---- auto_contrast
     const std::string auto_doc =
         std::string("Stretches the values to the whole range after dropping the darkest and brightest `cutoff` percent (0 up to\n"
                     "but not including 50), like Pillow's ImageOps.autocontrast.\n") + tone_doc + "\n" + mode_doc;
-    m.def(
-        "auto_contrast",
-        [](const stb::image& img, float cutoff, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::auto_contrast(img, cutoff, t);
-        },
-        "src"_a, "cutoff"_a = 0.0f, "mode"_a = "luma", auto_doc.c_str());
-    m.def(
-        "auto_contrast",
-        [](const f32_array& src, float cutoff, nb::handle mode) -> f32_result {
-            const stb::tone_mode t = tone_mode_of(mode);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::auto_contrast(in, cutoff, t); });
-        },
-        "src"_a, "cutoff"_a = 0.0f, "mode"_a = "luma");
-    image_cls.def(
-        "auto_contrast",
-        [](const stb::image& self, float cutoff, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::auto_contrast(self, cutoff, t);
-        },
-        "cutoff"_a = 0.0f, "mode"_a = "luma",
-        "Stretches the contrast: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "auto_contrast", stb_kinds,
+                 [](const auto& x, float cutoff, stb::tone_mode mode) { return stb::auto_contrast(x, cutoff, mode); },
+                 "src"_a, "cutoff"_a = 0.0f, "mode"_a = "luma", auto_doc.c_str());
 
     // ---- clahe
     const std::string clahe_doc =
@@ -332,112 +294,38 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
                     "tiles_x) is equalised on its own with its histogram cut at `clip_limit` times the mean count of a bin (at least 1; 1\\n"
                     "spreads nothing, 2 to 4 is usual), and each pixel mixes the mappings of its four nearest tiles. A tile of one value is\\n"
                     "left as it is. ValueError for a bad clip_limit or tile count, or more tiles than pixels along an axis.\\n") + tone_doc + "\\n" + mode_doc;
-    m.def(
-        "clahe",
-        [](const stb::image& img, float clip_limit, int tiles_x, int tiles_y, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::clahe(img, clip_limit, tiles_x, tiles_y, t);
-        },
-        "src"_a, "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma", clahe_doc.c_str());
-    m.def(
-        "clahe",
-        [](const f32_array& src, float clip_limit, int tiles_x, int tiles_y, nb::handle mode) -> f32_result {
-            const stb::tone_mode t = tone_mode_of(mode);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::clahe(in, clip_limit, tiles_x, tiles_y, t); });
-        },
-        "src"_a, "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma");
-    image_cls.def(
-        "clahe",
-        [](const stb::image& self, float clip_limit, int tiles_x, int tiles_y, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::clahe(self, clip_limit, tiles_x, tiles_y, t);
-        },
-        "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma",
-        "Contrast-limited adaptive equalisation: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "clahe", stb_kinds,
+                 [](const auto& x, float clip_limit, int tiles_x, int tiles_y, stb::tone_mode mode) {
+                     return stb::clahe(x, clip_limit, tiles_x, tiles_y, mode);
+                 },
+                 "src"_a, "clip_limit"_a = 2.0f, "tiles_x"_a = 8, "tiles_y"_a = 0, "mode"_a = "luma", clahe_doc.c_str());
 
     // ---- match_histogram
     const std::string match_doc =
         std::string("Moves the levels so that the histogram follows the one of `reference` (an Image, or a float32 array for a\n"
                     "float32 `src`; any size, the same number of channels).\n") + tone_doc + "\n" + mode_doc;
-    m.def(
-        "match_histogram",
-        [](const stb::image& img, const stb::image& reference, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::match_histogram(img, reference, t);
-        },
-        "src"_a, "reference"_a, "mode"_a = "luma", match_doc.c_str());
-    m.def(
-        "match_histogram",
-        [](const f32_array& src, const f32_array& reference, nb::handle mode) -> f32_result {
-            const stb::tone_mode t = tone_mode_of(mode);
-            const stb::mat32f ref = view_of(reference);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::match_histogram(in, ref, t); });
-        },
-        "src"_a, "reference"_a, "mode"_a = "luma");
-    image_cls.def(
-        "match_histogram",
-        [](const stb::image& self, const stb::image& reference, nb::handle mode) -> stb::image {
-            const stb::tone_mode t = tone_mode_of(mode);
-            nb::gil_scoped_release release;
-            return stb::match_histogram(self, reference, t);
-        },
-        "reference"_a, "mode"_a = "luma",
-        "Matches the histogram of `reference`: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "match_histogram", stb_kinds,
+                 [](const auto& x, const auto& reference, stb::tone_mode mode) { return stb::match_histogram(x, reference, mode); },
+                 "src"_a, "reference"_a, "mode"_a = "luma", match_doc.c_str());
 
     // ---- gamma
     const std::string gamma_doc =
         std::string("Every colour channel c becomes c ** (1 / g): g above 1 brightens, below 1 darkens. g must be a positive\n"
                     "finite number.\n") + tone_doc;
-    m.def(
-        "gamma",
-        [](const stb::image& img, float g) -> stb::image {
-            nb::gil_scoped_release release;
-            return stb::gamma(img, g);
-        },
-        "src"_a, "g"_a, gamma_doc.c_str());
-    m.def(
-        "gamma", [](const f32_array& src, float g) -> f32_result {
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::gamma(in, g); });
-        },
-        "src"_a, "g"_a);
-    image_cls.def(
-        "gamma",
-        [](const stb::image& self, float g) -> stb::image {
-            nb::gil_scoped_release release;
-            return stb::gamma(self, g);
-        },
-        "g"_a,
-        "Gamma correction: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "gamma", stb_kinds,
+                 [](const auto& x, float g) { return stb::gamma(x, g); },
+                 "src"_a, "g"_a, gamma_doc.c_str());
 
     // ---- levels
     const std::string levels_doc =
         std::string("The levels adjustment of an image editor: [in_black, in_white] is stretched to 0..1, raised to 1 / gamma and\n"
                     "mapped to [out_black, out_white]. All levels are fractions of the full range, 0 <= in_black < in_white <= 1.\n") +
         tone_doc;
-    m.def(
-        "levels",
-        [](const stb::image& img, float in_black, float in_white, float g, float out_black, float out_white) -> stb::image {
-            nb::gil_scoped_release release;
-            return stb::levels(img, in_black, in_white, g, out_black, out_white);
-        },
-        "src"_a, "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f, levels_doc.c_str());
-    m.def(
-        "levels",
-        [](const f32_array& src, float in_black, float in_white, float g, float out_black, float out_white) -> f32_result {
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::levels(in, in_black, in_white, g, out_black, out_white); });
-        },
-        "src"_a, "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f);
-    image_cls.def(
-        "levels",
-        [](const stb::image& self, float in_black, float in_white, float g, float out_black, float out_white) -> stb::image {
-            nb::gil_scoped_release release;
-            return stb::levels(self, in_black, in_white, g, out_black, out_white);
-        },
-        "in_black"_a, "in_white"_a, "gamma"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f,
-        "The levels adjustment: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "levels", stb_kinds,
+                 [](const auto& x, float in_black, float in_white, float g, float out_black, float out_white) {
+                     return stb::levels(x, in_black, in_white, g, out_black, out_white);
+                 },
+                 "src"_a, "in_black"_a, "in_white"_a, "g"_a = 1.0f, "out_black"_a = 0.0f, "out_white"_a = 1.0f, levels_doc.c_str());
 
     // ---- look-up tables
     m.def("gamma_lut", [](float g) { return lut_to_array(stb::gamma_lut(g)); }, "g"_a,
@@ -700,57 +588,20 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
         std::string("out = src + amount * (src - gaussian_blur(src, sigma)), clamped to 0..1; a value whose difference from the blur is\n"
                     "below `threshold` (a fraction of the full range) is left alone. amount 1 is \"100 %\" of Pillow's UnsharpMask.\n"
                     "The alpha channel is never changed.\n") + alpha_doc + "\n" + edge_doc;
-    m.def(
-        "unsharp_mask",
-        [](const stb::image& img, float sigma, float amount, float threshold, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::unsharp_mask(img, sigma, amount, threshold, e);
-        },
-        "src"_a, "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp", unsharp_doc.c_str());
-    m.def(
-        "unsharp_mask",
-        [](const f32_array& src, float sigma, float amount, float threshold, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::unsharp_mask(in, sigma, amount, threshold, e); });
-        },
-        "src"_a, "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "unsharp_mask",
-        [](const stb::image& self, float sigma, float amount, float threshold, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::unsharp_mask(self, sigma, amount, threshold, e);
-        },
-        "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp",
-        "Unsharp mask: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "unsharp_mask", stb_kinds,
+                 [](const auto& x, float sigma, float amount, float threshold, stb::edge_mode edge) {
+                     return stb::unsharp_mask(x, sigma, amount, threshold, edge);
+                 },
+                 "src"_a, "sigma"_a, "amount"_a = 1.0f, "threshold"_a = 0.0f, nb::kw_only(), "edge"_a = "clamp", unsharp_doc.c_str());
 
     // ---- pixelize
     const std::string pixelize_doc =
         std::string("Cuts the picture into blocks of block_w x block_h values (block_h 0: the same as block_w), from the top left, and\n"
                     "fills each block with its mean; the blocks at the right and bottom edges are smaller. The colour of an image with\n"
                     "alpha is the mean weighted by alpha, and the alpha of a block is the mean of its alpha.\n") + alpha_doc;
-    m.def(
-        "pixelize",
-        [](const stb::image& img, int block_w, int block_h) -> stb::image {
-            nb::gil_scoped_release release;
-            return stb::pixelize(img, block_w, block_h);
-        },
-        "src"_a, "block_w"_a, "block_h"_a = 0, pixelize_doc.c_str());
-    m.def(
-        "pixelize",
-        [](const f32_array& src, int block_w, int block_h) -> f32_result {
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::pixelize(in, block_w, block_h); });
-        },
-        "src"_a, "block_w"_a, "block_h"_a = 0);
-    image_cls.def(
-        "pixelize",
-        [](const stb::image& self, int block_w, int block_h) -> stb::image {
-            nb::gil_scoped_release release;
-            return stb::pixelize(self, block_w, block_h);
-        },
-        "block_w"_a, "block_h"_a = 0,
-        "Pixelizes: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "pixelize", stb_kinds,
+                 [](const auto& x, int block_w, int block_h) { return stb::pixelize(x, block_w, block_h); },
+                 "src"_a, "block_w"_a, "block_h"_a = 0, pixelize_doc.c_str());
 
     // ---- convert_color
     const std::string color_doc =
@@ -759,30 +610,9 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
                     "channels become (H, S, V), (H, S, L), (Y, Cb, Cr) or (R, G, B). In 8 bits every channel is 0 to 255 and the hue has\n"
                     "256 steps for the full turn; in float32 every channel is 0 to 1 and the hue is a fraction of the turn. YCbCr is the\n"
                     "full-range BT.601 of JPEG.\n");
-    m.def(
-        "convert_color",
-        [](const stb::image& img, nb::handle from_space, nb::handle to_space) -> stb::image {
-            const stb::color_space a = space_of(from_space, "from_space"), b = space_of(to_space, "to_space");
-            nb::gil_scoped_release release;
-            return stb::convert_color(img, a, b);
-        },
-        "src"_a, "from_space"_a, "to_space"_a, color_doc.c_str());
-    m.def(
-        "convert_color",
-        [](const f32_array& src, nb::handle from_space, nb::handle to_space) -> f32_result {
-            const stb::color_space a = space_of(from_space, "from_space"), b = space_of(to_space, "to_space");
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::convert_color(in, a, b); });
-        },
-        "src"_a, "from_space"_a, "to_space"_a);
-    image_cls.def(
-        "convert_color",
-        [](const stb::image& self, nb::handle from_space, nb::handle to_space) -> stb::image {
-            const stb::color_space a = space_of(from_space, "from_space"), b = space_of(to_space, "to_space");
-            nb::gil_scoped_release release;
-            return stb::convert_color(self, a, b);
-        },
-        "from_space"_a, "to_space"_a,
-        "Converts the colour space: a new Image (the function of the same name with _inplace changes it in place).");
+    def_dispatch(m, image_cls, "convert_color", stb_kinds,
+                 [](const auto& x, stb::color_space from, stb::color_space to) { return stb::convert_color(x, from, to); },
+                 "src"_a, "from_space"_a, "to_space"_a, color_doc.c_str());
 
     // ---- metrics
     const char* pair_doc =
@@ -878,40 +708,9 @@ nb::object stats_array(const stb::components& c) {
     return nb::cast(nb::ndarray<nb::numpy, double, nb::ndim<2>>(data->data(), 2, shape, owner));
 }
 
-// One morphology operation: module function on an Image and on a float32 array, and an Image method.
-template <class CopyFn>
-void def_morphology(nb::module_& m, nb::class_<stb::image>& image_cls, const char* name, const std::string& doc, CopyFn copy_fn) {
-    m.def(
-        name,
-        [copy_fn](const stb::image& img, const stb::image& se, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return copy_fn(img, static_cast<const stb::mat8u&>(se), e);
-        },
-        "src"_a, "se"_a, nb::kw_only(), "edge"_a = "clamp", doc.c_str());
-    m.def(
-        name,
-        [copy_fn](const f32_array& src, const stb::image& se, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return copy_fn(in, static_cast<const stb::mat8u&>(se), e); });
-        },
-        "src"_a, "se"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        name,
-        [copy_fn](const stb::image& self, const stb::image& se, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return copy_fn(self, static_cast<const stb::mat8u&>(se), e);
-        },
-        "se"_a, nb::kw_only(), "edge"_a = "clamp",
-        (std::string("A new Image (") + name + "_inplace changes it in place); see the module function of the same name.").c_str());
-}
-
 // The sixteen functions that change their argument: one name for an Image, a uint8 array and a float32 array, and a method of Image.
 // Each lambda is written once (polybind::def_dispatch makes the overloads); it gives its argument back, so calls chain.
 void bind_inplace(nb::module_& m, nb::class_<stb::image>& image_cls) {
-    using polybind::def_dispatch;
-    using stb_py::stb_kinds;
     const auto doc = [](const char* what, const char* same) {
         return std::string(what) + " in place and returns it, so calls chain. It takes an Image, a uint8 array or a float32 array (an array\n"
                "must be writable and C-contiguous; any other type is a TypeError). The parameters are those of " + same + ".";
@@ -1091,30 +890,24 @@ void bind_segmentation(nb::module_& m, nb::class_<stb::image>& image_cls) {
         "A structuring element as a gray Image (members 255): \"rect\", \"ellipse\" or \"cross\" (or a MorphShape), width x height\n"
         "values, both odd (height 0: the same as the width). Any odd-sized gray Image with non-zero members works as an element too.");
     const std::string morph_doc =
-        std::string("Takes an Image (a new Image) or a float32 array (a new array), any number of channels, and the structuring element\n"
-                    "`se` (a gray Image). Each channel is done on its own. ") +
+        std::string("Takes an Image, a uint8 array or a float32 array (any number of channels; an array is not converted: any other type\n"
+                    "is a TypeError) and the structuring element `se` (a gray Image), and gives a new one of the same kind. Each channel\n"
+                    "is done on its own. ") +
         edge_doc;
-    def_morphology(
-        m, image_cls, "erode", "The smallest value under the element for every position.\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::erode(s, se, e); });
-    def_morphology(
-        m, image_cls, "dilate", "The largest value under the element for every position.\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::dilate(s, se, e); });
-    def_morphology(
-        m, image_cls, "morph_open", "Erode, then dilate: removes small bright parts.\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::morph_open(s, se, e); });
-    def_morphology(
-        m, image_cls, "morph_close", "Dilate, then erode: fills small dark holes.\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::morph_close(s, se, e); });
-    def_morphology(
-        m, image_cls, "morph_gradient", "dilate - erode: the outline of the shapes.\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::morph_gradient(s, se, e); });
-    def_morphology(
-        m, image_cls, "top_hat", "src - morph_open(src): the small bright parts (never below 0).\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::top_hat(s, se, e); });
-    def_morphology(
-        m, image_cls, "black_hat", "morph_close(src) - src: the small dark parts (never below 0).\n" + morph_doc,
-        [](const auto& s, const stb::mat8u& se, stb::edge_mode e) { return stb::black_hat(s, se, e); });
+#define STB_DEF_MORPH(NAME, WHAT)                                                                                           \
+    def_dispatch(m, image_cls, #NAME, stb_kinds,                                                                            \
+                 [](const auto& x, const stb::image& se, stb::edge_mode edge) {                                             \
+                     return stb::NAME(x, static_cast<const stb::mat8u&>(se), edge);                                         \
+                 },                                                                                                         \
+                 "src"_a, "se"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(WHAT "\n") + morph_doc).c_str())
+    STB_DEF_MORPH(erode, "The smallest value under the element for every position.");
+    STB_DEF_MORPH(dilate, "The largest value under the element for every position.");
+    STB_DEF_MORPH(morph_open, "Erode, then dilate: removes small bright parts.");
+    STB_DEF_MORPH(morph_close, "Dilate, then erode: fills small dark holes.");
+    STB_DEF_MORPH(morph_gradient, "dilate - erode: the outline of the shapes.");
+    STB_DEF_MORPH(top_hat, "src - morph_open(src): the small bright parts (never below 0).");
+    STB_DEF_MORPH(black_hat, "morph_close(src) - src: the small dark parts (never below 0).");
+#undef STB_DEF_MORPH
 
     // ---- connected components
     nb::class_<stb::components>(m, "Components",

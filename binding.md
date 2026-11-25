@@ -78,6 +78,7 @@ m.def("h", [](f32_rw) { return "f32 rw"; }, "x"_a.noconvert());
 ## ۵. ترتیب کار
 
 - **۱الف:** شانزده تابع `*_inplace` با سه ورودی، زنجیره‌ای، و حذف `inplace=` (طبق ۲ تا ۷).
+- **۱ب (بخش اول، انجام شد):** همان شانزده تابع در شکل «شیء تازه» (`equalize`، `gamma`، `erode`، ...) با `const auto&` روی `def_dispatch` (polybind 0.6.1). ورودی Image، آرایه‌ی uint8 یا آرایه‌ی float32 است، بدون هیچ تبدیل بی‌صدا (نوع دیگر `TypeError`)؛ نتیجه هم‌نوع ورودی است و شکل ورودی را نگه می‌دارد: `(H, W)` می‌ماند `(H, W)` و `(H, W, 1)` می‌ماند `(H, W, 1)`. یک فراخوانی مخلوط (Image و آرایه‌ی uint8، مثلاً در `match_histogram`) فراخوانی روی آرایه است: Image با رابط آرایه‌اش خوانده می‌شود و نتیجه آرایه است. مانده از ۱ب: فیلترها (`median_filter`، `bilateral_filter`، `guided_filter`، `gaussian_blur`، `box_blur`، `convolve`) و توابعی که نوع خروجی‌شان فرق دارد (`threshold`، `otsu_threshold`، `adaptive_threshold`، `canny`، `sobel`، `scharr`، `magnitude`، `to_8u`، `ssim_map`، `histogram`، `warp_affine`، `warp_perspective`).
 - **۱ب:** همین قاعده (سه ورودی و `noconvert`) روی توابع موجود، که باگ بخش ۲ را می‌بندد.
 - **۲:** تصمیم درباره‌ی کلاس `Mat` و گسترش `polybind` (پایین).
 - باز: ۱الف و ۱ب در یک patch باشند یا دو patch؟ هنوز تصمیم نگرفته‌ایم.
@@ -100,7 +101,7 @@ m.def("h", [](f32_rw) { return "f32 rw"; }, "x"_a.noconvert());
 ## ۷. مرحله‌ی ۱الف: آنچه پیاده شد (2026-11-23)
 
 - **C++:** شانزده `*_inplace` خودِ آرگومان را با نوع دقیق برمی‌گردانند (`traits::if_image_mutable_t<M>`)؛ کار اصلی در `detail::..._inplace_mat<T>`؛ `edge_mode`، `tone_mode` و `color_space` تابع `*_name` و `*_from_name` عمومی دارند.
-- **Python:** هسته‌ی دسته‌بندی به `polybind` رفت (مخزن `mohammadraziei/polybind`: `polybind/dispatch.hpp`، `nanobind.hpp`، target `polybind::polybind`)، و اینجا یک کپی با `polybind vendor src/bindings/python` است (`src/bindings/python/polybind/`، stamp `VENDORED`). `stb_kinds.hpp` سه نوع (`stb::image`، `stb::mat8u`، `stb::mat32f`) و سه enum را معرفی می‌کند.
+- **Python:** هسته‌ی دسته‌بندی به `polybind` رفت (مخزن `mohammadraziei/polybind`: `polybind/dispatch.hpp`، `nanobind.hpp`، target `polybind::polybind`)، و اینجا یک کپی با `polybind vendor cmake` است (`cmake/polybind/`، stamp `VENDORED`). `stb_kinds.hpp` سه نوع (`stb::image`، `stb::mat8u`، `stb::mat32f`) و سه enum را معرفی می‌کند.
 - **تفاوت با طرح اولیه:** یک تابع `def_dispatch` (بدون برچسب؛ درجا بودن از `auto&` خوانده می‌شود)؛ سخت‌گیری با نوع پارامتر `polybind::strict<...>` است، نه `.noconvert()` روی توصیف‌گر (در nanobind 3 مقدار برگشتی `noconvert()` نوع تازه است و پارامتر دوم توصیف‌گر ندارد)؛ lint یک `RuntimeWarning` هنگام import است (`POLYBIND_LINT`)؛ گزینه‌ی `-DPOLYBIND_LINT=OFF` آن را خاموش می‌کند.
 - **رفتار:** `inplace=True` حذف شد. آرایه‌ی float64 و int32 و read-only و غیرپیوسته `TypeError` است. `Image` به‌عنوان پارامتر **دوم** (مرجع) هنوز یک آرایه‌ی uint8 را با تبدیل ضمنیِ خودِ `Image` می‌پذیرد (طراحی قبلی کتابخانه).
 - **تست:** `tests/python/test_inplace.py` (هر شانزده تابع روی سه نوع، زنجیره، خطاها، enum، شکل آرایه). ساخت با CMake بدون warning؛ C++ 753 و Python 1941 پاس.

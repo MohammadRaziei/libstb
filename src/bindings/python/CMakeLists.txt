@@ -52,8 +52,8 @@ if(DEFINED SKBUILD)
         set(_libstb_core_for_python stb_core_static)
     endif()
     nanobind_add_module(libstb_py STABLE_ABI NB_STATIC ${LIBSTB_BINDING_SOURCES})
-    # polybind::polybind: the dispatch headers (<polybind/...>), a copy made by `polybind vendor src/bindings/python`.
-    include("${CMAKE_CURRENT_SOURCE_DIR}/polybind/polybind-config.cmake")
+    # polybind::polybind: the dispatch headers (<polybind/...>), a copy made by `polybind vendor cmake`.
+    include("${PROJECT_SOURCE_DIR}/cmake/polybind/polybind-config.cmake")
     target_link_libraries(libstb_py PRIVATE polybind::polybind)
     target_link_libraries(libstb_py PRIVATE ${_libstb_core_for_python})
     if(_libstb_is_musl)

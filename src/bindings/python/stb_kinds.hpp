@@ -5,9 +5,12 @@
 //   stb::mat8u  a uint8 numpy array (H, W) or (H, W, C),
 //   stb::mat32f a float32 numpy array of the same shapes (pixels 0..1).
 // An array is received without conversion (polybind::strict) and worked on in place through a view of its memory.
+// A function that makes a new value gives back a stb::image (a new Image) or a stb::mat8u / stb::mat32f (a new array that owns
+// its memory: the shape of the argument for a result of one channel ((H, W) or (H, W, 1)), (H, W, C) otherwise).
 
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 #include <string_view>
 
 #include <nanobind/nanobind.h>
@@ -64,11 +67,29 @@ struct stb_array_kind {
     };
     struct const_holder {
         stb::mat<T> view;
-        explicit const_holder(const array_ro& a) : view(stb_py::view_of_array<T>(a.value)) {}
+        bool three_d;  // the argument is (H, W, C): a result of one channel is (H, W, 1), not (H, W)
+        explicit const_holder(const array_ro& a) : view(stb_py::view_of_array<T>(a.value)), three_d(a.value.ndim() == 3) {}
         const stb::mat<T>& get() { return view; }
     };
     static holder mutable_holder(const array_rw& a) { return holder{stb_py::view_of_array<T>(a.value)}; }
     static array_rw give_back(const array_rw& a) { return a; }
+
+    // a new array: the matrix moves to the heap and a capsule frees it with the array
+    using new_ret = nanobind::ndarray<nanobind::numpy, T>;
+    static constexpr auto new_policy = nanobind::rv_policy::automatic;
+    static new_ret make(stb::mat<T>&& m, bool three_d) {
+        if (m.empty()) throw std::runtime_error("the result is empty");
+        auto* owned = new stb::mat<T>(std::move(m));
+        nanobind::capsule owner(owned, [](void* p) noexcept { delete static_cast<stb::mat<T>*>(p); });
+        const std::size_t shape[3] = {std::size_t(owned->height()), std::size_t(owned->width()), std::size_t(owned->channels())};
+        return new_ret(owned->data(), three_d || owned->channels() != 1 ? 3 : 2, shape, owner);
+    }
+    // the result of a function has the shape of its argument (one channel: (H, W) for (H, W), (H, W, 1) for (H, W, 1))
+    template <class H, class = decltype(std::declval<const H&>().three_d)>
+    static new_ret wrap(stb::mat<T>&& m, const H& like) {
+        return make(std::move(m), like.three_d);
+    }
+    static new_ret wrap(stb::mat<T>&& m) { return make(std::move(m), false); }
 };
 
 template <>
@@ -93,6 +114,10 @@ struct nanobind_backend::kind<stb::image> {
     };
     static holder mutable_holder(stb::image& x) { return holder{x}; }
     static stb::image& give_back(stb::image& x) { return x; }
+
+    using new_ret = stb::image;
+    static constexpr auto new_policy = nanobind::rv_policy::automatic;
+    static stb::image wrap(stb::image&& x) { return std::move(x); }
 };
 
 
