@@ -97,6 +97,36 @@ struct nanobind_backend::kind<stb::mat8u> : stb_array_kind<std::uint8_t> {};
 template <>
 struct nanobind_backend::kind<stb::mat32f> : stb_array_kind<float> {};
 
+// Kinds that are only ever the result of a function: a level (int for 8 bits, double for floats), and the pair of derivatives of
+// sobel() and scharr(): a tuple (dx, dy) of float32 arrays.
+template <>
+struct nanobind_backend::kind<int> {
+    using new_ret = int;
+    static constexpr auto new_policy = nanobind::rv_policy::automatic;
+    static int wrap(int&& v) { return v; }
+};
+template <>
+struct nanobind_backend::kind<double> {
+    using new_ret = double;
+    static constexpr auto new_policy = nanobind::rv_policy::automatic;
+    static double wrap(double&& v) { return v; }
+};
+template <>
+struct nanobind_backend::kind<stb::gradients> {
+    using new_ret = nanobind::tuple;
+    static constexpr auto new_policy = nanobind::rv_policy::automatic;
+    static new_ret make(stb::gradients&& g, bool three_d) {
+        auto dx = kind<stb::mat32f>::make(std::move(g.dx), three_d);
+        auto dy = kind<stb::mat32f>::make(std::move(g.dy), three_d);
+        return nanobind::make_tuple(std::move(dx), std::move(dy));
+    }
+    template <class H, class = decltype(std::declval<const H&>().three_d)>
+    static new_ret wrap(stb::gradients&& g, const H& like) {
+        return make(std::move(g), like.three_d);
+    }
+    static new_ret wrap(stb::gradients&& g) { return make(std::move(g), false); }
+};
+
 template <>
 struct nanobind_backend::kind<stb::image> {
     using const_arg = const stb::image&;
@@ -109,6 +139,7 @@ struct nanobind_backend::kind<stb::image> {
     };
     struct const_holder {
         const stb::image& ref;
+        static constexpr bool three_d = true;  // an array made from an Image is (H, W, C), also for one channel
         explicit const_holder(const stb::image& r) : ref(r) {}
         const stb::image& get() { return ref; }
     };

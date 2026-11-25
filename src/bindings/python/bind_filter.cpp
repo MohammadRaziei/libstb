@@ -2,9 +2,11 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,17 +55,6 @@ E to_enum(nb::handle h, std::initializer_list<std::pair<const char*, E>> names, 
     std::string list;
     for (const auto& n : names) list += std::string(list.empty() ? "" : ", ") + "\"" + n.first + "\"";
     throw std::invalid_argument(std::string(what) + " must be one of " + list);
-}
-
-stb::edge_mode edge_of(nb::handle h) {
-    using stb::edge_mode;
-    return to_enum<edge_mode>(h,
-                              {{"clamp", edge_mode::clamp},
-                               {"reflect", edge_mode::reflect},
-                               {"mirror", edge_mode::mirror},
-                               {"wrap", edge_mode::wrap},
-                               {"zero", edge_mode::zero}},
-                              "edge");
 }
 
 stb::interpolation_method interpolation_of(nb::handle h) {
@@ -161,22 +152,33 @@ stb::mat32f kernel_of(nb::handle h) {
     throw std::invalid_argument("a kernel must be a 1-D or 2-D array, or a (nested) list of numbers");
 }
 
-// Runs fn(mat32f view of a) without the GIL and returns the result as an array shaped like `a`.
-template <class Fn>
-f32_result run_f32(const f32_array& a, Fn&& fn) {
-    const bool with_channels = a.ndim() == 3;
-    const stb::mat32f in = view_of(a);
-    stb::mat32f out;
-    {
-        nb::gil_scoped_release release;
-        out = fn(in);
-    }
-    return to_array(std::move(out), with_channels);
+// The kinds a function may take: the 8-bit ones (an Image, a uint8 array) or the float one.
+inline constexpr polybind::kinds<stb::image, stb::mat8u> byte_kinds{};
+inline constexpr polybind::kinds<stb::mat32f> float_kinds{};
+
+// The type of the argument of a generic lambda (`const auto& x`) without const and reference.
+template <class T>
+using kind_of = std::decay_t<T>;
+
+// A filter of a uint8 input gives an image8u (the class); the result must be of the kind of the argument, so a uint8 array
+// (a mat8u) gets a mat8u back and an Image an Image.
+template <class M, class R>
+M of_kind(R&& r) {
+    if constexpr (std::is_same_v<M, std::decay_t<R>>) return std::forward<R>(r);
+    else return M(std::move(r));
 }
 
-nb::tuple gradients_tuple(stb::gradients&& g, bool with_channels) {
-    return nb::make_tuple(nb::cast(to_array(std::move(g.dx), with_channels)), nb::cast(to_array(std::move(g.dy), with_channels)));
+// What every function that takes an Image or an array says about its arguments and result.
+const std::string kinds_doc =
+    "Takes an Image, a uint8 array (0 to 255) or a float32 array (0 to 1) of shape (H, W) or (H, W, C) and gives a new one of the same\n"
+    "kind; the argument is not changed and an array is not converted (any other type is a TypeError).\n";
+
+// A kernel (a list or an array) is read with the GIL: the function itself runs without it.
+stb::mat32f kernel_with_gil(nb::handle h) {
+    nb::gil_scoped_acquire gil;
+    return kernel_of(h);
 }
+
 
 // ---- the region map as a Python object
 nb::object labels_view(nb::handle self) {
@@ -191,11 +193,6 @@ constexpr const char* edge_doc =
     "\"mirror\", \"wrap\" or \"zero\" (or an EdgeMode).";
 
 // ---- tone (stb/tone.hpp): histogram, equalize, auto_contrast, match_histogram, gamma, levels and look-up tables
-
-stb::tone_mode tone_mode_of(nb::handle h) {
-    using stb::tone_mode;
-    return to_enum<tone_mode>(h, {{"luma", tone_mode::luma}, {"per_channel", tone_mode::per_channel}}, "mode");
-}
 
 using lut_array = nb::ndarray<const std::uint8_t, nb::c_contig, nb::device::cpu>;
 using i32_result = nb::ndarray<nb::numpy, std::int32_t>;
@@ -212,6 +209,18 @@ i32_result histogram_array(const stb::mat32i& h) {
     const std::size_t shape[2] = {c, bins};
     return i32_result(owned->data(), 2, shape, owner);
 }
+
+}  // namespace
+
+// A histogram (what stb::histogram gives) as the int32 array of shape (channels, bins) that Python gets.
+template <>
+struct polybind::nanobind_backend::kind<stb::mat32i> {
+    using new_ret = i32_result;
+    static constexpr auto new_policy = nb::rv_policy::automatic;
+    static new_ret wrap(stb::mat32i&& h) { return histogram_array(h); }
+};
+
+namespace {
 
 // A 256 x 1 x C table as a uint8 array of shape (256,) (one channel) or (256, C).
 u8_result lut_to_array(const stb::mat8u& t) {
@@ -245,32 +254,16 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
         .value("PER_CHANNEL", stb::tone_mode::per_channel);
 
     // ---- histogram
-    const auto histogram8 = [](const stb::image& img) {
-        stb::mat32i h;
-        {
-            nb::gil_scoped_release release;
-            h = stb::histogram(img);
-        }
-        return histogram_array(h);
-    };
     const char* histogram_doc =
         "How many pixels have each value, as an int32 array of shape (channels, 256): row k is channel k (alpha included).\n"
         "For a float32 array: `bins` equal bins over [0, 1] (values outside are counted in the first or last bin, NaN not\n"
         "at all) and shape (channels, bins).";
-    m.def("histogram", histogram8, "src"_a, histogram_doc);
-    m.def(
-        "histogram",
-        [](const f32_array& src, int bins) {
-            const stb::mat32f in = view_of(src);
-            stb::mat32i h;
-            {
-                nb::gil_scoped_release release;
-                h = stb::histogram(in, bins);
-            }
-            return histogram_array(h);
-        },
-        "src"_a, "bins"_a = 256);
-    image_cls.def("histogram", histogram8, "How many pixels have each value, as an int32 array of shape (channels, 256).");
+    def_dispatch(m, image_cls, "histogram", byte_kinds,
+                 [](const auto& x) { return stb::histogram(x); },
+                 "src"_a, histogram_doc);
+    def_dispatch(m, image_cls, "histogram", float_kinds,
+                 [](const auto& x, int bins) { return stb::histogram(x, bins); },
+                 "src"_a, "bins"_a = 256, histogram_doc);
 
     // ---- equalize
     const std::string equalize_doc =
@@ -350,13 +343,6 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
 
 // ---- median_filter, unsharp_mask, pixelize (stb/filter.hpp), colour spaces (stb/colorspace.hpp), metrics (stb/metrics.hpp)
 
-stb::color_space space_of(nb::handle h, const char* what) {
-    using stb::color_space;
-    return to_enum<color_space>(h,
-                                {{"rgb", color_space::rgb}, {"hsv", color_space::hsv}, {"hsl", color_space::hsl}, {"ycbcr", color_space::ycbcr}},
-                                what);
-}
-
 constexpr const char* alpha_doc =
     "Takes an Image (gives a new Image) or a float32 array of shape (H, W) or (H, W, C) with values 0 to 1 (gives a new\n"
     "array); 1 to 4 channels: gray, gray + alpha, RGB, RGBA.";
@@ -375,29 +361,11 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
         std::string("The median of the (2 * radius + 1)-square around each value, per channel (radius 1 to 1000): removes isolated\n"
                     "noise and keeps edges. Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array).\n") +
         edge_doc;
-    m.def(
-        "median_filter",
-        [](const stb::image& img, int radius, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::median_filter(img, radius, e);
-        },
-        "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp", median_doc.c_str());
-    m.def(
-        "median_filter",
-        [](const f32_array& src, int radius, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::median_filter(in, radius, e); });
-        },
-        "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "median_filter",
-        [](const stb::image& img, int radius, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::median_filter(img, radius, e);
-        },
-        "radius"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the median filter of this one.");
+    def_dispatch(m, image_cls, "median_filter", stb_kinds,
+                 [](const auto& x, int radius, stb::edge_mode edge) {
+                     return of_kind<kind_of<decltype(x)>>(stb::median_filter(x, radius, edge));
+                 },
+                 "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(median_doc) + kinds_doc).c_str());
 
     // ---- bilateral_filter
     const std::string bilateral_doc =
@@ -406,29 +374,11 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
                     "from the middle pixel's (sigma_range, in units of the full range 0 to 1; all colour channels together). Alpha is copied.\n"
                     "Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array); 1 to 4 channels.\n") +
         edge_doc;
-    m.def(
-        "bilateral_filter",
-        [](const stb::image& img, int radius, float sigma_space, float sigma_range, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::bilateral_filter(img, radius, sigma_space, sigma_range, e);
-        },
-        "src"_a, "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp", bilateral_doc.c_str());
-    m.def(
-        "bilateral_filter",
-        [](const f32_array& src, int radius, float sigma_space, float sigma_range, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::bilateral_filter(in, radius, sigma_space, sigma_range, e); });
-        },
-        "src"_a, "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "bilateral_filter",
-        [](const stb::image& img, int radius, float sigma_space, float sigma_range, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::bilateral_filter(img, radius, sigma_space, sigma_range, e);
-        },
-        "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the bilateral filter of this one.");
+    def_dispatch(m, image_cls, "bilateral_filter", stb_kinds,
+                 [](const auto& x, int radius, float sigma_space, float sigma_range, stb::edge_mode edge) {
+                     return of_kind<kind_of<decltype(x)>>(stb::bilateral_filter(x, radius, sigma_space, sigma_range, edge));
+                 },
+                 "src"_a, "radius"_a, "sigma_space"_a, "sigma_range"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(bilateral_doc) + kinds_doc).c_str());
 
     // ---- guided_filter
     const std::string guided_doc =
@@ -438,39 +388,16 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
                     "size, gray or colour (3 or 4 channels: a colour guide uses its 3 x 3 covariance). Alpha is copied. radius 0 changes\n"
                     "nothing. Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array).\n") +
         edge_doc;
-    m.def(
-        "guided_filter",
-        [](const stb::image& img, int radius, float eps, nb::handle guide, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            const stb::image* g = nullptr;
-            if (!guide.is_none() && !nb::try_cast(guide, g, /*convert=*/false)) throw std::invalid_argument("guide must be an Image (or None)");
-            nb::gil_scoped_release release;
-            return g != nullptr ? stb::guided_filter(img, *g, radius, eps, e) : stb::guided_filter(img, radius, eps, e);
-        },
-        "src"_a, "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp", guided_doc.c_str());
-    m.def(
-        "guided_filter",
-        [](const f32_array& src, int radius, float eps, nb::handle guide, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            f32_array garr;
-            const bool has_guide = !guide.is_none();
-            if (has_guide && !nb::try_cast(guide, garr, /*convert=*/false)) throw std::invalid_argument("guide must be a float32 array like src (or None)");
-            const stb::mat32f gm = has_guide ? view_of(garr) : stb::mat32f();
-            return run_f32(src, [&](const stb::mat32f& in) {
-                return has_guide ? stb::guided_filter(in, gm, radius, eps, e) : stb::guided_filter(in, radius, eps, e);
-            });
-        },
-        "src"_a, "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "guided_filter",
-        [](const stb::image& img, int radius, float eps, nb::handle guide, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            const stb::image* g = nullptr;
-            if (!guide.is_none() && !nb::try_cast(guide, g, /*convert=*/false)) throw std::invalid_argument("guide must be an Image (or None)");
-            nb::gil_scoped_release release;
-            return g != nullptr ? stb::guided_filter(img, *g, radius, eps, e) : stb::guided_filter(img, radius, eps, e);
-        },
-        "radius"_a, "eps"_a, "guide"_a = nb::none(), nb::kw_only(), "edge"_a = "clamp", "A new Image: the guided filter of this one.");
+    def_dispatch(m, image_cls, "guided_filter", stb_kinds,
+                 [](const auto& x, int radius, float eps, stb::edge_mode edge) {
+                     return of_kind<kind_of<decltype(x)>>(stb::guided_filter(x, radius, eps, edge));
+                 },
+                 "src"_a, "radius"_a, "eps"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(guided_doc) + kinds_doc).c_str());
+    def_dispatch(m, image_cls, "guided_filter", stb_kinds,
+                 [](const auto& x, int radius, float eps, const auto& guide, stb::edge_mode edge) {
+                     return of_kind<kind_of<decltype(x)>>(stb::guided_filter(x, guide, radius, eps, edge));
+                 },
+                 "src"_a, "radius"_a, "eps"_a, "guide"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(guided_doc) + kinds_doc).c_str());
 
     // ---- warp_affine, warp_perspective
     nb::enum_<stb::interpolation_method>(m, "InterpolationMethod",
@@ -528,60 +455,20 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
                     "Takes an Image (a new Image) or a float32 array of shape (H, W) or (H, W, C) (a new array); 1 to 4 channels.\n");
     const std::string affine_doc = warp_doc + "`transform` is a Matrix or the six numbers a, b, c, d, e, f.\n";
     const std::string persp_doc = warp_doc + "`transform` is a Homography, a Matrix, or 9 numbers by rows.\n";
-    const auto warp_image = [](const stb::image& img, const stb::homography& h, int out_width, int out_height, nb::handle interpolation, nb::handle edge) -> stb::image {
-        const stb::interpolation_method ip = interpolation_of(interpolation);
-        const stb::edge_mode e = edge_of(edge);
-        nb::gil_scoped_release release;
-        return stb::warp_perspective(img, h, out_width, out_height, ip, e);
-    };
-    const auto warp_array = [](const f32_array& src, const stb::homography& h, int out_width, int out_height, nb::handle interpolation, nb::handle edge) -> f32_result {
-        const stb::interpolation_method ip = interpolation_of(interpolation);
-        const stb::edge_mode e = edge_of(edge);
-        const bool with_channels = src.ndim() == 3;
-        const stb::mat32f in = view_of(src);
-        stb::mat32f out;
-        {
-            nb::gil_scoped_release release;
-            out = stb::warp_perspective(in, h, out_width, out_height, ip, e);
-        }
-        return to_array(std::move(out), with_channels);
-    };
-    m.def(
-        "warp_affine",
-        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
-            return warp_image(img, stb::homography(matrix_of(transform)), out_width, out_height, interpolation, edge);
-        },
-        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", affine_doc.c_str());
-    m.def(
-        "warp_affine",
-        [=](const f32_array& src, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
-            return warp_array(src, stb::homography(matrix_of(transform)), out_width, out_height, interpolation, edge);
-        },
-        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
-    m.def(
-        "warp_perspective",
-        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
-            return warp_image(img, homography_of(transform), out_width, out_height, interpolation, edge);
-        },
-        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", persp_doc.c_str());
-    m.def(
-        "warp_perspective",
-        [=](const f32_array& src, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
-            return warp_array(src, homography_of(transform), out_width, out_height, interpolation, edge);
-        },
-        "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero");
-    image_cls.def(
-        "warp_affine",
-        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
-            return warp_image(img, stb::homography(matrix_of(transform)), out_width, out_height, interpolation, edge);
-        },
-        "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by an affine transform (see warp_affine).");
-    image_cls.def(
-        "warp_perspective",
-        [=](const stb::image& img, nb::handle transform, int out_width, int out_height, nb::handle interpolation, nb::handle edge) {
-            return warp_image(img, homography_of(transform), out_width, out_height, interpolation, edge);
-        },
-        "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", "A new Image: this one warped by a perspective transform (see warp_perspective).");
+    def_dispatch(m, image_cls, "warp_affine", stb_kinds,
+                 [](const auto& x, nb::handle transform, int out_width, int out_height, nb::handle interpolation, stb::edge_mode edge) {
+                     const stb::homography h = with_gil([&] { return stb::homography(matrix_of(transform)); });
+                     const stb::interpolation_method ip = with_gil([&] { return interpolation_of(interpolation); });
+                     return stb::warp_perspective(x, h, out_width, out_height, ip, edge);
+                 },
+                 "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", (std::string(affine_doc) + kinds_doc).c_str());
+    def_dispatch(m, image_cls, "warp_perspective", stb_kinds,
+                 [](const auto& x, nb::handle transform, int out_width, int out_height, nb::handle interpolation, stb::edge_mode edge) {
+                     const stb::homography h = with_gil([&] { return homography_of(transform); });
+                     const stb::interpolation_method ip = with_gil([&] { return interpolation_of(interpolation); });
+                     return stb::warp_perspective(x, h, out_width, out_height, ip, edge);
+                 },
+                 "src"_a, "transform"_a, "out_width"_a = 0, "out_height"_a = 0, nb::kw_only(), "interpolation"_a = "bilinear", "edge"_a = "zero", (std::string(persp_doc) + kinds_doc).c_str());
 
     // ---- unsharp_mask
     const std::string unsharp_doc =
@@ -643,31 +530,9 @@ void bind_image_ops(nb::module_& m, nb::class_<stb::image>& image_cls) {
     both("ssim", stb::ssim, stb::ssim,
          std::string("Structural similarity (Wang et al. 2004: Gaussian window 11 x 11, sigma 1.5, like scikit-image's\n"
                      "structural_similarity(gaussian_weights=True)): the mean of ssim_map(). The picture must be at least 11 x 11.\n") + pair_doc);
-    m.def(
-        "ssim_map",
-        [](const stb::image& a, const stb::image& b) {
-            stb::mat32f out;
-            {
-                nb::gil_scoped_release release;
-                out = stb::ssim_map(a, b);
-            }
-            return to_array(std::move(out), true);
-        },
-        "a"_a, "b"_a,
-        "The local SSIM values as a float32 array of shape (H - 10, W - 10, C): one per window that lies inside the picture.");
-    m.def(
-        "ssim_map",
-        [](const f32_array& a, const f32_array& b) {
-            const bool with_channels = a.ndim() == 3;
-            const stb::mat32f ma = view_of(a), mb = view_of(b);
-            stb::mat32f out;
-            {
-                nb::gil_scoped_release release;
-                out = stb::ssim_map(ma, mb);
-            }
-            return to_array(std::move(out), with_channels);
-        },
-        "a"_a, "b"_a);
+    def_dispatch(m, image_cls, "ssim_map", stb_kinds,
+                 [](const auto& a, const auto& b) { return stb::ssim_map(a, b); },
+                 "a"_a, "b"_a, (std::string("The local SSIM values as a float32 array of shape (H - 10, W - 10, C) ((H - 10, W - 10) for a (H, W) array): one per window that lies inside the picture.\n") + "Two Images, two uint8 arrays or two float32 arrays of the same shape.\n").c_str());
 }
 
 // ---- scharr, thresholds, morphology, connected components and canny (stb/threshold.hpp, morphology.hpp, components.hpp, filter.hpp)
@@ -693,6 +558,20 @@ stb::image mask_image(const stb::mat8u& mask) {
     stb::image out(mask.width(), mask.height(), stb::pixel_format::gray);
     std::memcpy(out.data(), mask.data(), mask.size());
     return out;
+}
+
+// A mask (the result of threshold, canny, ...) is a gray Image for an Image and a uint8 array for an array.
+template <class M>
+auto mask_of(stb::mat8u&& mask) {
+    if constexpr (std::is_same_v<M, stb::image>) return mask_image(mask);
+    else return std::move(mask);
+}
+
+// Python objects (a name, a matrix) are read with the GIL: the function itself runs without it.
+template <class F>
+auto with_gil(F&& f) {
+    nb::gil_scoped_acquire gil;
+    return f();
 }
 
 // The statistics of the pieces as a float64 array (count, 7): area, x, y, width, height, cx, cy.
@@ -792,95 +671,41 @@ void bind_segmentation(nb::module_& m, nb::class_<stb::image>& image_cls) {
         .value("EIGHT", stb::connectivity::eight);
 
     // ---- scharr
-    m.def(
-        "scharr",
-        [](const stb::image& img, nb::handle edge) {
-            const stb::edge_mode e = edge_of(edge);
-            stb::gradients g;
-            {
-                nb::gil_scoped_release release;
-                g = stb::scharr(img, e);
-            }
-            return gradients_tuple(std::move(g), true);
-        },
-        "src"_a, nb::kw_only(), "edge"_a = "clamp",
-        "Like sobel() with {3, 10, 3} as the smoothing across: a tuple (dx, dy) of float32 arrays. A step of height 1 gives 16.");
-    m.def(
-        "scharr",
-        [](const f32_array& src, nb::handle edge) {
-            const stb::edge_mode e = edge_of(edge);
-            const bool with_channels = src.ndim() == 3;
-            const stb::mat32f in = view_of(src);
-            stb::gradients g;
-            {
-                nb::gil_scoped_release release;
-                g = stb::scharr(in, e);
-            }
-            return gradients_tuple(std::move(g), with_channels);
-        },
-        "src"_a, nb::kw_only(), "edge"_a = "clamp");
+    def_dispatch(m, image_cls, "scharr", stb_kinds,
+                 [](const auto& x, stb::edge_mode edge) { return stb::scharr(x, edge); },
+                 "src"_a, nb::kw_only(), "edge"_a = "clamp", "Like sobel() with {3, 10, 3} as the smoothing across: a tuple (dx, dy) of float32 arrays. A step of height 1 gives 16.");
 
     // ---- thresholds: the masks are gray Images of 0 and 255
-    m.def(
-        "threshold",
-        [](const stb::image& img, int t, bool invert) {
-            if (t < 0 || t > 255) throw std::invalid_argument("t must be a level from 0 to 255");
-            nb::gil_scoped_release release;
-            return mask_image(stb::threshold(img, std::uint8_t(t), invert));
-        },
-        "src"_a, "t"_a, "invert"_a = false,
-        "The mask (a gray Image) of the values above `t`: 255 where src > t, else 0; invert swaps the two. src is an Image of one\n"
-        "channel with t a level 0 to 255, or a float32 array (H, W) with t a value of the 0 to 1 range. out = 255 * H(src - t) with\n"
-        "H the step function.");
-    m.def(
-        "threshold",
-        [](const f32_array& src, float t, bool invert) {
-            const stb::mat32f in = view_of(src);
-            nb::gil_scoped_release release;
-            return mask_image(stb::threshold(in, t, invert));
-        },
-        "src"_a, "t"_a, "invert"_a = false);
-    m.def(
-        "otsu_threshold",
-        [](const stb::image& img) {
-            nb::gil_scoped_release release;
-            return int(stb::otsu_threshold(img));
-        },
-        "src"_a,
-        "Otsu's level (an int for an Image, a float for a float32 array): the one that best splits the histogram in two, as\n"
-        "scikit-image's threshold_otsu. Use it as the `t` of threshold().");
-    m.def(
-        "otsu_threshold",
-        [](const f32_array& src) {
-            const stb::mat32f in = view_of(src);
-            nb::gil_scoped_release release;
-            return double(stb::otsu_threshold(in));
-        },
-        "src"_a);
+    def_dispatch(m, image_cls, "threshold", stb_kinds,
+                 [](const auto& x, double t, bool invert) {
+                     using M = kind_of<decltype(x)>;
+                     if constexpr (std::is_same_v<M, stb::mat32f>) {
+                         return mask_of<M>(stb::threshold(x, float(t), invert));
+                     } else {
+                         if (t < 0 || t > 255 || t != std::floor(t)) throw std::invalid_argument("t must be a whole level from 0 to 255");
+                         return mask_of<M>(stb::threshold(x, std::uint8_t(t), invert));
+                     }
+                 },
+                 "src"_a, "t"_a, "invert"_a = false, "The mask of the values above `t`: 255 where src > t, else 0; invert swaps the two. src is an Image or a uint8 array of one channel\n"
+                 "(t is a whole level 0 to 255), or a float32 array (t is a value of the 0 to 1 range). The mask is a gray Image for an Image\n"
+                 "and a uint8 array for an array. out = 255 * H(src - t) with H the step function.");
+    def_dispatch(m, image_cls, "otsu_threshold", stb_kinds,
+                 [](const auto& x) {
+                     if constexpr (std::is_same_v<kind_of<decltype(x)>, stb::mat32f>) return double(stb::otsu_threshold(x));
+                     else return int(stb::otsu_threshold(x));
+                 },
+                 "src"_a, "Otsu's level (an int for an Image or a uint8 array, a float for a float32 array): the one that best splits the histogram in two, as\n"
+                 "scikit-image's threshold_otsu. Use it as the `t` of threshold().");
     const std::string adaptive_doc =
         std::string("The mask (a gray Image) of the values above the local level of their neighbourhood: 255 where\n"
                     "src > local - offset, `local` being the mean or the Gaussian-weighted mean of the (2 * radius + 1)-square around the value.\n"
                     "`offset` is in levels for an Image and in values for a float32 array. Takes one channel.\n") + edge_doc;
-    m.def(
-        "adaptive_threshold",
-        [](const stb::image& img, int radius, float offset, nb::handle method, bool invert, nb::handle edge) {
-            const stb::adaptive_method a = adaptive_of(method);
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return mask_image(stb::adaptive_threshold(img, radius, offset, a, invert, e));
-        },
-        "src"_a, "radius"_a, "offset"_a = 0.0f, "method"_a = "gaussian", "invert"_a = false, nb::kw_only(), "edge"_a = "clamp",
-        adaptive_doc.c_str());
-    m.def(
-        "adaptive_threshold",
-        [](const f32_array& src, int radius, float offset, nb::handle method, bool invert, nb::handle edge) {
-            const stb::adaptive_method a = adaptive_of(method);
-            const stb::edge_mode e = edge_of(edge);
-            const stb::mat32f in = view_of(src);
-            nb::gil_scoped_release release;
-            return mask_image(stb::adaptive_threshold(in, radius, offset, a, invert, e));
-        },
-        "src"_a, "radius"_a, "offset"_a = 0.0f, "method"_a = "gaussian", "invert"_a = false, nb::kw_only(), "edge"_a = "clamp");
+    def_dispatch(m, image_cls, "adaptive_threshold", stb_kinds,
+                 [](const auto& x, int radius, float offset, nb::handle method, bool invert, stb::edge_mode edge) {
+                     const stb::adaptive_method a = with_gil([&] { return adaptive_of(method); });
+                     return mask_of<kind_of<decltype(x)>>(stb::adaptive_threshold(x, radius, offset, a, invert, edge));
+                 },
+                 "src"_a, "radius"_a, "offset"_a = 0.0f, "method"_a = "gaussian", "invert"_a = false, nb::kw_only(), "edge"_a = "clamp", (std::string(adaptive_doc) + "\n" + kinds_doc + "The mask is a gray Image for an Image and a uint8 array for an array.\n").c_str());
 
     // ---- morphology
     m.def(
@@ -954,35 +779,11 @@ void bind_segmentation(nb::module_& m, nb::class_<stb::image>& image_cls) {
         "channels (3 and 4 are read as luma). A Gaussian blur of `sigma` (0: none), the Sobel gradient, the thinning to the ridge, and the\n"
         "hysteresis: a ridge point is an edge if its magnitude is at least `high`, or at least `low` and connected to such a point. The\n"
         "limits are fractions of a step from 0 to 1 across the picture (the Sobel magnitude divided by 4).";
-    m.def(
-        "canny",
-        [](const stb::image& img, float low, float high, float sigma) {
-            nb::gil_scoped_release release;
-            return mask_image(stb::canny(img, low, high, sigma));
-        },
-        "src"_a, "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f, canny_doc.c_str());
-    m.def(
-        "canny",
-        [](const f32_array& src, float low, float high, float sigma) {
-            const stb::mat32f in = view_of(src);
-            nb::gil_scoped_release release;
-            return mask_image(stb::canny(in, low, high, sigma));
-        },
-        "src"_a, "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f);
-    image_cls.def(
-        "canny", [](const stb::image& img, float low, float high, float sigma) {
-            nb::gil_scoped_release release;
-            return mask_image(stb::canny(img, low, high, sigma));
-        },
-        "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f, "The edges of this Image as a gray Image mask; see libstb.canny.");
-    image_cls.def(
-        "threshold",
-        [](const stb::image& img, int t, bool invert) {
-            if (t < 0 || t > 255) throw std::invalid_argument("t must be a level from 0 to 255");
-            nb::gil_scoped_release release;
-            return mask_image(stb::threshold(img, std::uint8_t(t), invert));
-        },
-        "t"_a, "invert"_a = false, "The mask of the values above `t` as a gray Image; see libstb.threshold.");
+    def_dispatch(m, image_cls, "canny", stb_kinds,
+                 [](const auto& x, float low, float high, float sigma) {
+                     return mask_of<kind_of<decltype(x)>>(stb::canny(x, low, high, sigma));
+                 },
+                 "src"_a, "low"_a = 0.1f, "high"_a = 0.2f, "sigma"_a = 1.0f, (std::string(canny_doc) + "\nThe mask is a gray Image for an Image and a uint8 array for an array.\n").c_str());
 }
 
 }  // namespace
@@ -1013,16 +814,10 @@ void bind_filter(nb::module_& m) {
           "The pixels of an Image as a float32 array of shape (H, W, C): every value / 255, so 0 is 0.0 and 255 is 1.0.");
     image_cls.def("to_f32", [](const stb::image& img) { return to_array(stb::to_f32(img), true); },
                   "The pixels as a float32 array of shape (H, W, C): every value / 255, so 0 is 0.0 and 255 is 1.0.");
-    m.def(
-        "to_8u",
-        [](const f32_array& a) -> stb::image {
-            const stb::mat32f in = view_of(a);
-            nb::gil_scoped_release release;
-            return stb::to_8u(in);
-        },
-        "src"_a,
-        "A float32 array of shape (H, W) or (H, W, C) with 1 to 4 channels as an Image: round(clamp(v, 0, 1) * 255),\n"
-        "NaN becomes 0. The inverse of to_f32.");
+    def_dispatch(m, image_cls, "to_8u", float_kinds,
+                 [](const auto& x) { return of_kind<stb::mat8u>(stb::to_8u(x)); },
+                 "src"_a, "A float32 array of shape (H, W) or (H, W, C) with 1 to 4 channels as a uint8 array: round(clamp(v, 0, 1) * 255),\n"
+                 "NaN becomes 0. The inverse of to_f32.");
 
     // ---- kernels
     m.def(
@@ -1036,60 +831,18 @@ void bind_filter(nb::module_& m) {
         "to 1. radius 0 means ceil(3 * sigma). Use it as both kernels of the separable convolve().");
 
     // ---- gaussian_blur
-    m.def(
-        "gaussian_blur",
-        [](const stb::image& img, float sigma, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::gaussian_blur(img, sigma, e);
-        },
-        "src"_a, "sigma"_a, nb::kw_only(), "edge"_a = "clamp",
-        (std::string("Gaussian blur of an Image (a new Image), or of a float32 array of shape (H, W) or (H, W, C) (a new array).\n"
-                     "Each channel on its own; uses all the cores on a big picture, with the same result on any number of threads.\n") +
-         edge_doc)
-            .c_str());
-    m.def(
-        "gaussian_blur",
-        [](const f32_array& src, float sigma, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::gaussian_blur(in, sigma, e); });
-        },
-        "src"_a, "sigma"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "gaussian_blur",
-        [](const stb::image& img, float sigma, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::gaussian_blur(img, sigma, e);
-        },
-        "sigma"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: this one blurred with a Gaussian of standard deviation `sigma`.");
+    def_dispatch(m, image_cls, "gaussian_blur", stb_kinds,
+                 [](const auto& x, float sigma, stb::edge_mode edge) {
+                     return of_kind<kind_of<decltype(x)>>(stb::gaussian_blur(x, sigma, edge));
+                 },
+                 "src"_a, "sigma"_a, nb::kw_only(), "edge"_a = "clamp", (std::string("Gaussian blur with a standard deviation `sigma`. Each channel on its own; uses all the cores on a big picture, with the same result on any number of threads.\n") + kinds_doc + edge_doc).c_str());
 
     // ---- box_blur
-    m.def(
-        "box_blur",
-        [](const stb::image& img, int radius, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::box_blur(img, radius, e);
-        },
-        "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp",
-        "The mean of the (2 * radius + 1)-square around each pixel of an Image (a new Image), or of a float32 array\n"
-        "(a new array). The cost does not depend on the radius.");
-    m.def(
-        "box_blur",
-        [](const f32_array& src, int radius, nb::handle edge) -> f32_result {
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::box_blur(in, radius, e); });
-        },
-        "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "box_blur",
-        [](const stb::image& img, int radius, nb::handle edge) -> stb::image {
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::box_blur(img, radius, e);
-        },
-        "radius"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: the mean of the (2 * radius + 1)-square around each pixel.");
+    def_dispatch(m, image_cls, "box_blur", stb_kinds,
+                 [](const auto& x, int radius, stb::edge_mode edge) {
+                     return of_kind<kind_of<decltype(x)>>(stb::box_blur(x, radius, edge));
+                 },
+                 "src"_a, "radius"_a, nb::kw_only(), "edge"_a = "clamp", (std::string("The mean of the (2 * radius + 1)-square around each pixel. The cost does not depend on the radius.\n") + kinds_doc).c_str());
 
     // ---- convolve: a full 2-D kernel, or a row and a column
     const std::string conv_doc =
@@ -1098,115 +851,33 @@ void bind_filter(nb::module_& m) {
                     "kernel and a column kernel (each a list of an odd number of taps): the same as their product but much\n"
                     "cheaper. Takes an Image or a float32 array; returns the same kind.\n") +
         edge_doc;
-    m.def(
-        "convolve",
-        [](const stb::image& img, nb::handle kernel, nb::handle edge) -> stb::image {
-            const stb::mat32f k = kernel_of(kernel);
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::convolve(img, k, e);
-        },
-        "src"_a, "kernel"_a, nb::kw_only(), "edge"_a = "clamp", conv_doc.c_str());
-    m.def(
-        "convolve",
-        [](const f32_array& src, nb::handle kernel, nb::handle edge) -> f32_result {
-            const stb::mat32f k = kernel_of(kernel);
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::convolve(in, k, e); });
-        },
-        "src"_a, "kernel"_a, nb::kw_only(), "edge"_a = "clamp");
-    m.def(
-        "convolve",
-        [](const stb::image& img, nb::handle row, nb::handle col, nb::handle edge) -> stb::image {
-            const stb::mat32f r = kernel_of(row), c = kernel_of(col);
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::convolve(img, r, c, e);
-        },
-        "src"_a, "row_kernel"_a, "col_kernel"_a, nb::kw_only(), "edge"_a = "clamp");
-    m.def(
-        "convolve",
-        [](const f32_array& src, nb::handle row, nb::handle col, nb::handle edge) -> f32_result {
-            const stb::mat32f r = kernel_of(row), c = kernel_of(col);
-            const stb::edge_mode e = edge_of(edge);
-            return run_f32(src, [&](const stb::mat32f& in) { return stb::convolve(in, r, c, e); });
-        },
-        "src"_a, "row_kernel"_a, "col_kernel"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "convolve",
-        [](const stb::image& img, nb::handle kernel, nb::handle edge) -> stb::image {
-            const stb::mat32f k = kernel_of(kernel);
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::convolve(img, k, e);
-        },
-        "kernel"_a, nb::kw_only(), "edge"_a = "clamp", "A new Image: this one convolved with a 2-D kernel (see libstb.convolve).");
-    image_cls.def(
-        "convolve",
-        [](const stb::image& img, nb::handle row, nb::handle col, nb::handle edge) -> stb::image {
-            const stb::mat32f r = kernel_of(row), c = kernel_of(col);
-            const stb::edge_mode e = edge_of(edge);
-            nb::gil_scoped_release release;
-            return stb::convolve(img, r, c, e);
-        },
-        "row_kernel"_a, "col_kernel"_a, nb::kw_only(), "edge"_a = "clamp");
+    def_dispatch(m, image_cls, "convolve", stb_kinds,
+                 [](const auto& x, nb::handle kernel, stb::edge_mode edge) {
+                     const stb::mat32f k = kernel_with_gil(kernel);
+                     return of_kind<kind_of<decltype(x)>>(stb::convolve(x, k, edge));
+                 },
+                 "src"_a, "kernel"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(conv_doc) + kinds_doc).c_str());
+    def_dispatch(m, image_cls, "convolve", stb_kinds,
+                 [](const auto& x, nb::handle row, nb::handle col, stb::edge_mode edge) {
+                     const stb::mat32f r = kernel_with_gil(row), c = kernel_with_gil(col);
+                     return of_kind<kind_of<decltype(x)>>(stb::convolve(x, r, c, edge));
+                 },
+                 "src"_a, "row_kernel"_a, "col_kernel"_a, nb::kw_only(), "edge"_a = "clamp", (std::string(conv_doc) + kinds_doc).c_str());
 
     // ---- sobel and magnitude
-    m.def(
-        "sobel",
-        [](const stb::image& img, nb::handle edge) {
-            const stb::edge_mode e = edge_of(edge);
-            stb::gradients g;
-            {
-                nb::gil_scoped_release release;
-                g = stb::sobel(img, e);
-            }
-            return gradients_tuple(std::move(g), true);
-        },
-        "src"_a, nb::kw_only(), "edge"_a = "clamp",
-        "The Sobel derivatives of an Image (read as value / 255) or a float32 array: a tuple (dx, dy) of float32 arrays\n"
-        "of the same shape, positive where the values grow to the right (dx) or downwards (dy). A step of height 1 gives 4.");
-    m.def(
-        "sobel",
-        [](const f32_array& src, nb::handle edge) {
-            const stb::edge_mode e = edge_of(edge);
-            const bool with_channels = src.ndim() == 3;
-            const stb::mat32f in = view_of(src);
-            stb::gradients g;
-            {
-                nb::gil_scoped_release release;
-                g = stb::sobel(in, e);
-            }
-            return gradients_tuple(std::move(g), with_channels);
-        },
-        "src"_a, nb::kw_only(), "edge"_a = "clamp");
-    image_cls.def(
-        "sobel",
-        [](const stb::image& img, nb::handle edge) {
-            const stb::edge_mode e = edge_of(edge);
-            stb::gradients g;
-            {
-                nb::gil_scoped_release release;
-                g = stb::sobel(img, e);
-            }
-            return gradients_tuple(std::move(g), true);
-        },
-        nb::kw_only(), "edge"_a = "clamp", "The Sobel derivatives as a tuple (dx, dy) of float32 arrays (H, W, C); see libstb.sobel.");
-    m.def(
-        "magnitude",
-        [](const f32_array& dx, const f32_array& dy) -> f32_result {
-            const bool with_channels = dx.ndim() == 3;
-            stb::gradients g;
-            g.dx = view_of(dx).copy();
-            g.dy = view_of(dy).copy();
-            stb::mat32f out;
-            {
-                nb::gil_scoped_release release;
-                out = stb::magnitude(g);
-            }
-            return to_array(std::move(out), with_channels);
-        },
-        "dx"_a, "dy"_a, "sqrt(dx**2 + dy**2) of two float32 arrays of the same shape (the result of sobel()).");
+    def_dispatch(m, image_cls, "sobel", stb_kinds,
+                 [](const auto& x, stb::edge_mode edge) { return stb::sobel(x, edge); },
+                 "src"_a, nb::kw_only(), "edge"_a = "clamp", "The Sobel derivatives of an Image or a uint8 array (read as value / 255) or a float32 array: a tuple (dx, dy) of float32 arrays\n"
+                 "of the same shape ((H, W, C) for an Image), positive where the values grow to the right (dx) or downwards (dy). A step of\n"
+                 "height 1 gives 4.");
+    def_dispatch(m, image_cls, "magnitude", float_kinds,
+                 [](const auto& dx, const auto& dy) {
+                     stb::gradients g;
+                     g.dx = dx.copy();
+                     g.dy = dy.copy();
+                     return stb::magnitude(g);
+                 },
+                 "dx"_a, "dy"_a, "sqrt(dx**2 + dy**2) of two float32 arrays of the same shape (the result of sobel()).");
 
     // ---- superpixels
     nb::class_<stb::superpixel_map>(m, "SuperpixelMap",

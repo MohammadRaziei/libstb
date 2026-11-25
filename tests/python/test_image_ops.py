@@ -179,7 +179,7 @@ def test_ssim_matches_scikit_image_with_gaussian_weights():
     m = stb.ssim_map(stb.Image(a), stb.Image(b))
     assert m.dtype == np.float32 and m.shape == (30, 38, 3)
     assert float(m.mean()) == pytest.approx(stb.ssim(stb.Image(a), stb.Image(b)), abs=1e-6)
-    assert stb.ssim_map(fa[..., 0], fb[..., 0]).shape == (30, 38)  # (H, W) in, (H, W) out
+    assert stb.ssim_map(np.ascontiguousarray(fa[..., 0]), np.ascontiguousarray(fb[..., 0])).shape == (30, 38)  # (H, W) in, (H, W) out
 
 
 def test_metrics_errors():
@@ -302,7 +302,7 @@ def test_guided_filter_matches_a_numpy_version_of_the_algorithm(edge, guide_chan
     pytest.importorskip("scipy")
     f = randf(17, 21, 3, seed=41)
     guide = None if guide_channels == 0 else randf(17, 21, guide_channels, seed=42)
-    got = stb.guided_filter(f, 2, 0.02, guide, edge=edge)
+    got = stb.guided_filter(f, 2, 0.02, edge=edge) if guide is None else stb.guided_filter(f, 2, 0.02, guide, edge=edge)
     g = f if guide is None else guide
     want = guided_reference(f, g, 2, 0.02, edge)
     assert got.dtype == np.float32 and got.shape == f.shape
@@ -336,5 +336,5 @@ def test_guided_filter_image_forms_radius_zero_and_errors():
             stb.guided_filter(img, *args)
     with pytest.raises(ValueError):  # a guide of another size
         stb.guided_filter(img, 1, 0.01, stb.Image(rand8(12, 15, 1, seed=47)))
-    with pytest.raises(ValueError):  # a guide that is not an Image
+    with pytest.raises(TypeError):  # a guide that is not an Image: the kinds of the two must be the same
         stb.guided_filter(img, 1, 0.01, np.zeros((12, 14), dtype=np.float32))

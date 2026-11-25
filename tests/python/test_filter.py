@@ -92,7 +92,7 @@ def test_edge_accepts_the_enum_and_rejects_nonsense():
     a = randf(6, 6)
     assert np.array_equal(stb.box_blur(a, 1, edge=stb.EdgeMode.MIRROR), stb.box_blur(a, 1, edge="mirror"))
     assert np.array_equal(stb.box_blur(a, 1, edge="MIRROR"), stb.box_blur(a, 1, edge="mirror"))
-    with pytest.raises(ValueError, match="edge must be one of"):
+    with pytest.raises(ValueError, match="unknown edge mode"):
         stb.box_blur(a, 1, edge="nope")
 
 

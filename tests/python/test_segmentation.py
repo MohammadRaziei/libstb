@@ -19,9 +19,9 @@ def randf(h, w, c=None, seed=0):
     return np.random.default_rng(seed).random(shape, dtype=np.float32)
 
 
-def mask_of(image):
-    """An Image mask as a (H, W) uint8 array."""
-    return np.asarray(image)[..., 0]
+def mask_of(mask):
+    """A mask as a (H, W) uint8 array: an Image mask has a channel axis, the mask of an array is the array."""
+    return np.asarray(mask)[..., 0] if isinstance(mask, stb.Image) else np.asarray(mask)
 
 
 SCIPY_MODES = {"clamp": "nearest", "reflect": "reflect", "mirror": "mirror", "wrap": "wrap", "zero": "constant"}
@@ -75,7 +75,7 @@ def test_adaptive_threshold_matches_the_formula_with_scipy(method, radius):
     assert (got != want).mean() < 0.002  # only values that fall within rounding of their level can differ
     inverted = mask_of(stb.adaptive_threshold(img, radius, 6.0, method, True))
     assert np.array_equal(inverted, 255 - got)
-    assert stb.adaptive_threshold(randf(20, 20, seed=8), radius, 0.05, method).__class__ is stb.Image
+    assert stb.adaptive_threshold(randf(20, 20, seed=8), radius, 0.05, method).dtype == np.uint8  # an array gives an array
 
 
 def test_adaptive_threshold_finds_a_dark_line_on_an_uneven_page_and_errors():
