@@ -496,7 +496,7 @@ std::vector<float> bilateral_space_weights(int r, float sigma) {
 // left out and a NaN pixel stays NaN.
 template <class T>
 void bilateral_run(const mat<T>& src, mat<T>& out, int r, float sigma_space, float sigma_range, edge_mode edge) {
-    constexpr bool u8 = std::is_same_v<T, std::uint8_t>;
+    static constexpr bool u8 = std::is_same_v<T, std::uint8_t>;
     const int w = src.width(), h = src.height(), c = src.channels();
     const int colour = (c == 2 || c == 4) ? c - 1 : c;
     const int side = 2 * r + 1;
