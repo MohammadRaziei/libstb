@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "pixel_range.hpp"
 #include "stb/filter.hpp"
 #include "stb/parallel.hpp"
 
@@ -82,21 +83,22 @@ template <class T>
 T otsu_threshold_mat(const mat<T>& src) {
     need_one_channel(src);
     if (src.empty()) throw std::invalid_argument("the picture is empty");
-    if constexpr (std::is_same_v<T, std::uint8_t>) {
-        std::vector<double> hist(256, 0.0);
-        std::size_t lo = 255, hi = 0;
+    if constexpr (!std::is_floating_point_v<T>) {  // an integer type: the histogram has one bin for every level
+        constexpr std::size_t levels = std::size_t(detail_pixel::range<T>::max) + 1;
+        std::vector<double> hist(levels, 0.0);
+        std::size_t lo = levels - 1, hi = 0;
         for (int y = 0; y < src.height(); ++y) {
-            const std::uint8_t* s = src.row(y);
+            const T* s = src.row(y);
             for (int x = 0; x < src.width(); ++x) hist[s[x]] += 1.0;
         }
-        for (std::size_t i = 0; i < 256; ++i)
+        for (std::size_t i = 0; i < levels; ++i)
             if (hist[i] > 0.0) {
-                if (lo == 255 && i < lo) lo = i;
+                if (lo == levels - 1 && i < lo) lo = i;
                 hi = i;
             }
-        if (lo == hi) return std::uint8_t(lo);
+        if (lo == hi) return T(lo);
         const std::vector<double> counts(hist.begin() + std::ptrdiff_t(lo), hist.begin() + std::ptrdiff_t(hi) + 1);
-        return std::uint8_t(lo + best_split(counts, [&](std::size_t i) { return double(lo + i); }));
+        return T(lo + best_split(counts, [&](std::size_t i) { return double(lo + i); }));
     } else {
         double lo = 0.0, hi = 0.0;
         bool any = false;
@@ -137,8 +139,8 @@ mat8u adaptive_threshold_mat(const mat<T>& src, int radius, float offset, adapti
     if (src.empty()) return mat8u();
     mat32f scratch;
     const mat32f& f = as_unit(src, scratch);
-    // the offset is in levels for 8 bits and the values are read as value / 255
-    const float off = std::is_same_v<T, std::uint8_t> ? offset / 255.0f : offset;
+    // the offset is in levels for an integer type (a value is read as value / maximum) and in the unit range for floats
+    const float off = offset / float(detail_pixel::range<T>::max);
     mat32f local;
     if (method == adaptive_method::mean) {
         local = box_blur(f, radius, edge);

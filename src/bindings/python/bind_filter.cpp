@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <limits>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -679,11 +680,14 @@ void bind_segmentation(nb::module_& m, nb::class_<stb::image>& image_cls) {
     def_dispatch(m, image_cls, "threshold", stb_kinds,
                  [](const auto& x, double t, bool invert) {
                      using M = kind_of<decltype(x)>;
-                     if constexpr (std::is_same_v<M, stb::mat32f>) {
-                         return mask_of<M>(stb::threshold(x, float(t), invert));
+                     using V = stb::traits::mat_value_t<M>;  // uint8_t for an Image and a uint8 array, float for a float array
+                     if constexpr (std::is_floating_point_v<V>) {
+                         return mask_of<M>(stb::threshold(x, V(t), invert));
                      } else {
-                         if (t < 0 || t > 255 || t != std::floor(t)) throw std::invalid_argument("t must be a whole level from 0 to 255");
-                         return mask_of<M>(stb::threshold(x, std::uint8_t(t), invert));
+                         const auto top = std::numeric_limits<V>::max();
+                         if (t < 0 || t > double(top) || t != std::floor(t))
+                             throw std::invalid_argument("t must be a whole level from 0 to " + std::to_string(static_cast<unsigned long long>(top)));
+                         return mask_of<M>(stb::threshold(x, V(t), invert));
                      }
                  },
                  "src"_a, "t"_a, "invert"_a = false, "The mask of the values above `t`: 255 where src > t, else 0; invert swaps the two. src is an Image or a uint8 array of one channel\n"
@@ -691,8 +695,9 @@ void bind_segmentation(nb::module_& m, nb::class_<stb::image>& image_cls) {
                  "and a uint8 array for an array. out = 255 * H(src - t) with H the step function.");
     def_dispatch(m, image_cls, "otsu_threshold", stb_kinds,
                  [](const auto& x) {
-                     if constexpr (std::is_same_v<kind_of<decltype(x)>, stb::mat32f>) return double(stb::otsu_threshold(x));
-                     else return int(stb::otsu_threshold(x));
+                     using V = stb::traits::mat_value_t<kind_of<decltype(x)>>;
+                     if constexpr (std::is_floating_point_v<V>) return double(stb::otsu_threshold(x));
+                     else return static_cast<long long>(stb::otsu_threshold(x));
                  },
                  "src"_a, "Otsu's level (an int for an Image or a uint8 array, a float for a float32 array): the one that best splits the histogram in two, as\n"
                  "scikit-image's threshold_otsu. Use it as the `t` of threshold().");

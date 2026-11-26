@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "image/math_kernels.hpp"
+#include "pixel_range.hpp"
 #include "plane.hpp"
 #include "stb/parallel.hpp"
 
@@ -492,22 +493,28 @@ std::vector<float> bilateral_space_weights(int r, float sigma) {
 
 // Every colour channel of a pixel is changed by the weighted mean of the window, where a tap weighs
 // exp(-distance^2 / (2 sigma_space^2)) * exp(-d^2 / (2 sigma_range^2)) and d is the distance of the two pixels as colours
-// (all colour channels together, in units of the full range). The alpha channel is copied. On floats a tap with a NaN is
-// left out and a NaN pixel stays NaN.
+// (all colour channels together, in units of the full range: a level divided by the maximum of the type). The alpha channel is
+// copied. On floats a tap with a NaN is left out and a NaN pixel stays NaN.
+//
+// An integer type keeps the squared distance as an integer, in levels squared, and takes the range weight from a table of every
+// possible value when the table is small (8 bits: 195076 entries); a type with more levels (16 bits) evaluates it for every tap.
 template <class T>
 void bilateral_run(const mat<T>& src, mat<T>& out, int r, float sigma_space, float sigma_range, edge_mode edge) {
-    static constexpr bool u8 = std::is_same_v<T, std::uint8_t>;
+    using px_range = detail_pixel::range<T>;
     const int w = src.width(), h = src.height(), c = src.channels();
     const int colour = (c == 2 || c == 4) ? c - 1 : c;
     const int side = 2 * r + 1;
     const std::size_t pw = std::size_t(w) + 2 * std::size_t(r);
     const std::vector<float> ws = bilateral_space_weights(r, sigma_space);
     const double inv_range = 1.0 / (2.0 * double(sigma_range) * double(sigma_range));
+    const double max2 = double(px_range::max) * double(px_range::max);  // the largest squared distance of one channel, in levels
 
-    std::vector<float> lut;  // 8 bits: the range weight of every possible squared distance (in levels squared)
-    if (u8) {
-        lut.resize(std::size_t(colour) * 255u * 255u + 1u);
-        for (std::size_t d = 0; d < lut.size(); ++d) lut[d] = float(std::exp(-(double(d) / 65025.0) * inv_range));
+    constexpr std::size_t table_limit = std::size_t(1) << 20;  // entries
+    const bool use_table = px_range::is_integer && double(colour) * max2 + 1.0 <= double(table_limit);
+    std::vector<float> lut;  // the range weight of every possible squared distance (in levels squared)
+    if (use_table) {
+        lut.resize(std::size_t(colour) * std::size_t(max2) + 1u);
+        for (std::size_t d = 0; d < lut.size(); ++d) lut[d] = float(std::exp(-(double(d) / max2) * inv_range));
     }
     const float inv_range_f = float(inv_range);
 
@@ -527,7 +534,7 @@ void bilateral_run(const mat<T>& src, mat<T>& out, int r, float sigma_space, flo
                 bool centre_nan = false;
                 for (int k = 0; k < colour; ++k) {
                     centre[k] = planes[std::size_t(k)][mid];
-                    if constexpr (!u8) centre_nan = centre_nan || centre[k] != centre[k];
+                    if constexpr (!px_range::is_integer) centre_nan = centre_nan || centre[k] != centre[k];
                 }
                 if (centre_nan) {
                     for (int k = 0; k < colour; ++k) px[k] = std::numeric_limits<T>::quiet_NaN();
@@ -540,28 +547,29 @@ void bilateral_run(const mat<T>& src, mat<T>& out, int r, float sigma_space, flo
                     for (int dx = 0; dx < side; ++dx) {
                         const std::size_t idx = row + std::size_t(dx);
                         T v[4];
-                        std::conditional_t<u8, int, float> d2 = 0;
+                        std::conditional_t<px_range::is_integer, std::int64_t, float> d2 = 0;
                         bool skip = false;
                         for (int k = 0; k < colour; ++k) {
                             v[k] = planes[std::size_t(k)][idx];
-                            if constexpr (!u8) skip = skip || v[k] != v[k];
-                            const auto d = v[k] - centre[k];
-                            d2 += d * d;
+                            if constexpr (px_range::is_integer) {
+                                const std::int64_t d = std::int64_t(v[k]) - std::int64_t(centre[k]);
+                                d2 += d * d;
+                            } else {
+                                skip = skip || v[k] != v[k];
+                                const float d = v[k] - centre[k];
+                                d2 += d * d;
+                            }
                         }
                         if (skip) continue;
                         float rw;
-                        if constexpr (u8) rw = lut[std::size_t(d2)];
+                        if constexpr (px_range::is_integer) rw = use_table ? lut[std::size_t(d2)] : float(std::exp(-(double(d2) / max2) * inv_range));
                         else rw = std::exp(-d2 * inv_range_f);
                         const float wgt = ws[std::size_t(dy) * std::size_t(side) + std::size_t(dx)] * rw;
                         wsum += wgt;
                         for (int k = 0; k < colour; ++k) acc[k] += wgt * float(v[k]);
                     }
                 }
-                for (int k = 0; k < colour; ++k) {
-                    const float val = acc[k] / wsum;  // the middle tap alone weighs 1, so wsum >= 1
-                    if constexpr (u8) px[k] = std::uint8_t(val < 0.0f ? 0 : (val > 255.0f ? 255 : int(val + 0.5f)));
-                    else px[k] = val;
-                }
+                for (int k = 0; k < colour; ++k) px[k] = px_range::store(acc[k] / wsum);  // the middle tap alone weighs 1, so wsum >= 1
             }
         }
     });
@@ -822,13 +830,16 @@ int colour_channels(int channels) {
     return (channels == 2 || channels == 4) ? channels - 1 : channels;
 }
 
-// What goes into one block of pixelize: sums in 64-bit integers for 8 bits (exact) and in double for floats.
+// What goes into one block of pixelize: sums in 64-bit integers for an integer type (exact) and in double for floats.
 template <class T>
-using block_sum_t = std::conditional_t<std::is_same_v<T, std::uint8_t>, std::uint64_t, double>;
+using block_sum_t = std::conditional_t<std::is_floating_point_v<T>, double, std::uint64_t>;
 
 // The mean num / den, rounded to the nearest for integers.
-inline std::uint8_t mean_value(std::uint64_t num, std::uint64_t den) { return std::uint8_t((2 * num + den) / (2 * den)); }
-inline float mean_value(double num, double den) { return float(num / den); }
+template <class T>
+T mean_value(block_sum_t<T> num, block_sum_t<T> den) {
+    if constexpr (std::is_floating_point_v<T>) return T(num / den);
+    else return T((2 * num + den) / (2 * den));
+}
 
 }  // namespace
 
@@ -900,8 +911,8 @@ traits::if_image_t<mat<T>, void> detail::pixelize_inplace_mat(mat<T>& img, int b
                 const sum_t count = sum_t(y1 - y0) * sum_t(x1 - x0);
                 T value[4] = {};
                 for (int k = 0; k < colour; ++k)
-                    value[k] = (alpha && alpha_sum != sum_t(0)) ? T(mean_value(weighted[k], alpha_sum)) : T(mean_value(plain[k], count));
-                if (alpha) value[colour] = T(mean_value(alpha_sum, count));
+                    value[k] = (alpha && alpha_sum != sum_t(0)) ? mean_value<T>(weighted[k], alpha_sum) : mean_value<T>(plain[k], count);
+                if (alpha) value[colour] = mean_value<T>(alpha_sum, count);
                 for (int y = y0; y < y1; ++y) {
                     T* row = img.row(y);
                     for (int x = x0; x < x1; ++x)
