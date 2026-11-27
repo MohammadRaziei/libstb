@@ -7,8 +7,8 @@
 // The range of a pixel type: "white" is the maximum of an integer type and 1 for a float, and a value computed in floating point is
 // stored rounded to the nearest and clamped. The same code serves 8, 16 and 32 bits, signed or not.
 
-namespace {
-
+// UTEST() declares `extern utest_state` itself: inside an anonymous namespace that would declare
+// a different, internal-linkage utest_state and the link fails, so the tests stay at global scope.
 using stb::pixel_range;
 
 UTEST(libstb_pixel_range_tests, test_white_is_the_maximum_of_the_type_and_one_for_a_float) {
@@ -54,5 +54,3 @@ UTEST(libstb_pixel_range_tests, test_a_float_is_not_changed) {
     EXPECT_EQ(pixel_range<float>::store(-2.0f), -2.0f);  // not clamped: a float may hold any value
     EXPECT_EQ(pixel_range<float>::store(3.5f), 3.5f);
 }
-
-}  // namespace

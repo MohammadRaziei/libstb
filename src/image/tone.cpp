@@ -149,12 +149,12 @@ lut8 match_lut(const hist8& src, const hist8& ref) {
     const double ns = double(total(src)), nr = double(total(ref));
     lut8 t{};
     std::uint64_t cs = 0, cr = ref[0];
-    int u = 0;
-    for (int v = 0; v < 256; ++v) {
-        cs += src[std::size_t(v)];
+    std::size_t u = 0;
+    for (std::size_t v = 0; v < t.size(); ++v) {
+        cs += src[v];
         const double p = double(cs) / ns;
-        while (u < 255 && double(cr) / nr < p) cr += ref[std::size_t(++u)];
-        t[std::size_t(v)] = std::uint8_t(u);
+        while (u + 1 < ref.size() && double(cr) / nr < p) cr += ref[++u];
+        t[v] = std::uint8_t(u);
     }
     return t;
 }
