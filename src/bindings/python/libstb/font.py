@@ -39,6 +39,31 @@ class FontFaceInfo(NamedTuple):
     weight_max: int = 400
 
 
+class FontEmbedding(NamedTuple):
+    """What a font's license (OS/2 fsType) allows when it is put inside a document, as `Font.embedding` reports it.
+
+    libstb only reports the bits; whether to embed is the caller's decision."""
+
+    permission: str  # "installable", "restricted", "preview_print" or "editable" (the most restrictive bit set)
+    subsetting_allowed: bool  # False: the font may only be embedded whole
+    bitmap_only: bool  # True: only the font's bitmaps may be embedded, not its outlines
+    fs_type: int  # the raw OS/2 fsType
+
+
+class FontSubset(NamedTuple):
+    """A font file with only some glyphs of another font, as `Font.subset` makes it."""
+
+    data: bytes  # a complete .ttf with one face
+    glyphs: Sequence[int]  # glyphs[n] is the glyph of the original font that is glyph n of `data`
+
+    def new_index(self, glyph: int) -> Optional[int]:
+        """The index in `data` of a glyph of the original font, None if the subset does not hold it."""
+        try:
+            return self.glyphs.index(glyph)  # ponytail: linear; the list is sorted, bisect it if a caller asks for many
+        except ValueError:
+            return None
+
+
 class FontAxis(NamedTuple):
     """One design axis of a variable font: "wght" (weight), "wdth" (width in percent), "opsz", ..."""
 
@@ -321,6 +346,27 @@ class Font:
         numbers in pixels). The `size` of draw_text is the height from the descent to the ascent, so
         to draw outlines at the same size scale them by ``size / (ascent - descent)``."""
         return DesignMetrics(*self._f.design_metrics())
+
+    @property
+    def embedding(self) -> FontEmbedding:
+        """What the font's license says about putting it inside a document (a PDF): see FontEmbedding."""
+        permission, subsetting, bitmap, fs_type = self._f.embedding()
+        return FontEmbedding(("installable", "restricted", "preview_print", "editable")[permission], subsetting, bitmap, fs_type)
+
+    @property
+    def can_subset(self) -> bool:
+        """True when `subset` works: TrueType outlines and no variation applied (a variable font at its default
+        axes works). False for a CFF font and for a font made by with_variation / with_weight."""
+        return self._f.can_subset()
+
+    def subset(self, glyphs: Sequence[int]) -> FontSubset:
+        """A font file with only `glyphs`, glyph 0 and the parts of composite glyphs, numbered again (see FontSubset).
+
+        It has no layout tables and no name: shape the text with this font first, then write the glyph
+        indices from `FontSubset.new_index`. Whether the license allows it is `embedding`. Raises ValueError for a
+        glyph index this font does not have, Error if not `can_subset`, DecodeError for damaged glyph data."""
+        data, kept = self._f.subset(list(glyphs))
+        return FontSubset(data, tuple(kept))
 
     def outline(self, glyph: int) -> list:
         """The outline of a glyph in font units, y up, as the commands Outline takes:

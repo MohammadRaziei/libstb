@@ -6,6 +6,7 @@
 //   glyph_raster.cpp outline -> 8-bit coverage bitmap (curve flattening, scanline area coverage)
 //   atlas.cpp        packing many glyph bitmaps into one image
 //   face_info.cpp    the family name and the bold / italic flags (tables name, OS/2, head)
+//   subset.cpp       a new font file that holds only some glyphs of a TrueType-outline font
 //
 // A font is untrusted input, so every read goes through otl::byte_view: out-of-range reads give
 // 0 instead of touching memory outside the file.
@@ -212,6 +213,25 @@ private:
 
 // The design axes of an `fvar` table (empty for an empty or damaged one). Used by face::axes and read_face_info.
 std::vector<face::axis> read_fvar_axes(otl::byte_view fvar);
+
+// ---- subset.cpp
+
+// What subset() makes: a complete one-face .ttf and the old index of every glyph it holds, ascending. Glyph n of
+// the new font is glyph kept[n] of the old one (kept[0] is always 0, .notdef).
+struct subset_output {
+    std::vector<std::uint8_t> data;
+    std::vector<std::uint32_t> kept;
+};
+
+// True when subset() can work on this face: TrueType outlines (`glyf`, not CFF) with the tables a subset needs
+// (head, hhea, hmtx, loca, maxp), and no axis moved off its default (the outlines would not be the ones in `glyf`).
+bool can_subset(const face& f);
+
+// A font with only `glyphs` (old indices, each below f.num_glyphs()), glyph 0 and every glyph a composite among them
+// is made of. The glyphs are numbered again, densely and in the old order; hinting programs (cvt, fpgm, prep) stay.
+// Throws decode_error if the glyph data is damaged (a composite that names a glyph the font does not have),
+// stb::error if !can_subset(f).
+subset_output subset(const face& f, const std::vector<std::uint32_t>& glyphs);
 
 // ---- glyph_raster.cpp
 

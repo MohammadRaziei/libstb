@@ -2,6 +2,17 @@
 
 تاریخ: 2026-11-17. این بخش خلاصه‌ی خودکفا برای چت بعدی است؛ زیرش جزئیات هر دور (جدیدترین اول) و تاریخچه‌ی قدیمی‌تر است.
 
+## ۰ج. آخرین کار: subsetter و font::embedding (2026-11-27)
+
+برای embed واقعی فونت در PDF (novasvg: `--pdf-text outlines|embed`، پیش‌فرض outlines). API با تأیید کاربر:
+- `font::embedding()` یک `font_embedding` می‌دهد: `permission()` (installable، restricted، preview_print، editable؛ سخت‌گیرانه‌ترین بیت)، `subsetting_allowed()` (بیت ۸ fsType)، `bitmap_only()` (بیت ۹)، `fs_type()`. فقط گزارش است؛ تصمیم با فراخواننده.
+- `subsetter(font).glyph(g)/glyphs(v).run()` یک `font_subset` می‌دهد: `data()` (یک `.ttf` کامل)، `glyph_count()`، `new_index(old)` (`absent` اگر نباشد). `supported()`: فقط glyf (نه CFF) و بدون variation اعمال‌شده (فونت variable در مقدار پیش‌فرض کار می‌کند). glyphها دوباره شماره می‌خورند (glyph 0 همان .notdef؛ اجزای composite اضافه و داخل composite بازنویسی می‌شوند).
+- جدول‌ها: head، hhea، maxp، hmtx، loca، glyf، cvt/fpgm/prep (اگر باشند) و یک cmap خالی (یک segment 0xFFFF؛ **انحراف از پیشنهاد اولیه**: بدون آن `font::from_memory` خود libstb فایل را نمی‌پذیرد). بدون GSUB، GPOS، kern، name، post، OS/2.
+- کد: `src/font/truetype/subset.cpp` (هسته)، `font.cpp` (لایه‌ی نازک)، `include/stb/font.hpp`. پایتون: `Font.embedding`، `Font.can_subset`، `Font.subset(glyphs)` (`FontEmbedding`، `FontSubset`).
+- تست: `tests/cpp/test_font_subset.cpp` (11 تست، Vazirmatn با 785 composite، فونت خراب، checksum استاندارد، loca) و `tests/python/test_font_subset.py` (مقایسه با fontTools: همان outline بعد از decompose و همان advance). gate: C++ 767 تست پاس، Python 2093 پاس و 18 skip، ASAN/UBSAN تمیز، بدون warning.
+- **باز:** subset برای CFF و برای نمونه‌ی variable (نوشتن glyf از outlineهای instance)؛ trim کردن glyph تا انتهای واقعی؛ فشرده‌کردن hmtx (advanceهای تکراری آخر). گام بعد: سمت novasvg (enum `pdf_text`، `Identity-H` با CID = new_index، `FontFile2`، `/ToUnicode`؛ فونتی که `restricted` یا `bitmap_only` یا `!supported()` است به outline برمی‌گردد).
+- یک باگ حین کار: درج اولیه‌ی ۴ بایت خالی داخل حلقه (نه بعد از آن) باعث می‌شد glyph 0 چهار بایتی شود و fontTools خطا بدهد؛ تست «هر glyph یا خالی است یا ≥10 بایت» همین را می‌گیرد.
+
 ## ۰الف. در جریان: طراحی بایندینگ (2026-11-21)
 
 - جزئیات و آزمایش در **`binding.md`** (ریشه‌ی ریپو). خلاصه: Python باید سه ورودی را بشناسد (`Image`، آرایه‌ی uint8، آرایه‌ی float32) و هر چیز دیگر خطا بدهد؛ دسته‌بندی بومی nanobind با `.noconvert()`؛ `*_inplace` تابع جدا مثل C++ و زنجیره‌ای (برمی‌گرداند خودِ شیء)؛ `inplace=` حذف می‌شود.

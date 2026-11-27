@@ -366,6 +366,44 @@ font_design_metrics font::design_metrics() const noexcept {
     return d;
 }
 
+font_embedding font::embedding() const noexcept {
+    const truetype::face& face = impl_->face;
+    const otl::byte_view os2 = otl::find_table(face.file(), std::uint32_t(face.font_start()), otl::make_tag('O', 'S', '/', '2'));
+    return font_embedding(os2.has(8, 2) ? os2.u16(8) : std::uint16_t(0));  // fsType; no OS/2 table, no restriction
+}
+
+// ---------------------------------------------------------------- subsetting (the work is in truetype/subset.cpp)
+
+std::uint32_t font_subset::new_index(std::uint32_t old_index) const noexcept {
+    const auto it = std::lower_bound(kept_.begin(), kept_.end(), old_index);
+    return it != kept_.end() && *it == old_index ? std::uint32_t(it - kept_.begin()) : absent;
+}
+
+subsetter::subsetter(const font& f) : font_(f) {}
+
+bool subsetter::supported() const noexcept { return truetype::can_subset(font_.impl_->face); }
+
+subsetter& subsetter::glyph(std::uint32_t index) & {
+    if (index >= font_.glyph_count()) throw std::invalid_argument("glyph index is past the end of the font");
+    glyphs_.push_back(index);
+    return *this;
+}
+
+subsetter& subsetter::glyphs(const std::vector<std::uint32_t>& indices) & {
+    for (const std::uint32_t index : indices)
+        if (index >= font_.glyph_count()) throw std::invalid_argument("glyph index is past the end of the font");
+    glyphs_.insert(glyphs_.end(), indices.begin(), indices.end());
+    return *this;
+}
+
+font_subset subsetter::run() const {
+    truetype::subset_output made = truetype::subset(font_.impl_->face, glyphs_);
+    font_subset out;
+    out.data_ = std::move(made.data);
+    out.kept_ = std::move(made.kept);
+    return out;
+}
+
 static void parse_outline(const truetype::face& face, std::uint32_t g, std::vector<outline_command>& out) {
     const std::vector<truetype::vertex> vertices = face.outline(int(g));
     const auto at = [](int x, int y) { return point{float(x), float(y)}; };

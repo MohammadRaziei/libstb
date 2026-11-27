@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -142,6 +143,7 @@ struct shape_params {  // the settings of a `shaping` builder; the defaults are 
 }  // namespace detail
 
 class shaping;  // the builder that shapes with settings; defined after font
+class subsetter;  // the builder that makes a smaller font file; defined after font
 
 // What a shaped glyph is. `glyph == 0` alone does not say: a line break and a character the font has
 // no glyph for both have glyph 0.
@@ -191,6 +193,37 @@ struct system_font_info : font_face_info {
     std::filesystem::path path;
 };
 
+// What a font's license (OS/2 fsType) allows when the font is put inside a document such as a PDF. A value that
+// reports the bits, with no policy: the program that writes the document decides what to do with them.
+class font_embedding {
+public:
+    enum class level {
+        installable,    // no restriction
+        restricted,     // the license forbids embedding
+        preview_print,  // may be embedded to view and print the document, which is then read-only
+        editable        // may be embedded and the document may be edited
+    };
+
+    explicit font_embedding(std::uint16_t fs_type = 0) noexcept : fs_type_(fs_type) {}
+
+    // The most restrictive of the level bits that are set (the standard allows only one).
+    level permission() const noexcept {
+        if (fs_type_ & 0x0002u) return level::restricted;
+        if (fs_type_ & 0x0004u) return level::preview_print;
+        if (fs_type_ & 0x0008u) return level::editable;
+        return level::installable;
+    }
+    // false when the font says it may only be embedded whole ("no subsetting", bit 8).
+    bool subsetting_allowed() const noexcept { return (fs_type_ & 0x0100u) == 0; }
+    // true when only the bitmaps of the font may be embedded, not its outlines (bit 9).
+    bool bitmap_only() const noexcept { return (fs_type_ & 0x0200u) != 0; }
+    // The raw OS/2 fsType.
+    std::uint16_t fs_type() const noexcept { return fs_type_; }
+
+private:
+    std::uint16_t fs_type_;
+};
+
 // A TrueType/OpenType font. Cheap to copy (copies share one immutable
 // parsed font) and safe to use from many threads at once.
 //
@@ -234,6 +267,10 @@ public:
     std::uint32_t glyph_count() const noexcept;
     glyph_metrics glyph_info(std::uint32_t glyph) const;
     font_design_metrics design_metrics() const noexcept;
+
+    // What the font's license says about putting it inside a document (OS/2 fsType); installable if the font has
+    // no OS/2 table. libstb only reports it: whether to embed is the caller's decision.
+    font_embedding embedding() const noexcept;
 
     // The outline of a glyph: every contour is move_to ... close, in the font's own point order and
     // curve types (quad_to for TrueType, cubic_to for CFF). Empty for a glyph with no outline. The
@@ -393,6 +430,7 @@ private:
     explicit font(std::shared_ptr<const impl> p) noexcept : impl_(std::move(p)) {}
     std::vector<shaped_glyph> shape_with(std::string_view utf8, std::size_t begin, std::size_t end, const detail::shape_params& options) const;
     friend class shaping;
+    friend class subsetter;
 
     std::shared_ptr<const impl> impl_;
 };
@@ -441,6 +479,63 @@ private:
     std::size_t begin_ = 0;
     std::size_t end_;
     detail::shape_params p_;
+};
+
+// A font file that holds some of the glyphs of another font, made by subsetter.
+class STB_API font_subset {
+public:
+    // new_index() of a glyph that is not in the subset.
+    static constexpr std::uint32_t absent = 0xFFFFFFFFu;
+
+    // A complete .ttf with one face: glyph, metric and hinting tables, and an empty character map. It has no
+    // layout tables (GSUB, GPOS, kern) and no name: shape the text with the original font first, then write the
+    // glyph indices from new_index().
+    const std::vector<std::uint8_t>& data() const noexcept { return data_; }
+    // How many glyphs it holds; the new indices are 0 .. glyph_count() - 1, and new index 0 is .notdef.
+    std::uint32_t glyph_count() const noexcept { return static_cast<std::uint32_t>(kept_.size()); }
+    // The index in the subset of a glyph of the original font, or `absent`. The glyphs keep their order.
+    std::uint32_t new_index(std::uint32_t old_index) const noexcept;
+
+private:
+    friend class subsetter;
+    std::vector<std::uint8_t> data_;
+    std::vector<std::uint32_t> kept_;  // the old index of each glyph, ascending
+};
+
+// Makes a font file with only the glyphs a document uses (what a PDF embeds), with settings. The font goes in the
+// constructor, the glyphs are calls that return the builder, and run() makes the subset:
+//
+//     stb::subsetter s(font);
+//     if (s.supported()) {
+//         for (auto g : used_glyphs) s.glyph(g);
+//         stb::font_subset sub = s.run();   // sub.data() is the file, sub.new_index(g) the glyph's number in it
+//     }
+//
+// The glyphs are numbered again. Glyph 0 (.notdef) and the parts of every composite glyph are added by run().
+// A subset of a font whose license forbids it is the caller's to avoid: see font::embedding().
+class STB_API subsetter {
+public:
+    // Keeps a copy of the font (cheap: the bytes are shared).
+    explicit subsetter(const font& f);
+
+    // true when the font has TrueType outlines (glyf) and no variation applied. A variable font at its default
+    // axes works (the subset is its default instance); with_weight / with_variation make it unsupported, and so does
+    // CFF. ponytail: those two are the next steps (an instance would need its outlines written out, CFF its own subsetter).
+    bool supported() const noexcept;
+
+    // A glyph to keep (a duplicate does nothing). Throws invalid_argument for an index at or past font::glyph_count().
+    subsetter& glyph(std::uint32_t index) &;
+    subsetter& glyphs(const std::vector<std::uint32_t>& indices) &;
+    subsetter&& glyph(std::uint32_t index) && { glyph(index); return std::move(*this); }
+    subsetter&& glyphs(const std::vector<std::uint32_t>& indices) && { glyphs(indices); return std::move(*this); }
+
+    // Does the work; can be called again. Throws stb::error if !supported(), decode_error if the glyph data is damaged
+    // (a composite glyph that names a glyph the font does not have).
+    font_subset run() const;
+
+private:
+    font font_;
+    std::vector<std::uint32_t> glyphs_;
 };
 
 // ---------------------------------------------------------------- estimates

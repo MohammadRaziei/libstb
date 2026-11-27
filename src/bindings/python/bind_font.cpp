@@ -230,6 +230,26 @@ void bind_font(nb::module_& m) {
                  return std::make_tuple(d.units_per_em, d.ascent, d.descent, d.line_gap, d.x_min, d.y_min, d.x_max,
                                         d.y_max);
              })
+        // ---- embedding a font in a document ----
+        .def("embedding",
+             [](const font& f) {
+                 const stb::font_embedding e = f.embedding();
+                 return std::make_tuple(static_cast<int>(e.permission()), e.subsetting_allowed(), e.bitmap_only(),
+                                        static_cast<int>(e.fs_type()));
+             })
+        .def("can_subset", [](const font& f) { return stb::subsetter(f).supported(); })
+        .def("subset",
+             [](const font& f, const std::vector<long long>& glyphs) {
+                 stb::subsetter builder(f);
+                 for (const long long g : glyphs) builder.glyph(glyph_id(g));
+                 const stb::font_subset sub = builder.run();
+                 // the old index of each glyph of the subset, in the order of the new indices
+                 nb::list kept;
+                 for (std::uint32_t g = 0; g < f.glyph_count(); ++g)
+                     if (sub.new_index(g) != stb::font_subset::absent) kept.append(g);
+                 return std::make_tuple(nb::bytes(reinterpret_cast<const char*>(sub.data().data()), sub.data().size()), kept);
+             },
+             "glyphs"_a)
         .def("outline",
              [](const font& f, long long glyph) {
                  nb::list out;

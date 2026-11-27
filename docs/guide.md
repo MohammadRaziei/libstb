@@ -505,6 +505,24 @@ for (const stb::system_font_info& s : stb::font::system_fonts())      // every f
     if (s.family_name == "DejaVu Sans" && !s.bold && !s.italic) f = stb::font::open(s.path, s.index);
 ```
 
+**Embedding a font in a document.** A PDF writer that wants real text (not outlines) puts the font in the file;
+`subsetter` makes a font with only the glyphs the document uses, and `font::embedding()` says what the font's license
+allows. libstb only reports the license: the program decides.
+
+```cpp
+const stb::font_embedding e = f.embedding();     // OS/2 fsType: permission(), subsetting_allowed(), bitmap_only()
+stb::subsetter s(f);
+if (e.permission() != stb::font_embedding::level::restricted && !e.bitmap_only() && s.supported()) {
+    for (std::uint32_t g : used_glyphs) s.glyph(g);   // glyph indices from shape_glyphs; invalid_argument past glyph_count()
+    const stb::font_subset sub = s.run();             // sub.data(): a one-face .ttf; glyph 0 and the parts of composites come along
+    const std::uint32_t cid = sub.new_index(g);       // the glyph's number in the subset, font_subset::absent if it is not there
+}
+```
+
+The glyphs are numbered again, so the subset has no gaps. It has no layout tables (GSUB, GPOS, kern) and no name: shape
+the text with the original font first. `supported()` is true for TrueType outlines (a variable font at its default axes
+too); CFF and a font made by `with_variation` / `with_weight` are not supported yet.
+
 `f.codepoints()` lists every code point the font has a glyph for (ascending), for a caller that builds a table of advances or
 checks coverage; it reads the cmap's own ranges, so it does not cost a `has_glyph` call per Unicode value.
 
@@ -559,6 +577,9 @@ font.glyph_info(g)                               # GlyphMetrics(advance, lsb, x_
 font.design_metrics                              # DesignMetrics(units_per_em, ascent, descent, line_gap, x_min, ...)
 font.outline(g)                                  # [("M", x, y), ("L", ...), ("Q", ...), ("C", ...), ("Z",)] = Outline commands
 font.glyph_kerning(left, right, "automatic")     # or "kern_table" or "none"
+font.embedding                                   # FontEmbedding(permission, subsetting_allowed, bitmap_only, fs_type): the license bits
+font.can_subset                                  # True for TrueType outlines with no variation applied
+font.subset(glyphs)                              # FontSubset(data, glyphs): a .ttf with only those glyphs; .new_index(old) -> int | None
 
 d = font.design_metrics
 s = size / (d.ascent - d.descent)                # font units -> pixels, the scale draw_text uses for its size
