@@ -47,7 +47,7 @@ def warm_up(small):
     """First calls allocate lazily (imports, tables, nanobind caches): do them before measuring."""
     img = stb.Image(small)
     png, jpg = img.to_png(), img.to_jpg()
-    stb.Image.open(png), stb.Image.open(jpg)
+    stb.Image.decode(png), stb.Image.decode(jpg)
     img.resize(100, 100).numpy()
     stb.Image(_rgb(c=4)).blend(stb.Image(_rgb(c=4)))
     for _ in range(2):
@@ -72,10 +72,10 @@ class Wrapper:
 def test_encode_and_decode_leave_nothing_behind(small):
     img = stb.Image(small)
     for _ in range(ROUNDS):
-        stb.Image.open(img.to_png())
-        stb.Image.open(img.to_jpg(80))
-        stb.Image.open(img.to_bmp())
-        stb.Image.open(img.to_tga())
+        stb.Image.decode(img.to_png())
+        stb.Image.decode(img.to_jpg(80))
+        stb.Image.decode(img.to_bmp())
+        stb.Image.decode(img.to_tga())
 
 
 @pytest.mark.limit_leaks(LEAK_LIMIT)
@@ -150,7 +150,7 @@ def test_exceptions_leave_nothing_behind(small):
         with pytest.raises(ValueError):
             img.crop(0, 0, 0, 5)
         with pytest.raises(stb.DecodeError):
-            stb.Image.open(b"not an image")
+            stb.Image.decode(b"not an image")
         with pytest.raises(ValueError):
             stb.simd("nope")
 
@@ -223,7 +223,7 @@ def test_resize_peak_is_the_output_plus_a_small_working_buffer(big):
 @pytest.mark.limit_memory("40 MB")
 def test_decoding_a_png_peaks_near_the_size_of_the_pixels(big):
     png = stb.Image(big[:1500, :2000]).to_png()  # 9 MB of pixels, encoded before measuring? no: part of the test
-    stb.Image.open(png)
+    stb.Image.decode(png)
 
 
 @pytest.fixture(scope="module")
@@ -235,7 +235,7 @@ def bomb():
 def test_a_png_bomb_is_refused_before_any_pixel_memory_is_allocated(bomb):
     for _ in range(5):
         with pytest.raises(stb.LimitError):
-            stb.Image.open(bomb)
+            stb.Image.decode(bomb)
 
 
 @pytest.fixture(scope="module")
