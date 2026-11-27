@@ -223,18 +223,18 @@
 
 ## سایت و مستندات
 
-- [x] دارک تم: هیرو landing توی دارک سبز برنده (توکن `--hero-bg` توی هر دو تم یکیه) و Sphinx و Doxygen توکن‌های
-      مشترک `libstb-docs.css` رو می‌گیرن. این رو با اسکرین‌شات ۱۲۸۰ پیکسل (روشن و تاریک، landing و مرجع Python و
-      C++) چک کردم؛ هیچ‌کدوم هیرو ندارن که سبز بشه.
+روال مثل httpp شد (ADR-0004): سایت در `docs/site/`، هر صفحه یک مفهوم، سوئیچ Python/C++ بالای صفحه، کد صفحه‌ها فایل واقعی در
+`examples/<topic>/<lang>/main.<ext>`، و `tests/python/test_examples.py` مثال‌ها رو اجرا می‌کنه. Doxygen و Sphinx و `docs/snippets` و
+`STB_BUILD_DOCS` حذف شدن (تاریخچه‌ی git نگهشون می‌داره).
+
+- [x] ساخت سایت با `npm run build` و type check پاس شد؛ `prepare.py all` پاس شد.
+- [ ] `tests/python/test_examples.py` روی CI (ubuntu) اجرا نشده؛ ctest روی Windows و macOS هم این تست رو می‌بینه (بخش C++ با DLL).
+- [ ] فقط یک درس (`resize`) نوشته شده. بقیه‌ی کتابخانه (فیلترها، فونت و shaping، رسم، zlib، EXIF، logging) فقط توی `docs/guide.md` و README هست و درس نداره.
+- [ ] مرجع API (C++ و Python) نداریم و `ApiLink` هم نیست؛ اگر لازم شد، تصمیمش با صاحب پروژه است (httpp هم ندارد).
+- [ ] صفحه‌ی اصلی، رنگ‌ها (`tokens.css` برای صفحه‌ی بنچمارک + `custom.css` از httpp) و موبایل توی مرورگر دیده نشدن.
+- [ ] `docs/guide.md` و `docs/adr/` توی سایت نیستن (فقط روی GitHub).
+- [ ] لینک `/benchmarks` و Pages: اولین deploy بعد از merge دیده بشه (`deploy-pages` در orchestrator؛ pages.yml جدا نداریم چون coverage رو هم منتشر می‌کنه).
 - [ ] `tests/genhtml.css` (گزارش پوشش) رو بررسی نکردم و دارک تمش چک نشده.
-- [ ] اسکرین‌شات‌ها با فونت‌های fallback گرفته شدن (Google Fonts توی سندباکس دسترس نیست)، پس Archivo و JetBrains Mono
-      واقعی دیده نشدن. موبایل هم چک نشده.
-- [ ] متن‌های «فقط تصویر»: `docs/guide.md` و `docs/python/source/index.rst` هنوز بررسی نشدن.
-- [ ] لوگوی PNG، و بررسی موبایل **گزارش بنچمارک** (فقط landing روی ۳۹۰ پیکسل چک شده بود).
-- [ ] فایل‌های قالب Sphinx به `DEPENDS` اضافه بشن (الان بعد از ویرایش قالب باید `build/docs/out`
-      پاک بشه یا `conf.py` touch بشه).
-- [ ] لینک خراب `python/html/_modules/index.html` به `libstb/libstb_py.html` (ماژول کامپایل‌شده)؛ ریشه‌ش
-      بررسی نشده.
 
 ## بنچمارک و انتشار
 

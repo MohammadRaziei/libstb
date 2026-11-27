@@ -39,63 +39,66 @@ jobs:
       run: ctest --test-dir build -C Release --output-on-failure
 
 
+  # The documentation site (docs/site, docs/adr/0004): examples run and match their pages, type check, static build. The build is
+  # uploaded as `cmake-documentation` and deployed with the coverage dashboard by the orchestrator (deploy-pages), so there is no
+  # separate Pages workflow here: two workflows deploying to one Pages site would overwrite each other.
   build-docs:
     needs: build-and-test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs/site
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
 
-    - name: Install apt dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y doxygen graphviz
-
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
-        python-version: "3.11"
+        python-version: "3.12"
         cache: "pip"
 
-    - name: Install python deps
-      run: pip install -r requirements-dev.txt
-
-    # stb_docs also builds the Docusaurus lesson site (docs), which needs Node.
     - name: Set up Node
       uses: actions/setup-node@v6
       with:
         node-version: 22
+        cache: npm
+        cache-dependency-path: docs/site/package-lock.json
 
-    # The Sphinx build imports the freshly built extension, so the Python binding is needed.
-    - name: Configure CMake
-      run: |
-        cmake -S . -B build \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DSTB_BUILD_TESTS=OFF \
-          -DSTB_BUILD_PYTHON=ON \
-          -DSTB_BUILD_DOCS=ON
+    - name: Every example has both languages and a README
+      run: python3 scripts/prepare.py all
 
-    # docs (Docusaurus) is the front of the site, published at the root of the project's Pages address, with the
-    # Doxygen and Sphinx references beside it at cpp/html and python/html. Docusaurus does not discover that address
-    # itself (built without it, the page says "baseUrl = /" and loads no scripts), so it is derived from the repository
-    # here instead of being written down: https://<owner>.github.io + /<repo>/.
+    - name: Build and install libstb
+      working-directory: .
+      run: pip install . pytest
+
+    - name: Examples build, run and write what their pages show
+      working-directory: .
+      run: python -m pytest tests/python/test_examples.py -q
+
+    # Docusaurus does not discover the address it is served from (built without it, the page says "baseUrl = /" and loads
+    # no scripts), so it is derived from the repository here instead of being written down: https://<owner>.github.io + /<repo>/.
     - name: Work out the Pages address
+      working-directory: .
       run: |
         echo "DOCS_URL=https://${GITHUB_REPOSITORY_OWNER,,}.github.io" >> "$GITHUB_ENV"
         echo "DOCS_BASE_URL=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
 
-    - name: Build documentation
-      run: cmake --build build --target stb_docs
+    - name: Install
+      run: npm ci
 
-    - name: List docs directory
-      run: tree --du -shaC build/docs/out
+    - name: Type check
+      run: npm run typecheck
+
+    - name: Build
+      run: npm run build
 
     - name: Upload documentation artifacts
       uses: actions/upload-artifact@v7
       with:
         name: cmake-documentation
-        path: build/docs/out
+        path: docs/site/build
         retention-days: 5
 
   build-coverage:
@@ -129,8 +132,7 @@ jobs:
       run: |
         cmake -S . -B build \
           -DSTB_BUILD_TESTS=ON \
-          -DSTB_BUILD_PYTHON=ON \
-          -DSTB_BUILD_DOCS=OFF
+          -DSTB_BUILD_PYTHON=ON
 
     # C++ (lcov), Python (coverage.py) and the merged total.
     - name: Generate coverage report

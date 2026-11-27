@@ -2,6 +2,15 @@
 
 تاریخ: 2026-11-17. این بخش خلاصه‌ی خودکفا برای چت بعدی است؛ زیرش جزئیات هر دور (جدیدترین اول) و تاریخچه‌ی قدیمی‌تر است.
 
+## ۰د. آخرین کار: روال docs مثل httpp (2026-11-28)
+
+به خواسته‌ی صاحب پروژه: `docs/` قدیمی دور ریخته شد، `docs/site` از httpp کپی و با sed به libstb تبدیل شد، بعد بقیه اصلاح شد. جزئیات و دلیل‌ها در `docs/adr/0004-docs-site.md`.
+- نگه داشته شد: `docs/guide.md`، `docs/adr/`، `docs/images/` (README، تست‌ها و کامنت‌های کد بهشون لینک دارن) و صفحه‌ی بنچمارک خود libstb (`src/pages/benchmarks.tsx` از `benchmarks/outputs/benchmark.json`؛ `Bench` httpp فرمت دیگه‌ای می‌خونه).
+- مثال: `examples/resize/{python,cpp}/main.*` + README؛ عکس‌های صفحه خروجی همین مثال‌اند (`docs/site/static/img/resize/`) و تست مقایسه‌شون می‌کنه.
+- CI: job `build-docs` در `cmake.yml` سایت رو می‌سازه و artifact `cmake-documentation` می‌ده؛ `deploy-pages` در orchestrator همراه coverage منتشرش می‌کنه (pages.yml جدا نذاشتم تا coverage گم نشه).
+- حذف‌شده: Doxygen، Sphinx، `docs/snippets`، `STB_BUILD_DOCS`، هدف‌های `stb_docs*`، `make_showcase.py`، صفحه‌ی اصلی قدیمی (landing) و قالب‌های `libstb-docs.css`.
+- **باز:** فقط درس resize هست؛ مرجع API نداریم؛ صفحه‌ی اصلی و رنگ‌ها توی مرورگر دیده نشدن؛ اولین اجرای CI و deploy دیده نشده.
+
 ## ۰ج. آخرین کار: subsetter و font::embedding (2026-11-27)
 
 برای embed واقعی فونت در PDF (novasvg: `--pdf-text outlines|embed`، پیش‌فرض outlines). API با تأیید کاربر:

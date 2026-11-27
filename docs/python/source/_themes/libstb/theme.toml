@@ -1,9 +1,0 @@
-[theme]
-inherit = "basic"
-stylesheets = ["basic.css", "libstb-docs.css", "libstb-sphinx.css"]
-sidebars = []
-
-[options]
-nosidebar = "false"
-navigation_with_keys = "True"
-enable_search_shortcuts = "True"

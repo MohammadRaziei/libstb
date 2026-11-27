@@ -1,0 +1,113 @@
+/* Colour and type tokens of libstb (--bg --fg --accent --s-<library> ...). The benchmarks page draws with these names.
+   Taken once from the old docs/assets/libstb-docs.css; edit here from now on. */
+/* == tokens == */
+/* Fonts: Archivo and JetBrains Mono from Google Fonts, linked in each page's <head> (nothing is stored in the repo); the stacks below fall back to system fonts. */
+
+:root {
+  --brand: #19cdb4;
+  --on-brand: #0d0f12;
+  --ink: #0d0f12;
+  --paper: #f3f4f6;
+
+  --bg: #f3f4f6;
+  --bg2: #e9ebee;
+  --bg3: #dde0e4;
+  --fg: #0d0f12;
+  --fg2: #3f454d;
+  --fg3: #5f6670;
+  --border: #d3d6db;
+  --border2: #b9bec5;
+  --accent: #0d0f12;
+  --accent-hover: #3f454d;
+  --accent-fg: #f3f4f6;
+  --accent-glow: rgba(25, 205, 180, .38);
+  --accent-glow2: rgba(25, 205, 180, .16);
+  --card: #ffffff;
+  --card-border: #d3d6db;
+  --card-hover: #f3f4f6;
+
+  --hero-bg: #19cdb4;
+  --hero-fg: #0d0f12;
+  --hero-fg2: #2b2810;
+
+  /* one radius, a tile surface, and code as a soft tone step off its page (the same on every page) */
+  --r: 4px;
+  --gap: 12px;
+  --tile: #ffffff;
+  --code-bg: #e8ebee;
+  --code-fg: #12151a;
+  --code-dim: #5f6670;
+  --code-head: #dde1e5;
+  --tok-k: #086b5e;
+  --tok-s: #3b6a1f;
+  --tok-n: #1d5ba3;
+  --tok-f: #0d0f12;
+
+  --bar-bg: #0d0f12;
+  --bar-fg: #f3f4f6;
+  --bar-fg2: #aab0b8;
+
+  /* chart series: Okabe-Ito, chosen to stay apart for colour-blind readers; libstb is ink or yellow */
+  --s-libstb: #0d0f12;
+  --s-libstb_srgb: #6d737c;
+  --s-pillow: #0072b2;
+  --s-opencv: #e69f00;
+  --s-imageio: #cc79a7;
+  --s-skimage: #d55e00;
+  --s-numpy: #8b9199;
+  --track: #dde0e4;
+
+  /* names the Sphinx stylesheet already uses; flat on purpose */
+  --icon-grad: var(--accent);
+  --shine: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-blue: none;
+
+  --font: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --bg: #0c0d0f;
+  --bg2: #14161a;
+  --bg3: #1d2025;
+  --fg: #eef0f2;
+  --fg2: #b3b9c1;
+  --fg3: #858c96;
+  --border: #25282e;
+  --border2: #363b43;
+  --accent: #19cdb4;
+  --accent-hover: #5be3cf;
+  --accent-fg: #0d0f12;
+  --accent-glow: rgba(25, 205, 180, .3);
+  --accent-glow2: rgba(25, 205, 180, .1);
+  --card: #14161a;
+  --card-border: #25282e;
+  --card-hover: #1d2025;
+
+  --hero-bg: #19cdb4;
+  --hero-fg: #0d0f12;
+  --hero-fg2: #2b2810;
+
+  --tile: #14161a;
+  --code-bg: #1d2025;
+  --code-fg: #e8eaed;
+  --code-dim: #858c96;
+  --code-head: #25282e;
+  --tok-k: #19cdb4;
+  --tok-s: #8fdcae;
+  --tok-n: #8ec5ff;
+  --tok-f: #ffffff;
+
+  --s-libstb: #19cdb4;
+  --s-libstb_srgb: #0f8f7d;
+  --s-pillow: #56b4e9;
+  --s-opencv: #f2b84b;
+  --s-imageio: #e7a3c6;
+  --s-skimage: #f28c3d;
+  --s-numpy: #858c96;
+  --track: #25282e;
+  color-scheme: dark;
+}

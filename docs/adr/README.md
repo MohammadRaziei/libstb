@@ -9,3 +9,4 @@ never rewritten when the decision changes: a new one is added and the old one is
 | [0001](0001-own-logging-module-shaped-like-pythons.md) | libstb has its own small logging module, shaped like Python's `logging` | Accepted |
 | [0002](0002-python-logging-bridge.md) | In Python, libstb's records go to the `logging` module through a bridge installed at import | Accepted |
 | [0003](0003-logging-policy.md) | What libstb logs, at which level, and what it never logs | Accepted |
+| [0004](0004-docs-site.md) | The documentation site is built like httpp's: `docs/site`, one page per concept, examples as real files | Accepted |

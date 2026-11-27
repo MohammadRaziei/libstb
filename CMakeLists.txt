@@ -22,7 +22,6 @@ include(Optimize)
 option(STB_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_PYTHON "Build Python bindings" ${PROJECT_IS_TOP_LEVEL})
 option(STB_BUILD_EXAMPLES "Build the C++ examples in examples/cpp" OFF)
-option(STB_BUILD_DOCS "Build documentation (Doxygen + Sphinx)" OFF)
 
 # --- libstb C++ core ---
 # There is no stb header in the tree any more: the decoders, encoders, font reader and resizer are
@@ -215,16 +214,9 @@ if(STB_BUILD_TESTS)
     enable_testing()
     set(CMAKE_CTEST_ARGUMENTS "--output-on-failure" "-V")
     add_subdirectory(${PROJECT_SOURCE_DIR}/tests)
-    # Docs snippets (docs/snippets) are real programs: built and run here.
-    add_subdirectory(${PROJECT_SOURCE_DIR}/docs/snippets ${CMAKE_BINARY_DIR}/docs_snippets)
 endif()
 
 # The C++ examples (one executable per examples/cpp/*.cpp), against the same library the users link.
 if(STB_BUILD_EXAMPLES)
     add_subdirectory(${PROJECT_SOURCE_DIR}/examples/cpp)
-endif()
-
-# Documentation (Doxygen + Sphinx). Needs the Python extension: the Sphinx build imports it.
-if(STB_BUILD_DOCS)
-    add_subdirectory(${PROJECT_SOURCE_DIR}/docs)
 endif()

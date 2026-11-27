@@ -1,0 +1,19 @@
+---
+id: intro
+title: Introduction
+slug: /
+---
+
+libstb (Shaped Typography & Bitmaps) decodes, encodes, resizes, edits and draws images, renders text (Persian and Arabic included) and compresses with zlib, from Python and from C++. It has no system libraries and no Python dependencies.
+
+The code on every page follows the language you pick in the top bar. Your choice is remembered, and `?lang=cpp` or `?lang=python` in a link preselects it. Where the two APIs differ, the page says so in text, and its last section, "API at a glance", lists the calls of the language you picked.
+
+## Where to start
+
+1. [Install](install.mdx) the Python package or add the C++ library to a CMake project.
+2. [Resize an image](image/resize.mdx) and choose the filter.
+3. See how fast it is: the [benchmarks](/benchmarks).
+
+## What is not here yet
+
+The lessons cover one function at a time and there is only one so far. Everything else (every call with its rules, SIMD, threads, EXIF, DLPack, fonts and shaping, logging) is in the [guide](https://github.com/mohammadraziei/libstb/blob/master/docs/guide.md) and in the project [README](https://github.com/mohammadraziei/libstb#readme). The Doxygen (C++) and Sphinx (Python) references are not part of this site.

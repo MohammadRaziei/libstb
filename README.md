@@ -499,7 +499,7 @@ on yours.
 
 - [`docs/guide.md`](docs/guide.md): the full reference (every call, SIMD, threads, EXIF, DLPack,
   Pillow, errors, logging, design and source layout).
-- `docs/`: the Sphinx (Python) and Doxygen (C++) sources of the documentation site.
+- [`docs/site/`](docs/site): the documentation site (Docusaurus), published at https://mohammadraziei.github.io/libstb/: one page per concept with a Python/C++ code switch, and the benchmarks page. Its code is `examples/<topic>/`.
 - [`examples/`](examples): runnable Python scripts, C++ programs and notebooks. They run on the pictures and fonts of
   [`data/`](data) (photographs, an RGBA picture, a Persian and Latin font; licenses in `data/README.md`), so
   `python examples/python/05_font_render.py` and the C++ programs work without arguments.
@@ -515,8 +515,9 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Options: `STB_BUILD_TESTS`, `STB_BUILD_PYTHON`, `STB_BUILD_EXAMPLES` (off by default),
-`STB_BUILD_DOCS`. Targets: `stb_core`, `stb_test`, `stb_docs`, `stb_benchmark`.
+Options: `STB_BUILD_TESTS`, `STB_BUILD_PYTHON`, `STB_BUILD_EXAMPLES` (off by default).
+Targets: `stb_core`, `stb_test`, `stb_benchmark`. The documentation site is built with npm, see
+[`docs/site/README.md`](docs/site/README.md).
 
 ## License
 
