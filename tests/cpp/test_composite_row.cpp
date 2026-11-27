@@ -399,28 +399,28 @@ UTEST(libstb_composite_row_tests, test_the_newer_blend_modes_give_the_w3c_values
         return px;
     };
     const auto gray = [](int v) { return 0xFF000000u | u32(v) << 16 | u32(v) << 8 | u32(v); };
-    const auto near = [](u32 got, int r, int g, int b) {
+    const auto is_close = [](u32 got, int r, int g, int b) {
         return std::abs(channel(got, 16) - r) <= 2 && std::abs(channel(got, 8) - g) <= 2 && std::abs(channel(got, 0) - b) <= 2;
     };
     // separable: b / (1 - s), 1 - (1 - b) / s, screen(b, 2 s - 1), b - (1 - 2 s) b (1 - b)
-    ASSERT_TRUE(near(mix(blend_mode::color_dodge, gray(100), gray(50)), 124, 124, 124));
-    ASSERT_TRUE(near(mix(blend_mode::color_burn, gray(200), gray(100)), 115, 115, 115));
-    ASSERT_TRUE(near(mix(blend_mode::hard_light, gray(100), gray(200)), 188, 188, 188));
-    ASSERT_TRUE(near(mix(blend_mode::soft_light, gray(100), gray(50)), 63, 63, 63));
+    ASSERT_TRUE(is_close(mix(blend_mode::color_dodge, gray(100), gray(50)), 124, 124, 124));
+    ASSERT_TRUE(is_close(mix(blend_mode::color_burn, gray(200), gray(100)), 115, 115, 115));
+    ASSERT_TRUE(is_close(mix(blend_mode::hard_light, gray(100), gray(200)), 188, 188, 188));
+    ASSERT_TRUE(is_close(mix(blend_mode::soft_light, gray(100), gray(50)), 63, 63, 63));
     // the special cases: black stays black under dodge, white stays white under burn, white dodges to white
-    ASSERT_TRUE(near(mix(blend_mode::color_dodge, gray(0), gray(200)), 0, 0, 0));
-    ASSERT_TRUE(near(mix(blend_mode::color_burn, gray(255), gray(20)), 255, 255, 255));
-    ASSERT_TRUE(near(mix(blend_mode::color_dodge, gray(10), gray(255)), 255, 255, 255));
-    ASSERT_TRUE(near(mix(blend_mode::color_burn, gray(250), gray(0)), 0, 0, 0));
+    ASSERT_TRUE(is_close(mix(blend_mode::color_dodge, gray(0), gray(200)), 0, 0, 0));
+    ASSERT_TRUE(is_close(mix(blend_mode::color_burn, gray(255), gray(20)), 255, 255, 255));
+    ASSERT_TRUE(is_close(mix(blend_mode::color_dodge, gray(10), gray(255)), 255, 255, 255));
+    ASSERT_TRUE(is_close(mix(blend_mode::color_burn, gray(250), gray(0)), 0, 0, 0));
     // non-separable, on a gray backdrop: the hue and saturation of a colour change nothing, luminosity takes its Lum
     const u32 colour = 0xFF3C78B4u;
-    ASSERT_TRUE(near(mix(blend_mode::hue, gray(100), colour), 100, 100, 100));
-    ASSERT_TRUE(near(mix(blend_mode::saturation, colour, gray(30)), 109, 109, 109));  // Lum(colour) = 0.3 60 + 0.59 120 + 0.11 180
+    ASSERT_TRUE(is_close(mix(blend_mode::hue, gray(100), colour), 100, 100, 100));
+    ASSERT_TRUE(is_close(mix(blend_mode::saturation, colour, gray(30)), 109, 109, 109));  // Lum(colour) = 0.3 60 + 0.59 120 + 0.11 180
     // a red backdrop under a mid gray: color keeps red's luminosity (0.3 -> 77), luminosity takes the gray's (128) and clips
-    ASSERT_TRUE(near(mix(blend_mode::color, 0xFFFF0000u, gray(128)), 77, 77, 77));
-    ASSERT_TRUE(near(mix(blend_mode::luminosity, 0xFFFF0000u, gray(128)), 255, 74, 74));
+    ASSERT_TRUE(is_close(mix(blend_mode::color, 0xFFFF0000u, gray(128)), 77, 77, 77));
+    ASSERT_TRUE(is_close(mix(blend_mode::luminosity, 0xFFFF0000u, gray(128)), 255, 74, 74));
     // hue of a green over a red backdrop at full saturation: green hue, red's saturation and luminosity (0.3 * 255)
-    ASSERT_TRUE(near(mix(blend_mode::hue, 0xFFFF0000u, 0xFF00FF00u), 0, 130, 0));
+    ASSERT_TRUE(is_close(mix(blend_mode::hue, 0xFFFF0000u, 0xFF00FF00u), 0, 130, 0));
 }
 
 // The vector kernels of the closed-form blend modes (source_over) must give the scalar loop's integers on every

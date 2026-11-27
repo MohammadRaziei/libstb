@@ -1,5 +1,17 @@
 #pragma once
 
+// utest.h pulls in <windows.h> on Windows, which #defines min, max (std::min(a, b) stops compiling) and, with
+// near and far as empty macros, takes those two names away from the tests. NOMINMAX and WIN32_LEAN_AND_MEAN must be
+// set before the first include that can reach it; `near` and `far` still are macros: the tests do not use them as names.
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
 #include <algorithm>
 #include <cstdint>
 #include <string>
