@@ -60,6 +60,17 @@ template <class T>
 STB_API mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation_method interpolation, edge_mode edge);
 }  // namespace detail
 
+namespace detail {
+// warp for any pixel input: a wide image goes through float (the interpolation is done on values 0 to 1)
+template <class T>
+mat<T> warp_any(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation_method interpolation, edge_mode edge) {
+    if constexpr (is_wide_v<T>)
+        return via_float(src, [&](const mat32f& f) { return warp_core<float>(f, h, out_width, out_height, interpolation, edge); });
+    else
+        return warp_core<T>(src, h, out_width, out_height, interpolation, edge);
+}
+}  // namespace detail
+
 // ---- warp_perspective: `h` takes a source point to a point of the result. out_width and out_height are the size of the result
 // (0, the default, is the size of src). edge says what is read where the transform reaches outside the picture; the default
 // is `zero` (not `clamp` as for the filters), because there is no data out there: transparent black on an RGBA picture.
@@ -67,14 +78,14 @@ STB_API mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, 
 // negative or too large size, or an interpolation that is not one of the enum; more than 4 channels throw too; an empty
 // picture gives an empty one. The result is the same bits on every number of threads.
 template <class M>
-traits::if_image_t<M> warp_perspective(const M& src, const homography& h, int out_width = 0, int out_height = 0,
+traits::if_pixel_t<M> warp_perspective(const M& src, const homography& h, int out_width = 0, int out_height = 0,
                                        interpolation_method interpolation = interpolation_method::bilinear, edge_mode edge = edge_mode::zero) {
-    return M(detail::warp_core<traits::mat_value_t<M>>(src, h, out_width, out_height, interpolation, edge));
+    return M(detail::warp_any<traits::mat_value_t<M>>(src, h, out_width, out_height, interpolation, edge));
 }
 
 // ---- warp_affine: the same for a stb::matrix.
 template <class M>
-traits::if_image_t<M> warp_affine(const M& src, const matrix& m, int out_width = 0, int out_height = 0,
+traits::if_pixel_t<M> warp_affine(const M& src, const matrix& m, int out_width = 0, int out_height = 0,
                                   interpolation_method interpolation = interpolation_method::bilinear, edge_mode edge = edge_mode::zero) {
     return warp_perspective(src, homography(m), out_width, out_height, interpolation, edge);
 }

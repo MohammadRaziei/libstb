@@ -3,6 +3,7 @@
 // stb headers are never included here: they are compiled into src/ only, with STB_*_STATIC, so no
 // stbi_* symbol leaks out of stb_core (safe to link next to your own copy of stb).
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -686,5 +687,54 @@ template <class M>
 using if_image_mutable_t = std::enable_if_t<is_image_input_v<M> && !std::is_const_v<M>, M&>;
 
 }  // namespace traits
+
+// ---- the pixel types that have no code of their own: they go through float
+// The algorithms are compiled for 8 bits (a mat8u) and for float. Every other unsigned integer type (16 bits, 32 bits) is a "wide"
+// pixel: its value is read as value / max, the algorithm runs on floats and the result is written back with the rounding and
+// clamping of the type (see cast). A wide image is accepted by the same functions: equalize(mat<std::uint16_t>) is a mat<std::uint16_t>.
+// Signed integers are not pictures (a level 0 to max): only cast() takes them.
+namespace detail {
+template <class T>
+inline constexpr bool is_wide_v = std::is_integral_v<T> && std::is_unsigned_v<T> && !std::is_same_v<T, bool> && !std::is_same_v<T, std::uint8_t>;
+}  // namespace detail
+
+namespace traits {
+namespace detail_pixel_input {
+template <class M, class = void>
+struct impl : std::false_type {};
+template <class M>
+struct impl<M, std::enable_if_t<is_mat_v<M>>> : std::bool_constant<is_image_input_v<M> || stb::detail::is_wide_v<mat_value_t<M>>> {};
+}  // namespace detail_pixel_input
+
+// True for what the algorithms take: an image input (mat8u, mat32f) or a mat of a wide unsigned integer type.
+template <class M>
+inline constexpr bool is_pixel_input_v = detail_pixel_input::impl<M>::value;
+
+// The same three drop-out types as if_image_t, if_image_rvalue_t and if_image_mutable_t, for every pixel input.
+template <class M, class R = M>
+using if_pixel_t = std::enable_if_t<is_pixel_input_v<M>, R>;
+template <class M, class R = M>
+using if_pixel_rvalue_t = std::enable_if_t<is_pixel_input_v<M> && !std::is_lvalue_reference_v<M>, R>;
+template <class M>
+using if_pixel_mutable_t = std::enable_if_t<is_pixel_input_v<M> && !std::is_const_v<M>, M&>;
+}  // namespace traits
+
+namespace detail {
+// A function of floats applied to a wide image: to float, the function, back to the type (a new image).
+template <class T, class Fn>
+mat<T> via_float(const mat<T>& src, Fn&& fn) {
+    return cast<T>(fn(cast<float>(src)));
+}
+// The same for a function that changes its argument: img gets the result (img may view memory of someone else's, so the values
+// are written into it).
+template <class T, class Fn>
+void via_float_inplace(mat<T>& img, Fn&& fn) {
+    if (img.empty()) return;
+    mat32f f = cast<float>(img);
+    fn(f);
+    const mat<T> back = cast<T>(f);
+    std::copy(back.data(), back.data() + back.size(), img.data());
+}
+}  // namespace detail
 
 }  // namespace stb

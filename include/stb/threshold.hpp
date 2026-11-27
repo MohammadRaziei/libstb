@@ -37,11 +37,38 @@ STB_API mat8u adaptive_threshold_mat(const mat<T>& src, int radius, float offset
                                      edge_mode edge);
 }  // namespace detail
 
+namespace detail {
+// The entries for any pixel input: a wide image (16 or 32 bits) goes through float. A level of a wide type is read as level / max.
+template <class T>
+mat8u threshold_any(const mat<T>& src, T t, bool invert) {
+    if constexpr (is_wide_v<T>)
+        return threshold_mat<float>(cast<float>(src), float(double(t) * (double(pixel_range<float>::max) / double(pixel_range<T>::max))), invert);  // as cast reads it
+    else
+        return threshold_mat<T>(src, t, invert);
+}
+
+template <class T>
+T otsu_threshold_any(const mat<T>& src) {
+    if constexpr (is_wide_v<T>)
+        return pixel_range<T>::store(double(otsu_threshold_mat<float>(cast<float>(src))) * double(pixel_range<T>::max));
+    else
+        return otsu_threshold_mat<T>(src);
+}
+
+template <class T>
+mat8u adaptive_threshold_any(const mat<T>& src, int radius, float offset, adaptive_method method, bool invert, edge_mode edge) {
+    if constexpr (is_wide_v<T>)
+        return adaptive_threshold_mat<float>(cast<float>(src), radius, float(double(offset) / double(pixel_range<T>::max)), method, invert, edge);
+    else
+        return adaptive_threshold_mat<T>(src, radius, offset, method, invert, edge);
+}
+}  // namespace detail
+
 // 255 where src > t (a value equal to t is 0), 0 elsewhere; `invert` swaps the two (so a NaN, which is never > t, is
 // 255 in the inverted mask). For an image8u or mat8u `t` is a level (0 to 255), for a mat32f a value of the 0 to 1 range.
 template <class M>
-traits::if_image_t<M, mat8u> threshold(const M& src, traits::mat_value_t<M> t, bool invert = false) {
-    return detail::threshold_mat<traits::mat_value_t<M>>(src, t, invert);
+traits::if_pixel_t<M, mat8u> threshold(const M& src, traits::mat_value_t<M> t, bool invert = false) {
+    return detail::threshold_any<traits::mat_value_t<M>>(src, t, invert);
 }
 
 // Otsu's level: the one that makes the variance between the two classes it splits the histogram into as large as
@@ -51,8 +78,8 @@ traits::if_image_t<M, mat8u> threshold(const M& src, traits::mat_value_t<M> t, b
 // (values that are not finite are left out). A picture whose values are all equal gives that value. Throws
 // invalid_argument for an empty picture or one without a finite value.
 template <class M>
-traits::if_image_t<M, traits::mat_value_t<M>> otsu_threshold(const M& src) {
-    return detail::otsu_threshold_mat<traits::mat_value_t<M>>(src);
+traits::if_pixel_t<M, traits::mat_value_t<M>> otsu_threshold(const M& src) {
+    return detail::otsu_threshold_any<traits::mat_value_t<M>>(src);
 }
 
 // The mask of the values that stand above the local level of their neighbourhood: 255 where
@@ -63,10 +90,10 @@ traits::if_image_t<M, traits::mat_value_t<M>> otsu_threshold(const M& src) {
 // of less than 0.00001 of the 0 to 1 range counts as equal, so a flat area is 0 when the offset is 0 and does not fill
 // with noise. Throws invalid_argument for a radius outside 1 to 1000 or an offset that is not finite.
 template <class M>
-traits::if_image_t<M, mat8u> adaptive_threshold(const M& src, int radius, float offset = 0.0f,
+traits::if_pixel_t<M, mat8u> adaptive_threshold(const M& src, int radius, float offset = 0.0f,
                                                 adaptive_method method = adaptive_method::gaussian, bool invert = false,
                                                 edge_mode edge = edge_mode::clamp) {
-    return detail::adaptive_threshold_mat<traits::mat_value_t<M>>(src, radius, offset, method, invert, edge);
+    return detail::adaptive_threshold_any<traits::mat_value_t<M>>(src, radius, offset, method, invert, edge);
 }
 
 }  // namespace stb

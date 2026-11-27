@@ -52,24 +52,28 @@ STB_API color_space color_space_from_name(std::string_view name);
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> convert_color_inplace_mat(mat<T>& img, color_space from, color_space to);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void convert_color_inplace_mat(mat<T>& img, color_space from, color_space to) {
+    via_float_inplace(img, [&](mat32f& f) { convert_color_inplace_mat<float>(f, from, to); });
+}
 }  // namespace detail
 
 // img is converted from the space `from` to the space `to` (the same space is a no-op that still checks the
 // channels). Throws invalid_argument unless img has 3 or 4 channels; an empty image is left as it is, and a call
 // that throws leaves img as it was.
 template <class M>
-traits::if_image_mutable_t<M> convert_color_inplace(M& img, color_space from, color_space to) {
+traits::if_pixel_mutable_t<M> convert_color_inplace(M& img, color_space from, color_space to) {
     detail::convert_color_inplace_mat<traits::mat_value_t<M>>(img, from, to);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> convert_color(M&& img, color_space from, color_space to) {
+traits::if_pixel_rvalue_t<M> convert_color(M&& img, color_space from, color_space to) {
     convert_color_inplace(img, from, to);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> convert_color(const M& src, color_space from, color_space to) {
+traits::if_pixel_t<M> convert_color(const M& src, color_space from, color_space to) {
     return convert_color(src.copy(), from, to);
 }
 

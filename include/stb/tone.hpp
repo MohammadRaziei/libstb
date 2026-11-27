@@ -90,30 +90,38 @@ STB_API image8u apply_lut(const mat8u& src, const mat8u& lut);
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> equalize_inplace_mat(mat<T>& img, tone_mode mode);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void equalize_inplace_mat(mat<T>& img, tone_mode mode) {
+    via_float_inplace(img, [&](mat32f& f) { equalize_inplace_mat<float>(f, mode); });
+}
 }  // namespace detail
 
 // ---- equalize: the levels are spread so that each one is used about as often (the cumulative histogram becomes
 // a straight line). A picture whose values are all equal is returned unchanged. On floats the histogram has 256
 // bins and the mapping is the cumulative histogram, interpolated between the bin edges.
 template <class M>
-traits::if_image_mutable_t<M> equalize_inplace(M& img, tone_mode mode = tone_mode::luma) {
+traits::if_pixel_mutable_t<M> equalize_inplace(M& img, tone_mode mode = tone_mode::luma) {
     detail::equalize_inplace_mat<traits::mat_value_t<M>>(img, mode);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> equalize(M&& img, tone_mode mode = tone_mode::luma) {
+traits::if_pixel_rvalue_t<M> equalize(M&& img, tone_mode mode = tone_mode::luma) {
     equalize_inplace(img, mode);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> equalize(const M& src, tone_mode mode = tone_mode::luma) {
+traits::if_pixel_t<M> equalize(const M& src, tone_mode mode = tone_mode::luma) {
     return equalize(src.copy(), mode);
 }
 
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> auto_contrast_inplace_mat(mat<T>& img, float cutoff_percent, tone_mode mode);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void auto_contrast_inplace_mat(mat<T>& img, float cutoff_percent, tone_mode mode) {
+    via_float_inplace(img, [&](mat32f& f) { auto_contrast_inplace_mat<float>(f, cutoff_percent, mode); });
+}
 }  // namespace detail
 
 // ---- auto_contrast: the darkest and the brightest `cutoff_percent` percent of the values are dropped (they
@@ -122,18 +130,18 @@ STB_API traits::if_image_t<mat<T>, void> auto_contrast_inplace_mat(mat<T>& img, 
 // Throws invalid_argument unless 0 <= cutoff_percent < 50. A picture that has a single value left is returned
 // unchanged.
 template <class M>
-traits::if_image_mutable_t<M> auto_contrast_inplace(M& img, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
+traits::if_pixel_mutable_t<M> auto_contrast_inplace(M& img, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
     detail::auto_contrast_inplace_mat<traits::mat_value_t<M>>(img, cutoff_percent, mode);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> auto_contrast(M&& img, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
+traits::if_pixel_rvalue_t<M> auto_contrast(M&& img, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
     auto_contrast_inplace(img, cutoff_percent, mode);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> auto_contrast(const M& src, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
+traits::if_pixel_t<M> auto_contrast(const M& src, float cutoff_percent = 0.0f, tone_mode mode = tone_mode::luma) {
     return auto_contrast(src.copy(), cutoff_percent, mode);
 }
 
@@ -141,26 +149,30 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> match_histogram_inplace_mat(mat<T>& img, const mat<T>& reference,
                                                                      tone_mode mode);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void match_histogram_inplace_mat(mat<T>& img, const mat<T>& reference, tone_mode mode) {
+    via_float_inplace(img, [&](mat32f& f) { match_histogram_inplace_mat<float>(f, cast<float>(reference), mode); });
+}
 }  // namespace detail
 
 // ---- match_histogram: the levels are moved so that the histogram of the result follows the one of `reference`
 // (its size does not matter, its element type and number of channels must be those of the image). The
 // reference is not changed. Throws invalid_argument for an empty reference or another number of channels.
 template <class M>
-traits::if_image_mutable_t<M> match_histogram_inplace(M& img, const mat<traits::mat_value_t<M>>& reference,
+traits::if_pixel_mutable_t<M> match_histogram_inplace(M& img, const mat<traits::mat_value_t<M>>& reference,
                                                   tone_mode mode = tone_mode::luma) {
     detail::match_histogram_inplace_mat<traits::mat_value_t<M>>(img, reference, mode);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> match_histogram(M&& img, const mat<traits::mat_value_t<M>>& reference,
+traits::if_pixel_rvalue_t<M> match_histogram(M&& img, const mat<traits::mat_value_t<M>>& reference,
                                              tone_mode mode = tone_mode::luma) {
     match_histogram_inplace(img, reference, mode);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> match_histogram(const M& src, const mat<traits::mat_value_t<M>>& reference,
+traits::if_pixel_t<M> match_histogram(const M& src, const mat<traits::mat_value_t<M>>& reference,
                                       tone_mode mode = tone_mode::luma) {
     return match_histogram(src.copy(), reference, mode);
 }
@@ -169,6 +181,10 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> clahe_inplace_mat(mat<T>& img, float clip_limit, int tiles_x, int tiles_y,
                                                            tone_mode mode);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void clahe_inplace_mat(mat<T>& img, float clip_limit, int tiles_x, int tiles_y, tone_mode mode) {
+    via_float_inplace(img, [&](mat32f& f) { clahe_inplace_mat<float>(f, clip_limit, tiles_x, tiles_y, mode); });
+}
 }  // namespace detail
 
 // ---- clahe: contrast-limited adaptive histogram equalisation. The picture is cut into tiles_x x tiles_y tiles (tiles_y 0
@@ -179,20 +195,20 @@ STB_API traits::if_image_t<mat<T>, void> clahe_inplace_mat(mat<T>& img, float cl
 // invalid_argument for a clip_limit that is not finite and >= 1, tiles_x < 1, tiles_y < 0, or more tiles than pixels
 // along an axis. On floats the mapping is interpolated between 256 bins, as in equalize.
 template <class M>
-traits::if_image_mutable_t<M> clahe_inplace(M& img, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
+traits::if_pixel_mutable_t<M> clahe_inplace(M& img, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
                                         tone_mode mode = tone_mode::luma) {
     detail::clahe_inplace_mat<traits::mat_value_t<M>>(img, clip_limit, tiles_x, tiles_y, mode);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> clahe(M&& img, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
+traits::if_pixel_rvalue_t<M> clahe(M&& img, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
                                    tone_mode mode = tone_mode::luma) {
     clahe_inplace(img, clip_limit, tiles_x, tiles_y, mode);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> clahe(const M& src, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
+traits::if_pixel_t<M> clahe(const M& src, float clip_limit = 2.0f, int tiles_x = 8, int tiles_y = 0,
                             tone_mode mode = tone_mode::luma) {
     return clahe(src.copy(), clip_limit, tiles_x, tiles_y, mode);
 }
@@ -200,23 +216,27 @@ traits::if_image_t<M> clahe(const M& src, float clip_limit = 2.0f, int tiles_x =
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> gamma_inplace_mat(mat<T>& img, float g);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void gamma_inplace_mat(mat<T>& img, float g) {
+    via_float_inplace(img, [&](mat32f& f) { gamma_inplace_mat<float>(f, g); });
+}
 }  // namespace detail
 
 // ---- gamma: every colour channel c becomes c ^ (1 / g) (0 to 1): g above 1 brightens, below 1 darkens. Alpha is
 // kept. Throws invalid_argument unless g is a positive finite number.
 template <class M>
-traits::if_image_mutable_t<M> gamma_inplace(M& img, float g) {
+traits::if_pixel_mutable_t<M> gamma_inplace(M& img, float g) {
     detail::gamma_inplace_mat<traits::mat_value_t<M>>(img, g);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> gamma(M&& img, float g) {
+traits::if_pixel_rvalue_t<M> gamma(M&& img, float g) {
     gamma_inplace(img, g);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> gamma(const M& src, float g) {
+traits::if_pixel_t<M> gamma(const M& src, float g) {
     return gamma(src.copy(), g);
 }
 
@@ -224,25 +244,29 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> levels_inplace_mat(mat<T>& img, float in_black, float in_white, float g,
                                                             float out_black, float out_white);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void levels_inplace_mat(mat<T>& img, float in_black, float in_white, float g, float out_black, float out_white) {
+    via_float_inplace(img, [&](mat32f& f) { levels_inplace_mat<float>(f, in_black, in_white, g, out_black, out_white); });
+}
 }  // namespace detail
 
 // ---- levels: the input range [in_black, in_white] of every colour channel is stretched to [0, 1], raised to
 // 1 / g and mapped to [out_black, out_white] (see levels_lut for the rules). Alpha is kept.
 template <class M>
-traits::if_image_mutable_t<M> levels_inplace(M& img, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
+traits::if_pixel_mutable_t<M> levels_inplace(M& img, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
                                          float out_white = 1.0f) {
     detail::levels_inplace_mat<traits::mat_value_t<M>>(img, in_black, in_white, g, out_black, out_white);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> levels(M&& img, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
+traits::if_pixel_rvalue_t<M> levels(M&& img, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
                                     float out_white = 1.0f) {
     levels_inplace(img, in_black, in_white, g, out_black, out_white);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> levels(const M& src, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
+traits::if_pixel_t<M> levels(const M& src, float in_black, float in_white, float g = 1.0f, float out_black = 0.0f,
                              float out_white = 1.0f) {
     return levels(src.copy(), in_black, in_white, g, out_black, out_white);
 }

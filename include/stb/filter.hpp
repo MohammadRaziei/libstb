@@ -122,6 +122,10 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> unsharp_mask_inplace_mat(mat<T>& img, float sigma, float amount,
                                                                   float threshold, edge_mode edge);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void unsharp_mask_inplace_mat(mat<T>& img, float sigma, float amount, float threshold, edge_mode edge) {
+    via_float_inplace(img, [&](mat32f& f) { unsharp_mask_inplace_mat<float>(f, sigma, amount, threshold, edge); });
+}
 }  // namespace detail
 
 // ---- unsharp_mask: out = src + amount * (src - blur), where blur is gaussian_blur(src, sigma, edge), and a value whose
@@ -130,20 +134,20 @@ STB_API traits::if_image_t<mat<T>, void> unsharp_mask_inplace_mat(mat<T>& img, f
 // invalid_argument for a sigma that is not a positive finite number, an amount that is not finite and >= 0, or a
 // threshold outside [0, 1]. Needs a float copy of the image while it works.
 template <class M>
-traits::if_image_mutable_t<M> unsharp_mask_inplace(M& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
+traits::if_pixel_mutable_t<M> unsharp_mask_inplace(M& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
                                                edge_mode edge = edge_mode::clamp) {
     detail::unsharp_mask_inplace_mat<traits::mat_value_t<M>>(img, sigma, amount, threshold, edge);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> unsharp_mask(M&& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
+traits::if_pixel_rvalue_t<M> unsharp_mask(M&& img, float sigma, float amount = 1.0f, float threshold = 0.0f,
                                           edge_mode edge = edge_mode::clamp) {
     unsharp_mask_inplace(img, sigma, amount, threshold, edge);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> unsharp_mask(const M& src, float sigma, float amount = 1.0f, float threshold = 0.0f,
+traits::if_pixel_t<M> unsharp_mask(const M& src, float sigma, float amount = 1.0f, float threshold = 0.0f,
                                    edge_mode edge = edge_mode::clamp) {
     return unsharp_mask(src.copy(), sigma, amount, threshold, edge);
 }
@@ -151,6 +155,10 @@ traits::if_image_t<M> unsharp_mask(const M& src, float sigma, float amount = 1.0
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> pixelize_inplace_mat(mat<T>& img, int block_w, int block_h);
+template <class T, class = std::enable_if_t<is_wide_v<T>>>
+void pixelize_inplace_mat(mat<T>& img, int block_w, int block_h) {
+    via_float_inplace(img, [&](mat32f& f) { pixelize_inplace_mat<float>(f, block_w, block_h); });
+}
 }  // namespace detail
 
 // ---- pixelize: the picture is cut into blocks of block_w x block_h values (block_h 0 means the same as block_w),
@@ -160,18 +168,18 @@ STB_API traits::if_image_t<mat<T>, void> pixelize_inplace_mat(mat<T>& img, int b
 // a block becomes the plain mean of its alpha, so here the alpha channel does change. On 8 bits the means are exact
 // integer arithmetic rounded to the nearest. Throws invalid_argument for block_w below 1 or block_h below 0.
 template <class M>
-traits::if_image_mutable_t<M> pixelize_inplace(M& img, int block_w, int block_h = 0) {
+traits::if_pixel_mutable_t<M> pixelize_inplace(M& img, int block_w, int block_h = 0) {
     detail::pixelize_inplace_mat<traits::mat_value_t<M>>(img, block_w, block_h);
     return img;
 }
 
 template <class M>
-traits::if_image_rvalue_t<M> pixelize(M&& img, int block_w, int block_h = 0) {
+traits::if_pixel_rvalue_t<M> pixelize(M&& img, int block_w, int block_h = 0) {
     pixelize_inplace(img, block_w, block_h);
     return std::move(img);
 }
 template <class M>
-traits::if_image_t<M> pixelize(const M& src, int block_w, int block_h = 0) {
+traits::if_pixel_t<M> pixelize(const M& src, int block_w, int block_h = 0) {
     return pixelize(src.copy(), block_w, block_h);
 }
 
@@ -179,6 +187,15 @@ namespace detail {
 // The work of canny(), for std::uint8_t and float: not an API of its own, call canny().
 template <class T>
 STB_API mat8u canny_mat(const mat<T>& src, float low, float high, float sigma);
+}  // namespace detail
+
+namespace detail {
+// canny for any pixel input: a wide image goes through float
+template <class T>
+mat8u canny_any(const mat<T>& src, float low, float high, float sigma) {
+    if constexpr (is_wide_v<T>) return canny_mat<float>(cast<float>(src), low, high, sigma);
+    else return canny_mat<T>(src, low, high, sigma);
+}
 }  // namespace detail
 
 // ---- canny: the edges of a picture as a mask (a mat8u, 255 on an edge, 0 elsewhere), one value wide. A picture of 3 or
@@ -190,8 +207,8 @@ STB_API mat8u canny_mat(const mat<T>& src, float low, float high, float sigma);
 // by 4 (8-bit values are read as value / 255), the same for 8 bits and floats. Throws invalid_argument unless
 // 0 <= low <= high and sigma is a finite number >= 0.
 template <class M>
-traits::if_image_t<M, mat8u> canny(const M& src, float low = 0.1f, float high = 0.2f, float sigma = 1.0f) {
-    return detail::canny_mat<traits::mat_value_t<M>>(src, low, high, sigma);
+traits::if_pixel_t<M, mat8u> canny(const M& src, float low = 0.1f, float high = 0.2f, float sigma = 1.0f) {
+    return detail::canny_any<traits::mat_value_t<M>>(src, low, high, sigma);
 }
 
 }  // namespace stb
