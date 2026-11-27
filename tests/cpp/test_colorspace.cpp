@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Colour spaces: RGB, HSV, HSL and YCbCr. The expected values of the single colours are worked out by hand.
 

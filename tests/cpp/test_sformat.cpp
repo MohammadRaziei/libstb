@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // stb::sformat / vsformat / sformat_to: printf for std::string. The expected text comes from
 // snprintf itself wherever a result is checked against it.

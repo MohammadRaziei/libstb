@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // mat<T> (mat8u, mat32f, mat32i), the image types built on it, and the conversions between 8 bits and floats.
 // The expected values are written out here, not taken from the library.

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // stb::rgba_to_premultiplied_argb / premultiplied_argb_to_rgba. The expected values come from
 // the plain reference formulas written out here (not from the library's own kernels), and every

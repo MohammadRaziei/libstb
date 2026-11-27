@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Filters. The expected values are written out or computed here by a plain brute-force loop.
 

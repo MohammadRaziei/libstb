@@ -1,7 +1,7 @@
 #include <atomic>
 #include <thread>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 using testutil::gradient;
 using testutil::same;

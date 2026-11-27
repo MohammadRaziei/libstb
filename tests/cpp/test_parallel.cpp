@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 UTEST(libstb_parallel_tests, test_small_work_stays_on_one_thread_and_big_work_may_not) {
     stb::thread_scope scope(8);

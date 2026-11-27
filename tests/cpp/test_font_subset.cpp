@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // font::embedding() (the license bits) and subsetter (a smaller font file with only some glyphs).
 //

@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 namespace {
 

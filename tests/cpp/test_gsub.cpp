@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 #include "font/shaper/gsub.hpp"
 #include "font/shaper/text_shaper.hpp"
 

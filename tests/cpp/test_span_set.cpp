@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "stb/raster.hpp"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 namespace {
 

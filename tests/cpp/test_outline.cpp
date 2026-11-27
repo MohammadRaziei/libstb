@@ -1,7 +1,7 @@
 #include <cmath>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // stb::matrix and stb::outline: the geometry the rasterizer works from.
 

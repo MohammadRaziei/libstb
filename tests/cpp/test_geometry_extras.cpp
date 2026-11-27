@@ -3,7 +3,7 @@
 #include <limits>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // matrix::map (arrays), matrix::map_rect, outline::arc_to and outline::tight_bounds.
 

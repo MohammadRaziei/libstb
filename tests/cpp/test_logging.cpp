@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // stb::logging: levels, the logger tree, handlers, the formatter. Every test uses its own logger names
 // ("test.logging.<case>") and handlers it adds itself, so tests do not see each other and the root logger

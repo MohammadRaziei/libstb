@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <string>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 #include "stb/util.hpp"
 

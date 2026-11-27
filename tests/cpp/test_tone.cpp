@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Tone: histograms, equalize, auto_contrast, match_histogram, gamma, levels and look-up tables. The expected
 // values of the small cases are worked out by hand in the comments.

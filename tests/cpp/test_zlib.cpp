@@ -1,6 +1,6 @@
 #include <numeric>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 namespace {
 

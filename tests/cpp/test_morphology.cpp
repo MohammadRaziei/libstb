@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Morphology: the structuring elements, erode, dilate, open, close and the three differences. The window of every value
 // is also taken by a plain loop and compared.

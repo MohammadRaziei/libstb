@@ -1,4 +1,4 @@
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 UTEST(libstb_utf8_tests, test_decodes_every_sequence_length) {
     const std::u32string cps = stb::utf8_decode("A\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80");  // A é € 😀

@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 #include "util/file.hpp"
 
 // The glyph-index API of stb::font: outlines as path commands, per-glyph and font-wide metrics in

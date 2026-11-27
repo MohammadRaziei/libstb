@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // stb::rasterize_fill, rasterize_stroke, fill and stroke (stb/raster.hpp). The exact pixels of curves
 // and joins are checked against plutovg in test_raster_reference.cpp; here the behaviour: what is

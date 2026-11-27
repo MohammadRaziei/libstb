@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 using namespace stb;
 using namespace stb::color_literals;

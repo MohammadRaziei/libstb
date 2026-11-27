@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 #include "util/file.hpp"
 #include "font/woff.hpp"
 #include "stb/zlib.hpp"

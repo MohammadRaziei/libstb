@@ -3,7 +3,7 @@
 #include <utility>
 
 #include "stb/logging_os.hpp"
-#include "test_common.hpp"
+#include "conftest.hpp"
 #include "util/logging_os_rank.hpp"
 
 // The handlers that write to the log of the operating system (stb/logging_os.hpp). What each system

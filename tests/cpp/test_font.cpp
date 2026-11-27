@@ -3,7 +3,7 @@
 #include <cstring>
 #include <thread>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 #include "stb/draw.hpp"
 
 // The test font (tests/data/make_test_font.py) has solid-rectangle glyphs and

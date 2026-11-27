@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // The pictures and the font of data/ (data/README.md): real photographs, an RGBA picture and a TrueType font with
 // GSUB and GPOS. tests/data/ has synthetic files for exact numbers; these find what hand-made ones cannot.

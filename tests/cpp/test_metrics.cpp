@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Metrics: mae, mse, psnr and ssim. The small cases are worked out by hand; ssim is checked against a plain
 // double-precision loop written here.

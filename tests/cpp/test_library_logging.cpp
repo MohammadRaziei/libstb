@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // What libstb itself logs (docs/adr/0003-logging-policy.md): nothing at the default level; at DEBUG one
 // record per call for decode, encode, resize, zlib, SIMD and (when glyphs are missing) font rendering; WARNING

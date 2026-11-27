@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // font::shape: positioned glyphs in font units, with the byte offset of the text each one came from.
 // Fonts of tests/data:

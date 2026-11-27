@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // composite_row / composite_solid_row on premultiplied 0xAARRGGBB rows. The expected values come from the
 // W3C formulas written out here in floating point (not from the library's integer code):

@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Connected components. The numbering and the statistics of small masks are worked out by hand; random masks are
 // compared with a flood fill written here.

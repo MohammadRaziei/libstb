@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // The in-place functions (equalize_inplace, gamma_inplace, erode_inplace, ...) give their argument back, with the
 // exact type it had, so they chain; and the names of the enums they take can be parsed and printed.

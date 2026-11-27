@@ -8,7 +8,7 @@
 
 #include "../tools/raster_reference/reference_hashes.h"
 #include "../tools/raster_reference/scenes.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // The rasterizer and the stroker are ports of the algorithms in FreeType (through plutovg), and what
 // the library promises is that the pixels are the same: for every scene in scenes.h, the coverage image

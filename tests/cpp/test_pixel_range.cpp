@@ -2,7 +2,7 @@
 #include <limits>
 
 #include "stb/pixel_range.hpp"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // The range of a pixel type: "white" is the maximum of an integer type and 1 for a float, and a value computed in floating point is
 // stored rounded to the nearest and clamped. The same code serves 8, 16 and 32 bits, signed or not.

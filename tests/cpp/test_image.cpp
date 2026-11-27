@@ -4,7 +4,7 @@
 #include <fstream>
 #include <thread>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 using testutil::red_over_green;
 

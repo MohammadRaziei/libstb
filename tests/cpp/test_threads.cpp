@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 #include "stb/parallel.hpp"
 #include "util/parallel.hpp"
 

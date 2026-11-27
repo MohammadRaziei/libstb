@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Variable fonts: font::axes / with_variation / with_weight and font_face_info::weight_min / weight_max.
 //

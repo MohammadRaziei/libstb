@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Canny. Pictures with a known edge: a vertical step, a step that is strong in the upper half and weak in the lower.
 

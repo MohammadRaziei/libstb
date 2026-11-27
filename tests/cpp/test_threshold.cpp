@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // Thresholds: threshold, otsu_threshold and adaptive_threshold. The small cases are worked out by hand.
 

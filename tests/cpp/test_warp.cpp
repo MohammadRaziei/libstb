@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "stb.h"
-#include "test_common.hpp"
+#include "conftest.hpp"
 
 // warp_affine and warp_perspective. The small cases are worked out by hand in the comments; the rest is compared with a
 // straightforward sampler written in doubles from stb::matrix::inverse.
