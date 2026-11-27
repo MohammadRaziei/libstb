@@ -1,8 +1,9 @@
 """Filters, masks, gradients, histograms and warps: one name for an Image, a uint8 array and a float32 array. The argument is never
 changed or converted (any other dtype is a TypeError) and the result is of the kind of the argument, with the shape of the argument."""
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb as stb
 

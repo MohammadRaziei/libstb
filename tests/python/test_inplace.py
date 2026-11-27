@@ -1,8 +1,9 @@
 """The sixteen functions that change their argument (equalize_inplace, gamma_inplace, erode_inplace, ...): one name for an Image,
 a uint8 array and a float32 array, a method of Image, the argument given back so calls chain, and nothing converted silently."""
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb as stb
 

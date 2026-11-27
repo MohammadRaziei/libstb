@@ -1,8 +1,9 @@
 """The sixteen functions that make a new value (equalize, gamma, erode, ...): one name for an Image, a uint8 array and a float32 array,
 a method of Image, the argument left alone, and nothing converted silently (a uint8 array stays uint8: it is never read as floats)."""
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy")  # the tests below need numpy: without it this module is skipped
 
 import libstb as stb
 
