@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "image/math_kernels.hpp"
-#include "pixel_range.hpp"
+#include "stb/pixel_range.hpp"
 #include "plane.hpp"
 #include "stb/parallel.hpp"
 
@@ -332,7 +332,7 @@ mat32f box_blur(const mat32f& src, int radius, edge_mode edge) {
 image8u box_blur(const mat8u& src, int radius, edge_mode edge) {
     if (radius < 0) throw std::invalid_argument("radius must be >= 0");
     if (src.empty()) return image8u();
-    return to_8u(box_blur(to_f32(src), radius, edge));
+    return cast<std::uint8_t>(box_blur(cast<float>(src), radius, edge));
 }
 
 gradients sobel(const mat32f& src, edge_mode edge) {
@@ -346,7 +346,7 @@ gradients sobel(const mat32f& src, edge_mode edge) {
 
 gradients sobel(const mat8u& src, edge_mode edge) {
     if (src.empty()) return gradients();
-    return sobel(to_f32(src), edge);
+    return sobel(cast<float>(src), edge);
 }
 
 gradients scharr(const mat32f& src, edge_mode edge) {
@@ -360,7 +360,7 @@ gradients scharr(const mat32f& src, edge_mode edge) {
 
 gradients scharr(const mat8u& src, edge_mode edge) {
     if (src.empty()) return gradients();
-    return scharr(to_f32(src), edge);
+    return scharr(cast<float>(src), edge);
 }
 
 mat32f magnitude(const gradients& g) {
@@ -500,7 +500,7 @@ std::vector<float> bilateral_space_weights(int r, float sigma) {
 // possible value when the table is small (8 bits: 195076 entries); a type with more levels (16 bits) evaluates it for every tap.
 template <class T>
 void bilateral_run(const mat<T>& src, mat<T>& out, int r, float sigma_space, float sigma_range, edge_mode edge) {
-    using px_range = detail_pixel::range<T>;
+    using px_range = pixel_range<T>;
     const int w = src.width(), h = src.height(), c = src.channels();
     const int colour = (c == 2 || c == 4) ? c - 1 : c;
     const int side = 2 * r + 1;
@@ -796,8 +796,8 @@ image8u guided_filter(const mat8u& src, int radius, float eps, edge_mode edge) {
     if (src.empty()) return image8u();
     guided_colour(src.channels());
     if (radius == 0) return image8u(src.copy());
-    const mat32f f = to_f32(src);
-    return to_8u(guided_run(f, f, radius, eps, edge));
+    const mat32f f = cast<float>(src);
+    return cast<std::uint8_t>(guided_run(f, f, radius, eps, edge));
 }
 
 image8u guided_filter(const mat8u& src, const mat8u& guide, int radius, float eps, edge_mode edge) {
@@ -811,7 +811,7 @@ image8u guided_filter(const mat8u& src, const mat8u& guide, int radius, float ep
         throw std::invalid_argument("the guide must be as wide and as high as the image");
     guided_colour(guide.channels());
     if (radius == 0) return image8u(src.copy());
-    return to_8u(guided_run(to_f32(src), to_f32(guide), radius, eps, edge));
+    return cast<std::uint8_t>(guided_run(cast<float>(src), cast<float>(guide), radius, eps, edge));
 }
 
 // ============================================================================================ unsharp mask, pixelize
@@ -854,7 +854,7 @@ traits::if_image_t<mat<T>, void> detail::unsharp_mask_inplace_mat(mat<T>& img, f
 
     // `base` holds the values as floats and is where the result is made; `blur` is the blurred copy.
     mat32f converted;
-    if constexpr (std::is_same_v<T, std::uint8_t>) converted = to_f32(img);
+    if constexpr (std::is_same_v<T, std::uint8_t>) converted = cast<float>(img);
     mat32f& base = [&]() -> mat32f& {
         if constexpr (std::is_same_v<T, std::uint8_t>) return converted;
         else return img;

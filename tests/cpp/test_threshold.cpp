@@ -173,7 +173,7 @@ UTEST(libstb_threshold_tests, test_a_flat_picture_is_background_for_offset_0_and
 UTEST(libstb_threshold_tests, test_adaptive_threshold_reads_floats_like_8_bits_and_refuses_bad_arguments) {
     const image8u a = patterned8(25, 20, stb::pixel_format::gray, 9u);
     // the same picture and the offset in values instead of levels
-    EXPECT_TRUE(same_bytes(stb::adaptive_threshold(a, 3, 8.0f), stb::adaptive_threshold(stb::to_f32(a), 3, 8.0f / 255.0f)));
+    EXPECT_TRUE(same_bytes(stb::adaptive_threshold(a, 3, 8.0f), stb::adaptive_threshold(stb::cast<float>(a), 3, 8.0f / 255.0f)));
     ASSERT_THROWS(stb::adaptive_threshold(a, 0), std::invalid_argument);
     ASSERT_THROWS(stb::adaptive_threshold(a, 1001), std::invalid_argument);
     ASSERT_THROWS(stb::adaptive_threshold(a, 3, std::numeric_limits<float>::quiet_NaN()), std::invalid_argument);

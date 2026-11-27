@@ -15,8 +15,8 @@
 //   mat32f k = {{0, -1, 0}, {-1, 5, -1}, {0, -1, 0}}; // any kernel is a mat32f
 //   image8u sharp = stb::convolve(img, k);
 //
-// On 8-bit data the arithmetic is done in floats and rounded once at the end (to_8u), so a chain of
-// filters is best written on mat32f: to_f32 first, to_8u last.
+// On 8-bit data the arithmetic is done in floats and rounded once at the end (cast<std::uint8_t>), so a chain of
+// filters is best written on mat32f: cast<float> first, cast<std::uint8_t> last.
 
 #include <type_traits>
 #include <utility>

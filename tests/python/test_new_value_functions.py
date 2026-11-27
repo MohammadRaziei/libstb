@@ -140,7 +140,7 @@ def test_canny_and_adaptive_threshold_follow_the_same_rule():
         stb.adaptive_threshold(GRAY8, 3, method="nonsense")
 
 
-# ---- gradients, magnitude, to_8u
+# ---- gradients, magnitude, cast
 
 @pytest.mark.parametrize("name", ["sobel", "scharr"])
 def test_gradients_are_a_tuple_of_two_float32_arrays_of_the_shape_of_the_argument(name):
@@ -167,14 +167,89 @@ def test_magnitude_takes_two_float32_arrays_only():
         stb.magnitude(dx, dy.astype(np.float64))
 
 
-def test_to_8u_gives_a_uint8_array_of_the_shape_of_the_argument():
+def test_cast_gives_the_other_type_with_the_shape_of_the_argument():
     a = np.array([[0.0, 0.5, 1.0], [-1.0, 2.0, float("nan")]], dtype=np.float32)
-    out = stb.to_8u(a)
+    out = stb.cast(a, "uint8")
     assert out.dtype == np.uint8 and out.shape == (2, 3)
     assert out.tolist() == [[0, 128, 255], [0, 255, 0]]
-    assert stb.to_8u(a[:, :, None]).shape == (2, 3, 1)
-    with pytest.raises(TypeError):
-        stb.to_8u(GRAY8)
+    assert stb.cast(a[:, :, None], "uint8").shape == (2, 3, 1)
+    f = stb.cast(GRAY8, "float32")
+    assert f.dtype == np.float32 and f.shape == GRAY8.shape and f.min() >= 0.0 and f.max() <= 1.0
+    assert np.allclose(f, GRAY8 / 255.0, atol=1e-6)
+    assert stb.cast(GRAY8[:, :, None].copy(), "float32").shape == (21, 25, 1)
+
+
+def test_cast_to_the_same_type_is_a_copy():
+    arr8, arrf = GRAY8.copy(), f32(GRAY8)
+    for src, name in ((arr8, "uint8"), (arrf, "float32")):
+        out = stb.cast(src, name)
+        assert out.dtype == src.dtype and np.array_equal(out, src) and not np.shares_memory(out, src)
+    im = img(RGB8)
+    cp = stb.cast(im, "uint8")
+    assert isinstance(cp, stb.Image) and cp is not im and np.array_equal(cp.numpy(), RGB8)
+
+
+def test_cast_of_an_image_is_an_image_to_uint8_and_an_array_to_float32_and_is_a_method():
+    im = img(RGB8)
+    f = stb.cast(im, "float32")
+    assert isinstance(f, np.ndarray) and f.dtype == np.float32 and f.shape == (24, 30, 3)
+    assert np.array_equal(im.cast("float32"), f) and isinstance(im.cast("uint8"), stb.Image)
+    assert np.array_equal(stb.cast(f, "uint8"), RGB8)  # the inverse for every 8-bit value
+
+
+def test_the_type_is_a_name_or_a_numpy_dtype_or_type():
+    want = stb.cast(GRAY8, "float32")
+    for spec in ("float32", np.float32, np.dtype("float32")):
+        assert np.array_equal(stb.cast(GRAY8, spec), want)
+    for spec in ("uint8", np.uint8, np.dtype(np.uint8)):
+        assert stb.cast(want, spec).dtype == np.uint8
+    for bad in ("int64", "uint64", "float16", "bool", np.int64, 3):
+        with pytest.raises(ValueError):
+            stb.cast(GRAY8, bad)
+
+
+def test_cast_refuses_a_type_it_has_no_array_for_and_a_array_that_is_not_contiguous():
+    for bad in (GRAY8.astype(np.int64), GRAY8.astype(np.uint64), GRAY8.astype(np.float16), GRAY8 > 100, np.asfortranarray(RGB8)):
+        with pytest.raises(TypeError):
+            stb.cast(bad, "float32")
+
+
+def test_cast_between_every_integer_and_float_type():
+    a = np.array([[0, 100, 255]], dtype=np.uint8)
+    u16 = stb.cast(a, "uint16")
+    assert u16.dtype == np.uint16 and u16.tolist() == [[0, 25700, 65535]]  # a value times 257
+    assert np.array_equal(stb.cast(u16, "uint8"), a)
+    u32 = stb.cast(a, np.uint32)
+    assert u32.dtype == np.uint32 and u32.tolist() == [[0, 1684300900, 4294967295]]
+    i16 = stb.cast(a, "int16")
+    assert i16.dtype == np.int16 and i16.tolist() == [[0, 12850, 32767]]
+    i32 = stb.cast(a, np.dtype("int32"))
+    assert i32.dtype == np.int32 and i32.tolist() == [[0, 842150450, 2147483647]]
+    d = stb.cast(a, "float64")
+    assert d.dtype == np.float64 and np.allclose(d, a / 255.0, atol=1e-15)
+    for arr in (u16, u32, i16, i32, d):  # all of them come back to the same 8-bit values
+        assert np.array_equal(stb.cast(arr, "uint8"), a), arr.dtype
+    f = stb.cast(u16, "float32")
+    assert f.dtype == np.float32 and np.allclose(f, a / 255.0, atol=1e-6)
+    assert stb.cast(u16, "uint16").dtype == np.uint16 and not np.shares_memory(stb.cast(u16, "uint16"), u16)
+
+
+def test_cast_of_a_signed_type_keeps_the_sign_and_clamps_below_black_for_an_unsigned_one():
+    s = np.array([[-32768, -16384, 0, 32767]], dtype=np.int16)
+    f = stb.cast(s, "float32")
+    assert np.allclose(f, [[-32768 / 32767, -16384 / 32767, 0.0, 1.0]], atol=1e-6)
+    assert np.array_equal(stb.cast(f, "int16"), s)  # exact, -32768 included
+    assert stb.cast(s, "uint8").tolist() == [[0, 0, 0, 255]]
+    nan = np.array([[np.nan, -1.0, 2.0, 0.5]], dtype=np.float32)
+    assert stb.cast(nan, "uint16").tolist() == [[0, 0, 65535, 32768]]
+    assert stb.cast(nan, "int16").tolist() == [[0, -32767, 32767, 16384]]
+
+
+def test_cast_of_an_image_to_any_type_is_an_array_of_the_shape_of_the_image():
+    im = img(RGB8)
+    u16 = im.cast("uint16")
+    assert isinstance(u16, np.ndarray) and u16.dtype == np.uint16 and u16.shape == (24, 30, 3)
+    assert np.array_equal(u16, RGB8.astype(np.uint16) * 257)
 
 
 def test_ssim_map_takes_two_values_of_the_same_kind():

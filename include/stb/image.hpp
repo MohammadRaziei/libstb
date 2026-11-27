@@ -20,6 +20,8 @@
 
 #include "stb/export.hpp"
 #include "stb/mat.hpp"
+#include "stb/parallel.hpp"
+#include "stb/pixel_range.hpp"
 #include "stb/color.hpp"
 #include "stb/error.hpp"
 
@@ -218,6 +220,20 @@ class image8u;
 using image = image8u;
 using image32f = mat32f;
 
+namespace detail {
+// What cast<To>() gives: an image8u for 8 bits (it knows its pixel format), a mat<To> for any other type.
+template <class To>
+struct cast_result {
+    using type = mat<To>;
+};
+template <>
+struct cast_result<std::uint8_t> {
+    using type = image8u;
+};
+}  // namespace detail
+template <class To>
+using cast_result_t = typename detail::cast_result<To>::type;
+
 // An 8-bit image, the one everything else in libstb works on (image is another name for it): a
 // mat8u plus decoding, encoding, blending, resizing and the other operations below. An empty
 // (default-constructed) image has size() == 0. Being a mat8u, it goes wherever a mat8u does.
@@ -409,17 +425,55 @@ public:
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) const&;
     image flatten(std::array<std::uint8_t, 3> background = {255, 255, 255}) &&;
 
+    // The same picture in another pixel type, keeping the range: cast<float>() is a mat32f, cast<std::uint8_t>() a copy (see cast).
+    template <class To>
+    cast_result_t<To> cast() const;
+
 };
 
-// --- 8 bits <-> float ---------------------------------------------------------------------------
-// The two directions of the conversion every float computation starts and ends with. Same size and
-// channels; an empty input gives an empty result. Both use all the cores when the image is big.
+// --- the pixel type -------------------------------------------------------------------------------
+// cast<To>(src): the same picture in another pixel type, keeping the range: white stays white (see pixel_range: a float is 0 to 1,
+// an 8-bit value 0 to 255, a 16-bit value 0 to 65535, a signed 16-bit value -32768 to 32767 read as -1 to 1). It works for every
+// pair of integer types (not bool) and float types, with the same size and channels; an empty input gives an empty result.
+// A value is read as value / max of its type and written as round(clamp(value * max of the new type, lowest, max)), NaN is 0:
+//   cast<float>(mat8u)           every value / 255: 0 is 0.0f and 255 is exactly 1.0f. A mat32f.
+//   cast<std::uint8_t>(mat32f)   round(clamp(v, 0, 1) * 255), and NaN becomes 0: the inverse of the above for every 8-bit value.
+//                                An image8u. Throws invalid_argument when src has more than 4 channels (an image has at most 4).
+//   cast<std::uint16_t>(mat8u)   a value times 257 (255 is 65535); and so on for the other pairs.
+//   the same type                a copy (an image8u for 8 bits).
+// The pairs of 8 bits and float32 have kernels that use SIMD; the others are one loop in double precision, on all the cores when
+// the image is big. An image8u is a mat8u: cast<float>(img) works, and so does img.cast<float>().
+template <class To, class From>
+cast_result_t<To> cast(const mat<From>& src) {
+    using in = pixel_range<From>;
+    using out = pixel_range<To>;
+    if (src.empty()) return cast_result_t<To>();
+    cast_result_t<To> dst = [&] {
+        if constexpr (std::is_same_v<To, std::uint8_t>) return image8u(src.width(), src.height(), pixel_format_from_channels(src.channels()));
+        else return mat<To>(src.width(), src.height(), src.channels());
+    }();
+    const double scale = double(out::max) / double(in::max);
+    const From* from = src.data();
+    To* to = dst.data();
+    utils::parallel_for(src.size(), 2.0, [&](std::size_t begin, std::size_t end) {
+        for (std::size_t i = begin; i < end; ++i) to[i] = out::store(double(from[i]) * scale);
+    });
+    return dst;
+}
 
-// Every value / 255: 0 is 0.0f and 255 is exactly 1.0f.
-STB_API mat32f to_f32(const mat8u& src);
-// round(clamp(v, 0, 1) * 255), and NaN becomes 0: the inverse of to_f32 for every 8-bit value.
-// Throws invalid_argument when src has more than 4 channels (an image has at most 4).
-STB_API image8u to_8u(const mat32f& src);
+template <>
+STB_API mat32f cast<float, std::uint8_t>(const mat8u& src);
+template <>
+STB_API image8u cast<std::uint8_t, float>(const mat32f& src);
+template <>
+STB_API mat32f cast<float, float>(const mat32f& src);
+template <>
+STB_API image8u cast<std::uint8_t, std::uint8_t>(const mat8u& src);
+
+template <class To>
+cast_result_t<To> image8u::cast() const {
+    return stb::cast<To>(static_cast<const mat8u&>(*this));
+}
 
 // Pixels that are already multiplied by alpha, in the layout rasterizers draw into: one 32-bit word per
 // pixel, 0xAARRGGBB (native-endian: on a little-endian machine the bytes are B, G, R, A), exactly what

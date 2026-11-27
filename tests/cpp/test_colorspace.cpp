@@ -164,7 +164,7 @@ UTEST(libstb_colorspace_tests, test_8_bit_ycbcr_of_white_black_and_red) {
 
 UTEST(libstb_colorspace_tests, test_8_bit_conversions_follow_the_float_ones_within_one_level) {
     const image8u src = patterned8(37, 29, stb::pixel_format::rgb);
-    const mat32f srcf = stb::to_f32(src);
+    const mat32f srcf = stb::cast<float>(src);
     for (color_space s : {color_space::hsl, color_space::hsv, color_space::ycbcr}) {
         const image8u got = stb::convert_color(src, color_space::rgb, s);
         const mat32f want = stb::convert_color(srcf, color_space::rgb, s);

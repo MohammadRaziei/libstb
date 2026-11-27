@@ -22,7 +22,7 @@ mat32f unit_gray(const mat<T>& src) {
     const int c = src.channels();
     if (c != 1 && c != 3 && c != 4) throw std::invalid_argument("canny needs a picture of 1, 3 or 4 channels");
     mat32f f;
-    if constexpr (std::is_same_v<T, std::uint8_t>) f = to_f32(src);
+    if constexpr (std::is_same_v<T, std::uint8_t>) f = cast<float>(src);
     else f = src.copy();
     if (c == 1) return f;
     mat32f gray(src.width(), src.height(), 1);

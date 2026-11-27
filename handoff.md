@@ -45,7 +45,7 @@
 
 | هدر | چه دارد |
 |---|---|
-| `mat.hpp`، `image.hpp` | `mat<T>` (`mat8u`، `mat32f`، `mat32i`)، `image8u`، traits: `if_image_t<M>`، `if_image_rvalue_t<M>`، `mat_value_t<M>`، `to_f32`، `to_8u` |
+| `mat.hpp`، `image.hpp` | `mat<T>` (`mat8u`، `mat32f`، `mat32i`)، `image8u`، traits: `if_image_t<M>`، `if_image_rvalue_t<M>`، `mat_value_t<M>`، `cast<To>` |
 | `tone.hpp` | histogram، equalize، auto_contrast، match_histogram، gamma، levels، LUT |
 | `filter.hpp` | convolve، gaussian/box blur، sobel، **scharr**، magnitude، **median_filter**، **unsharp_mask**، **pixelize**، **canny** |
 | `colorspace.hpp` | `convert_color` (rgb، hsv، hsl، ycbcr) |
@@ -196,7 +196,7 @@ Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_im
 - `mat<T>` تنها نوع آرایه است: `width x height` با `channels` دلخواه (≥1)، interleaved، بدون padding، **move-only** با `copy()` صریح، `wrap` بدون کپی با keep-alive. `mat8u`، `mat32f`، `mat32i` aliasهایش هستند. اندیس `(x, y, c)` (ستون اول)، `rows()`/`cols()`، `row(y)`، `fill`. سازنده‌ی `mat32f k = {{1,2,1},{2,4,2},{1,2,1}};` برای کرنل.
 - `image8u : public mat8u` (همه‌ی decode/encode/blend/resize/exif/canvas مثل قبل)؛ `using image = image8u;` `using image32f = mat32f;`. `premultiplied_image` جدا ماند و از `detail::image_base` (= `image_base_t<uint8_t>` در `mat.hpp`) ارث می‌برد.
 - `pixel_format`، `channel_count`، `pixel_format_from_channels`، `edge_mode` در `mat.hpp` تعریف شده‌اند (از `image.hpp` منتقل شدند). `mat::format()` برای بیش از 4 کانال `invalid_argument` می‌دهد.
-- تبدیل‌ها توابع آزاد: `to_f32(const mat8u&)` (مقدار / 255 با تقسیم واقعی) و `to_8u(const mat32f&)` (round(clamp(v,0,1)*255)، NaN صفر)، در `src/image/math_ops.cpp`.
+- تبدیل نوع پیکسل: `cast<To>(src)` (حافظ بازه: سفید، سفید می‌ماند): `cast<float>(mat8u)` مقدار / 255 با تقسیم واقعی، `cast<std::uint8_t>(mat32f)` round(clamp(v,0,1)*255) و NaN صفر، و هم‌نوع یک کپی؛ برای هر جفت نوع صحیح و float کار می‌کند (`value / max`)؛ متد `Image::cast<To>()` هم هست؛ در `src/image/math_ops.cpp`.
 - `edge_mode { clamp, reflect (dcba|abcd|dcba), mirror (dcb|abcd|cba)، wrap, zero }`. جدا از `resize_edge` (آن enum مال stbir است و معنایش یکی نیست؛ alias نشد).
 
 **لایه‌ی عددی داخلی** (`src/image/math_kernels.hpp` + `math_ops.cpp` + `math_scalar.cpp`): کرنل‌های سطری (`u8_to_f32`، `f32_to_u8`، `fir_h`، `fir_v`، `add`، `magnitude`) یک بار به‌صورت always-inline نوشته شده و سه بار instantiate می‌شوند (AVX2 با target attribute، baseline، scalar با auto-vectorize خاموش)؛ انتخاب با `detail::math()` از `current_backend()` (همان `set_simd`/`simd_scope`). هر مقدار خروجی با ترتیب ثابت و **بدون FMA و بدون reduction افقی** حساب می‌شود (CMake: `-ffp-contract=off;-fno-math-errno` روی این فایل‌ها)، پس همه‌ی backendها و هر تعداد thread **بیت‌به‌بیت یکی** هستند (تست دارد). نکته: `current_backend()` thread-local است؛ کرنل را در thread صدازننده بگیر و به workerها بده (کد همین‌طور است).
@@ -205,7 +205,7 @@ Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_im
 
 **superpixel** (`include/stb/superpixel.hpp`، `src/image/superpixel.cpp`، `src/image/lab.hpp`): `superpixel_method { slic, slico (پیش‌فرض), snic }`، `superpixel_options {count=400, compactness=10, iterations=10, enforce_connectivity=true, method}`، `superpixel_map` (move-only، `labels()` یک `mat32i`، `label(x,y)`، `count()`، `boundaries(color)`، `overlay(src,color)`، `mean_color(src)`، `copy()`)، `superpixels(const mat8u&, options)`. از روی مقاله‌ها نوشته شد (**هیچ کدی کپی نشده**؛ کد superpixels-revisited/OpenCV/SLIC رسمی GPL یا غیرتجاری‌اند). SLIC/SLICO: assignment به‌شکل gather روی مراکز bucket شده (موازی)، مجموع مراکز با fixed-point 16.16 تا ترتیب جمع و تعداد thread اثری نگذارد؛ SNIC: heap ترتیب‌دار (یک thread). اتصال: BFS بر قطعه‌ها و merge قطعه‌های کوچک (< S²/4) به همسایه با بیشترین مرز مشترک. ورودی gray/gray_alpha/rgb/rgba (alpha نادیده). نتیجه روی هر thread count یکی است (تست). `NOTICE.md` مقاله‌ها را ثبت کرده و می‌گوید وضعیت پتنت بررسی نشده.
 
-**Python** (`src/bindings/python/bind_filter.cpp`، ثبت در `binding.cpp/.hpp` و `libstb/__init__.py`): `EdgeMode`، `SuperpixelMethod`، `SuperpixelMap` (`labels` یک view read-only int32 که map را زنده نگه می‌دارد)، توابع `gaussian_blur`، `box_blur`، `convolve` (2D یا row+col)، `gaussian_kernel`، `sobel` (tuple `(dx, dy)`)، `magnitude`، `superpixels`، `to_f32`، `to_8u`، و همان‌ها به‌صورت متد روی `Image`. ورودی `Image` یا آرایه‌ی float32 با شکل (H,W) یا (H,W,C) (خروجی همان شکل). `edge` فقط keyword (`edge="mirror"` یا `EdgeMode.MIRROR`). کرنل می‌تواند لیست تودرتو، آرایه‌ی float64 یا float32 باشد. GIL آزاد می‌شود. تست: `tests/python/test_filter.py` (مقایسه با numpy و SciPy اگر نصب باشد)، `test_superpixel.py`.
+**Python** (`src/bindings/python/bind_filter.cpp`، ثبت در `binding.cpp/.hpp` و `libstb/__init__.py`): `EdgeMode`، `SuperpixelMethod`، `SuperpixelMap` (`labels` یک view read-only int32 که map را زنده نگه می‌دارد)، توابع `gaussian_blur`، `box_blur`، `convolve` (2D یا row+col)، `gaussian_kernel`، `sobel` (tuple `(dx, dy)`)، `magnitude`، `superpixels`، `cast(x, type)` (type: یکی از `"uint8"`، `"uint16"`، `"uint32"`، `"int16"`، `"int32"`، `"float32"`، `"float64"` یا dtype نامپای)، و همان‌ها به‌صورت متد روی `Image`. ورودی `Image` یا آرایه‌ی float32 با شکل (H,W) یا (H,W,C) (خروجی همان شکل). `edge` فقط keyword (`edge="mirror"` یا `EdgeMode.MIRROR`). کرنل می‌تواند لیست تودرتو، آرایه‌ی float64 یا float32 باشد. GIL آزاد می‌شود. تست: `tests/python/test_filter.py` (مقایسه با numpy و SciPy اگر نصب باشد)، `test_superpixel.py`.
 
 **تست C++:** `tests/cpp/test_mat.cpp`، `test_filter.cpp`، `test_superpixel.cpp`. (تست قدیمی `test_image_types.cpp` حذف شد.)
 
@@ -229,7 +229,7 @@ Python: `src/bindings/python/bind_filter.cpp` (توابع `bind_tone`، `bind_im
 
 ## سؤال‌های باز برای کاربر
 
-- `to_8u`/`to_f32` توابع آزاد شدند (نه متد)؛ در Python متد `Image.to_f32()` هم هست. اگر کاربر متد `to_8u` روی آرایه می‌خواهد، چون `image32f` فقط alias است، نمی‌شود (باید تابع آزاد بماند).
+- `to_8u` و `to_f32` حذف شدند (بدون alias) و جایشان `cast<To>` است: در C++ `stb::cast<float>(x)` و `img.cast<float>()`، در Python `stb.cast(x, "float32")` و `img.cast("float32")`. نتیجه‌ی Image به uint8 یک Image است، بقیه‌ی نتیجه‌ها آرایه‌اند.
 - `mat` copy ندارد (move-only)؛ اگر برای کرنل‌های کوچک بد بود، copyable کردنش تغییر کوچک است ولی با رفتار تصویر ناهماهنگ می‌شود.
 - کلاس‌های Python برای `mat32f` ساخته نشد (آرایه‌ی numpy مستقیم استفاده می‌شود)؛ اگر کاربر `Mat32F` خواست، نام را با هم تعیین کنید.
 - `docs/guide.md`، `README.md`، `CHANGELOG.md` هنوز درباره‌ی `mat`/filters/superpixel چیزی ندارند و مثال (`examples/`) هم ندارد؛ و `checklist.md` پیشرفت را نشان نمی‌دهد. قبل از انتشار اضافه شود.

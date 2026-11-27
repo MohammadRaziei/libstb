@@ -169,8 +169,8 @@ UTEST(libstb_metrics_tests, test_ssim_falls_as_the_picture_gets_noisier_and_is_s
 
 UTEST(libstb_metrics_tests, test_ssim_reads_8_bit_values_as_value_over_255) {
     const image8u a = patterned8(24, 24, stb::pixel_format::gray, 41u), b = patterned8(24, 24, stb::pixel_format::gray, 42u);
-    // (the 8-bit path divides in double, to_f32 in float: they differ in the 8th digit)
-    EXPECT_NEAR(stb::ssim(a, b), stb::ssim(stb::to_f32(a), stb::to_f32(b)), 1e-6);
+    // (the 8-bit path divides in double, cast<float> in float: they differ in the 8th digit)
+    EXPECT_NEAR(stb::ssim(a, b), stb::ssim(stb::cast<float>(a), stb::cast<float>(b)), 1e-6);
 }
 
 UTEST(libstb_metrics_tests, test_ssim_needs_a_picture_of_at_least_11_by_11) {

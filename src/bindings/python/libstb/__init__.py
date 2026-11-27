@@ -42,7 +42,7 @@ from .libstb_py import (Align, BlendMode, PremultipliedImage, CompositeOp, Canva
 from .libstb_py import _SimdContext, _ThreadsContext, set_simd, simd_backends, simd_name
 from .libstb_py import logging_bridge, set_threads, thread_count
 from .libstb_py import (EdgeMode, SuperpixelMap, SuperpixelMethod, box_blur, convolve, gaussian_blur, gaussian_kernel, magnitude, sobel,
-                        superpixels, to_8u, to_f32)
+                        superpixels, cast)
 from .libstb_py import (Homography, InterpolationMethod, warp_affine, warp_perspective)
 from .libstb_py import (
     equalize_inplace, auto_contrast_inplace, match_histogram_inplace, clahe_inplace, gamma_inplace, levels_inplace, convert_color_inplace, pixelize_inplace,

@@ -7,7 +7,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "pixel_range.hpp"
+#include "stb/pixel_range.hpp"
 #include "stb/filter.hpp"
 #include "stb/parallel.hpp"
 
@@ -27,7 +27,7 @@ void need_one_channel(const mat<T>& src) {
 // The values as floats of the 0 to 1 range: an 8-bit picture is divided by 255, a float one is used as it is.
 const mat32f& as_unit(const mat32f& src, mat32f&) { return src; }
 const mat32f& as_unit(const mat8u& src, mat32f& scratch) {
-    scratch = to_f32(src);
+    scratch = cast<float>(src);
     return scratch;
 }
 
@@ -84,7 +84,7 @@ T otsu_threshold_mat(const mat<T>& src) {
     need_one_channel(src);
     if (src.empty()) throw std::invalid_argument("the picture is empty");
     if constexpr (!std::is_floating_point_v<T>) {  // an integer type: the histogram has one bin for every level
-        constexpr std::size_t levels = std::size_t(detail_pixel::range<T>::max) + 1;
+        constexpr std::size_t levels = std::size_t(pixel_range<T>::max) + 1;
         std::vector<double> hist(levels, 0.0);
         std::size_t lo = levels - 1, hi = 0;
         for (int y = 0; y < src.height(); ++y) {
@@ -140,7 +140,7 @@ mat8u adaptive_threshold_mat(const mat<T>& src, int radius, float offset, adapti
     mat32f scratch;
     const mat32f& f = as_unit(src, scratch);
     // the offset is in levels for an integer type (a value is read as value / maximum) and in the unit range for floats
-    const float off = offset / float(detail_pixel::range<T>::max);
+    const float off = offset / float(pixel_range<T>::max);
     mat32f local;
     if (method == adaptive_method::mean) {
         local = box_blur(f, radius, edge);

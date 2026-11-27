@@ -75,6 +75,17 @@ template <>
 struct nanobind_backend::kind<stb::mat8u> : array_kind<stb_py::mat_traits, std::uint8_t> {};
 template <>
 struct nanobind_backend::kind<stb::mat32f> : array_kind<stb_py::mat_traits, float> {};
+// The other pixel types a picture can have as an array (cast() reads them and gives them back)
+template <>
+struct nanobind_backend::kind<stb::mat<std::uint16_t>> : array_kind<stb_py::mat_traits, std::uint16_t> {};
+template <>
+struct nanobind_backend::kind<stb::mat<std::uint32_t>> : array_kind<stb_py::mat_traits, std::uint32_t> {};
+template <>
+struct nanobind_backend::kind<stb::mat<std::int16_t>> : array_kind<stb_py::mat_traits, std::int16_t> {};
+template <>
+struct nanobind_backend::kind<stb::mat<std::int32_t>> : array_kind<stb_py::mat_traits, std::int32_t> {};
+template <>
+struct nanobind_backend::kind<stb::mat<double>> : array_kind<stb_py::mat_traits, double> {};
 
 // A kind that is only ever the result of a function: the pair of derivatives of sobel() and scharr(): a tuple (dx, dy) of float32
 // arrays. (A number, an int level or a double, is a ready-made kind of polybind.)

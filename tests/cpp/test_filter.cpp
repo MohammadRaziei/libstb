@@ -214,11 +214,11 @@ UTEST(libstb_filter_tests, test_box_blur_matches_the_brute_force_mean) {
 
 UTEST(libstb_filter_tests, test_8_bit_filters_equal_the_float_filter_rounded_once) {
     const stb::image8u u = patterned8(37, 29, stb::pixel_format::rgb);
-    const stb::mat32f f = stb::to_f32(u);
-    EXPECT_TRUE(same_bytes(stb::gaussian_blur(u, 1.3f), stb::to_8u(stb::gaussian_blur(f, 1.3f))));
-    EXPECT_TRUE(same_bytes(stb::box_blur(u, 3), stb::to_8u(stb::box_blur(f, 3))));
+    const stb::mat32f f = stb::cast<float>(u);
+    EXPECT_TRUE(same_bytes(stb::gaussian_blur(u, 1.3f), stb::cast<std::uint8_t>(stb::gaussian_blur(f, 1.3f))));
+    EXPECT_TRUE(same_bytes(stb::box_blur(u, 3), stb::cast<std::uint8_t>(stb::box_blur(f, 3))));
     const stb::mat32f k = {{0, -1, 0}, {-1, 5, -1}, {0, -1, 0}};
-    EXPECT_TRUE(same_bytes(stb::convolve(u, k), stb::to_8u(stb::convolve(f, k))));
+    EXPECT_TRUE(same_bytes(stb::convolve(u, k), stb::cast<std::uint8_t>(stb::convolve(f, k))));
 }
 
 UTEST(libstb_filter_tests, test_filters_keep_size_channels_and_format) {
@@ -588,7 +588,7 @@ UTEST(libstb_filter_tests, test_scharr_of_a_step_is_16_times_its_height_and_foll
 
 UTEST(libstb_filter_tests, test_scharr_of_8_bits_is_the_scharr_of_the_floats_and_an_empty_input_has_empty_gradients) {
     const stb::image8u u = patterned8(14, 9, stb::pixel_format::rgb);
-    const stb::gradients a = stb::scharr(u), b = stb::scharr(stb::to_f32(u));
+    const stb::gradients a = stb::scharr(u), b = stb::scharr(stb::cast<float>(u));
     EXPECT_TRUE(same_bits(a.dx, b.dx));
     EXPECT_TRUE(same_bits(a.dy, b.dy));
     EXPECT_TRUE(stb::scharr(stb::mat8u()).dx.empty());
@@ -819,7 +819,7 @@ UTEST(libstb_filter_tests, test_guided_alpha_is_copied_the_alpha_of_a_guide_is_i
     const stb::image8u out = stb::guided_filter(rgba, 2, 0.01f);
     for (int y = 0; y < 12; ++y)
         for (int x = 0; x < 15; ++x) ASSERT_EQ(int(out(x, y, 3)), int(rgba(x, y, 3)));
-    ASSERT_TRUE(same_bytes(out, stb::to_8u(stb::guided_filter(stb::to_f32(rgba), 2, 0.01f))));
+    ASSERT_TRUE(same_bytes(out, stb::cast<std::uint8_t>(stb::guided_filter(stb::cast<float>(rgba), 2, 0.01f))));
     // a guide of gray + alpha is the gray guide; RGBA is the RGB guide
     const stb::mat32f ga = patterned(15, 12, 2), g = patterned(15, 12, 1);
     stb::mat32f g_only(15, 12, 1);

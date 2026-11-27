@@ -63,8 +63,8 @@ UTEST(libstb_mat_tests, test_an_empty_mat_has_no_cells) {
     EXPECT_EQ(std::size_t(0), e.size());
     EXPECT_TRUE(e.begin() == e.end());
     EXPECT_TRUE(e.copy().empty());
-    EXPECT_TRUE(stb::to_8u(e).empty());
-    EXPECT_TRUE(stb::to_f32(stb::mat8u()).empty());
+    EXPECT_TRUE(stb::cast<std::uint8_t>(e).empty());
+    EXPECT_TRUE(stb::cast<float>(stb::mat8u()).empty());
 }
 
 UTEST(libstb_mat_tests, test_a_list_of_rows_makes_a_one_channel_mat) {
@@ -174,9 +174,9 @@ UTEST(libstb_mat_tests, test_an_image_is_a_mat_and_a_mat_can_become_an_image) {
 
 // ---------------------------------------------------------------- 8 bits <-> float
 
-UTEST(libstb_mat_tests, test_to_f32_divides_by_255_and_keeps_the_shape) {
+UTEST(libstb_mat_tests, test_cast_to_float_divides_by_255_and_keeps_the_shape) {
     const stb::image8u src(2, 1, stb::pixel_format::rgb, std::vector<std::uint8_t>{0, 51, 255, 102, 153, 204});
-    const stb::mat32f f = stb::to_f32(src);
+    const stb::mat32f f = stb::cast<float>(src);
     ASSERT_EQ(2, f.width());
     ASSERT_EQ(1, f.height());
     ASSERT_EQ(3, f.channels());
@@ -184,21 +184,140 @@ UTEST(libstb_mat_tests, test_to_f32_divides_by_255_and_keeps_the_shape) {
     for (std::size_t i = 0; i < 6; ++i) EXPECT_EQ(expect[i], f.data()[i]);
 }
 
+UTEST(libstb_mat_tests, test_cast_is_a_method_of_image_and_a_function_of_any_mat) {
+    const stb::image8u src(2, 1, stb::pixel_format::rgb, std::vector<std::uint8_t>{0, 51, 255, 102, 153, 204});
+    const stb::mat32f by_method = src.cast<float>();
+    const stb::mat32f by_function = stb::cast<float>(src);
+    const stb::mat32f of_the_base = stb::cast<float>(static_cast<const stb::mat8u&>(src));
+    ASSERT_EQ(std::size_t(6), by_method.size());
+    for (std::size_t i = 0; i < 6; ++i) {
+        EXPECT_EQ(by_function.data()[i], by_method.data()[i]);
+        EXPECT_EQ(by_function.data()[i], of_the_base.data()[i]);
+    }
+    const stb::image8u back = by_method.size() == 6 ? stb::cast<std::uint8_t>(by_method) : stb::image8u();
+    EXPECT_EQ(int(src.format()), int(back.format()));
+}
+
+// cast<To> for every pair of integer and float types: read as value / max, written as round(clamp(value * max, lowest, max))
+UTEST(libstb_mat_tests, test_cast_between_unsigned_integers_scales_by_the_maxima) {
+    const stb::mat8u a(3, 1, 1, std::vector<std::uint8_t>{0, 100, 255});
+    const stb::mat<std::uint16_t> b = stb::cast<std::uint16_t>(a);
+    ASSERT_EQ(std::size_t(3), b.size());
+    EXPECT_EQ(0, int(b.data()[0]));
+    EXPECT_EQ(100 * 257, int(b.data()[1]));
+    EXPECT_EQ(65535, int(b.data()[2]));
+    const stb::image8u back = stb::cast<std::uint8_t>(b);  // every 8-bit value survives 8 -> 16 -> 8
+    for (std::size_t i = 0; i < 3; ++i) EXPECT_EQ(int(a.data()[i]), int(back.data()[i]));
+    const stb::mat<std::uint16_t> w(5, 1, 1, std::vector<std::uint16_t>{0, 128, 129, 32768, 65535});
+    const stb::image8u n = stb::cast<std::uint8_t>(w);  // a value / 257: 128 is 0.498, 129 is 0.502, 32768 is 127.5019
+    EXPECT_EQ(0, int(n.data()[0]));
+    EXPECT_EQ(0, int(n.data()[1]));
+    EXPECT_EQ(1, int(n.data()[2]));
+    EXPECT_EQ(128, int(n.data()[3]));
+    EXPECT_EQ(255, int(n.data()[4]));
+    const stb::mat<std::uint32_t> big = stb::cast<std::uint32_t>(a);
+    EXPECT_EQ(std::uint32_t(4294967295u), big.data()[2]);
+}
+
+UTEST(libstb_mat_tests, test_cast_of_an_integer_to_float_and_back_for_16_and_32_bits) {
+    const stb::mat<std::uint16_t> w(3, 1, 1, std::vector<std::uint16_t>{0, 1234, 65535});
+    const stb::mat32f f = stb::cast<float>(w);
+    EXPECT_EQ(0.0f, f.data()[0]);
+    EXPECT_NEAR(1234.0 / 65535.0, double(f.data()[1]), 1e-7);
+    EXPECT_EQ(1.0f, f.data()[2]);
+    const stb::mat<std::uint16_t> again = stb::cast<std::uint16_t>(f);
+    for (std::size_t i = 0; i < 3; ++i) EXPECT_EQ(int(w.data()[i]), int(again.data()[i]));
+    const stb::mat<std::int32_t> i32(3, 1, 1, std::vector<std::int32_t>{0, 1000000, 2147483647});
+    const stb::mat<double> d = stb::cast<double>(i32);  // in double precision: nothing is lost
+    EXPECT_EQ(0.0, d.data()[0]);
+    EXPECT_NEAR(1000000.0 / 2147483647.0, d.data()[1], 1e-15);
+    EXPECT_EQ(1.0, d.data()[2]);
+    const stb::mat<std::int32_t> i32b = stb::cast<std::int32_t>(d);
+    for (std::size_t i = 0; i < 3; ++i) EXPECT_EQ(i32.data()[i], i32b.data()[i]);
+}
+
+UTEST(libstb_mat_tests, test_cast_of_a_signed_type_keeps_the_sign_and_clamps_at_the_unsigned_zero) {
+    const stb::mat<std::int16_t> s(4, 1, 1, std::vector<std::int16_t>{-32768, -16384, 0, 32767});
+    const stb::mat32f f = stb::cast<float>(s);
+    EXPECT_NEAR(-32768.0 / 32767.0, double(f.data()[0]), 1e-6);  // a hair below -1
+    EXPECT_NEAR(-16384.0 / 32767.0, double(f.data()[1]), 1e-6);
+    EXPECT_EQ(0.0f, f.data()[2]);
+    EXPECT_EQ(1.0f, f.data()[3]);
+    const stb::mat<std::int16_t> again = stb::cast<std::int16_t>(f);  // the round trip is exact, -32768 included
+    for (std::size_t i = 0; i < 4; ++i) EXPECT_EQ(int(s.data()[i]), int(again.data()[i]));
+    const stb::image8u u = stb::cast<std::uint8_t>(s);  // negative values are below black
+    EXPECT_EQ(0, int(u.data()[0]));
+    EXPECT_EQ(0, int(u.data()[1]));
+    EXPECT_EQ(0, int(u.data()[2]));
+    EXPECT_EQ(255, int(u.data()[3]));
+    const stb::mat<std::int16_t> from_float = stb::cast<std::int16_t>(stb::mat32f(3, 1, 1, std::vector<float>{-2.0f, 0.5f, 3.0f}));
+    EXPECT_EQ(-32768, int(from_float.data()[0]));  // clamped at the lowest value
+    EXPECT_EQ(16384, int(from_float.data()[1]));   // 16383.5 rounds away from zero
+    EXPECT_EQ(32767, int(from_float.data()[2]));
+}
+
+UTEST(libstb_mat_tests, test_cast_turns_nan_into_zero_and_clamps_in_every_integer_type) {
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const stb::mat32f f(4, 1, 1, std::vector<float>{nan, -1.0f, 2.0f, 0.5f});
+    const stb::mat<std::uint16_t> u = stb::cast<std::uint16_t>(f);
+    EXPECT_EQ(0, int(u.data()[0]));
+    EXPECT_EQ(0, int(u.data()[1]));
+    EXPECT_EQ(65535, int(u.data()[2]));
+    EXPECT_EQ(32768, int(u.data()[3]));
+    const stb::mat<std::int32_t> i = stb::cast<std::int32_t>(f);
+    EXPECT_EQ(0, i.data()[0]);
+    EXPECT_EQ(-2147483647, i.data()[1]);  // -1.0 is minus white (-max); only below it the value is clamped at the lowest
+    EXPECT_EQ(2147483647, i.data()[2]);
+    const stb::mat<std::int32_t> below = stb::cast<std::int32_t>(stb::mat<double>(1, 1, 1, std::vector<double>{-1.5}));
+    EXPECT_EQ(-2147483647 - 1, below.data()[0]);
+}
+
+UTEST(libstb_mat_tests, test_cast_keeps_the_size_and_the_channels_and_copies_the_same_type) {
+    stb::mat<std::uint16_t> m(5, 3, 3);
+    for (std::size_t i = 0; i < m.size(); ++i) m.data()[i] = std::uint16_t(i * 100);
+    const stb::mat<std::uint16_t> same = stb::cast<std::uint16_t>(m);
+    EXPECT_EQ(5, same.width());
+    EXPECT_EQ(3, same.height());
+    EXPECT_EQ(3, same.channels());
+    EXPECT_TRUE(same.data() != m.data());
+    for (std::size_t i = 0; i < m.size(); ++i) EXPECT_EQ(int(m.data()[i]), int(same.data()[i]));
+    EXPECT_TRUE(stb::cast<std::uint16_t>(stb::mat<std::uint8_t>()).empty());
+    const stb::mat<double> d = stb::cast<double>(stb::mat32f(2, 1, 1, std::vector<float>{0.25f, 0.75f}));
+    EXPECT_EQ(0.25, d.data()[0]);
+    EXPECT_EQ(0.75, d.data()[1]);
+}
+
+UTEST(libstb_mat_tests, test_cast_to_the_same_type_is_a_copy) {
+    const stb::image8u src(2, 1, stb::pixel_format::rgb, std::vector<std::uint8_t>{0, 51, 255, 102, 153, 204});
+    const stb::image8u same = src.cast<std::uint8_t>();
+    ASSERT_EQ(src.size(), same.size());
+    EXPECT_EQ(int(src.format()), int(same.format()));
+    EXPECT_TRUE(same.data() != src.data());
+    for (std::size_t i = 0; i < src.size(); ++i) EXPECT_EQ(int(src.data()[i]), int(same.data()[i]));
+    const stb::mat32f f(2, 1, 1, std::vector<float>{0.25f, 0.75f});
+    const stb::mat32f g = stb::cast<float>(f);
+    EXPECT_TRUE(g.data() != f.data());
+    EXPECT_EQ(0.25f, g.data()[0]);
+    EXPECT_EQ(0.75f, g.data()[1]);
+    EXPECT_TRUE(stb::cast<float>(stb::mat32f()).empty());
+    EXPECT_TRUE(stb::cast<std::uint8_t>(stb::mat8u()).empty());
+}
+
 UTEST(libstb_mat_tests, test_every_8_bit_value_survives_a_round_trip) {
     std::vector<std::uint8_t> all(256);
     for (int i = 0; i < 256; ++i) all[std::size_t(i)] = std::uint8_t(i);
     const stb::image8u src(16, 16, stb::pixel_format::gray, all);
-    const stb::image8u back = stb::to_8u(stb::to_f32(src));
+    const stb::image8u back = stb::cast<std::uint8_t>(stb::cast<float>(src));
     ASSERT_EQ(std::size_t(256), back.size());
     for (int i = 0; i < 256; ++i) EXPECT_EQ(int(all[std::size_t(i)]), int(back.data()[i]));
 }
 
-UTEST(libstb_mat_tests, test_to_8u_rounds_to_nearest_clamps_and_turns_nan_into_zero) {
+UTEST(libstb_mat_tests, test_cast_to_uint8_rounds_to_nearest_clamps_and_turns_nan_into_zero) {
     const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
     const std::vector<float> v = {0.0f, 1.0f, -0.5f, 1.5f, 0.5f / 255.0f * 0.99f, 0.5f / 255.0f * 1.01f,
                                   nan,  inf,  -inf,  0.5f};
     const stb::mat32f f(5, 2, 1, v);
-    const stb::image8u out = stb::to_8u(f);
+    const stb::image8u out = stb::cast<std::uint8_t>(f);
     const int expect[10] = {0, 255, 0, 255,
                             0,    // just under half a step rounds down
                             1,    // just over half a step rounds up
@@ -212,10 +331,10 @@ UTEST(libstb_mat_tests, test_the_conversion_keeps_every_pixel_format_and_refuses
     for (const stb::pixel_format fmt : {stb::pixel_format::gray, stb::pixel_format::gray_alpha, stb::pixel_format::rgb,
                                         stb::pixel_format::rgba}) {
         const stb::image8u src(3, 2, fmt);
-        const stb::mat32f f = stb::to_f32(src);
+        const stb::mat32f f = stb::cast<float>(src);
         EXPECT_EQ(stb::channel_count(fmt), f.channels());
-        EXPECT_TRUE(stb::to_8u(f).format() == fmt);
+        EXPECT_TRUE(stb::cast<std::uint8_t>(f).format() == fmt);
     }
-    ASSERT_THROWS(stb::to_8u(stb::mat32f(2, 2, 5)), std::invalid_argument);
-    EXPECT_EQ(5, stb::to_f32(stb::mat8u(2, 2, 5)).channels());  // to_f32 takes any mat8u
+    ASSERT_THROWS(stb::cast<std::uint8_t>(stb::mat32f(2, 2, 5)), std::invalid_argument);
+    EXPECT_EQ(5, stb::cast<float>(stb::mat8u(2, 2, 5)).channels());  // cast<float> takes any mat8u
 }

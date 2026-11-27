@@ -24,7 +24,7 @@
 //   image8u img = image8u::decode(bytes, size);
 //   image8u better = stb::equalize(img);                         // luma only: the colours do not shift
 //   stb::auto_contrast_inplace(img, 1.0f);                       // drop the darkest and brightest 1 %
-//   mat32f f = stb::equalize(stb::to_f32(img));                  // the same on floats
+//   mat32f f = stb::equalize(stb::cast<float>(img));                  // the same on floats
 //   mat32i h = stb::histogram(img);                              // 256 x 1 x channels counts
 //
 // On 8-bit data the result is exact integer arithmetic; on floats the order of the operations is fixed, so

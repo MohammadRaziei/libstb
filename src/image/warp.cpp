@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "pixel_range.hpp"
+#include "stb/pixel_range.hpp"
 #include "plane.hpp"
 #include "stb/parallel.hpp"
 
@@ -84,7 +84,7 @@ inline void cubic_weights(float t, float w[4]) noexcept {
 
 template <class T>
 inline T store_value(float v) noexcept {
-    return detail_pixel::range<T>::store(v);
+    return pixel_range<T>::store(v);
 }
 
 template <class T>

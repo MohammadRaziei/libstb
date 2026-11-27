@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 
 #include "image/math_kernels.hpp"
@@ -67,7 +68,8 @@ const math_kernels& math() noexcept {
 
 }  // namespace detail
 
-mat32f to_f32(const mat8u& src) {
+template <>
+mat32f cast<float, std::uint8_t>(const mat8u& src) {
     if (src.empty()) return mat32f();
     mat32f out(src.width(), src.height(), src.channels());
     const std::uint8_t* s = src.data();
@@ -78,7 +80,8 @@ mat32f to_f32(const mat8u& src) {
     return out;
 }
 
-image8u to_8u(const mat32f& src) {
+template <>
+image8u cast<std::uint8_t, float>(const mat32f& src) {
     if (src.empty()) return image8u();
     image8u out(src.width(), src.height(), pixel_format_from_channels(src.channels()));
     const float* s = src.data();
@@ -86,6 +89,19 @@ image8u to_8u(const mat32f& src) {
     const detail::math_kernels& k = detail::math();
     utils::parallel_for(src.size(), detail::convert_ns,
                          [&](std::size_t b, std::size_t e) { k.f32_to_u8(s + b, d + b, e - b); });
+    return out;
+}
+
+template <>
+mat32f cast<float, float>(const mat32f& src) {
+    return src.copy();
+}
+
+template <>
+image8u cast<std::uint8_t, std::uint8_t>(const mat8u& src) {
+    if (src.empty()) return image8u();
+    image8u out(src.width(), src.height(), pixel_format_from_channels(src.channels()));
+    std::copy(src.data(), src.data() + src.size(), out.data());
     return out;
 }
 

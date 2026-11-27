@@ -8,6 +8,7 @@
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
+#include <variant>
 #include <string>
 #include <utility>
 #include <vector>
@@ -156,6 +157,10 @@ stb::mat32f kernel_of(nb::handle h) {
 // The kinds a function may take: the 8-bit ones (an Image, a uint8 array) or the float one.
 inline constexpr polybind::kinds<stb::image, stb::mat8u> byte_kinds{};
 inline constexpr polybind::kinds<stb::mat32f> float_kinds{};
+// Every kind that cast() reads: an Image and an array of any of the pixel types.
+inline constexpr polybind::kinds<stb::image, stb::mat8u, stb::mat<std::uint16_t>, stb::mat<std::uint32_t>, stb::mat<std::int16_t>,
+                                 stb::mat<std::int32_t>, stb::mat32f, stb::mat<double>>
+    cast_kinds{};
 
 // The type of the argument of a generic lambda (`const auto& x`) without const and reference.
 template <class T>
@@ -211,14 +216,94 @@ i32_result histogram_array(const stb::mat32i& h) {
     return i32_result(owned->data(), 2, shape, owner);
 }
 
+// What histogram() gives, as a type of its own: an int32 matrix (stb::mat32i) is an array kind of its own for cast().
+struct hist_value {
+    stb::mat32i h;
+};
+
 }  // namespace
 
-// A histogram (what stb::histogram gives) as the int32 array of shape (channels, bins) that Python gets.
+// A histogram as the int32 array of shape (channels, bins) that Python gets.
 template <>
-struct polybind::nanobind_backend::kind<stb::mat32i> {
+struct polybind::nanobind_backend::kind<hist_value> {
     using new_ret = i32_result;
     static constexpr auto new_policy = nb::rv_policy::automatic;
-    static new_ret wrap(stb::mat32i&& h) { return histogram_array(h); }
+    static new_ret wrap(hist_value&& v) { return histogram_array(v.h); }
+};
+
+namespace {
+
+// The pixel types cast() knows: the ones a numpy array of a picture has.
+using u16_mat = stb::mat<std::uint16_t>;
+using u32_mat = stb::mat<std::uint32_t>;
+using i16_mat = stb::mat<std::int16_t>;
+using i32_mat = stb::mat<std::int32_t>;
+using f64_mat = stb::mat<double>;
+
+// The result of cast(): an array of any of those types or an Image, which one is known only when the type is read from Python.
+using cast_value = std::variant<stb::mat8u, u16_mat, u32_mat, i16_mat, i32_mat, stb::mat32f, f64_mat, stb::image>;
+
+enum class pixel_type { uint8, uint16, uint32, int16, int32, float32, float64 };
+
+// "uint8", "uint16", "uint32", "int16", "int32", "float32" or "float64", or a numpy dtype or scalar type (numpy.float32): read with the GIL.
+pixel_type pixel_type_of(nb::handle h) {
+    std::string name;
+    if (nb::isinstance<nb::str>(h)) name = nb::cast<std::string>(h);
+    else if (nb::hasattr(h, "name")) name = nb::cast<std::string>(h.attr("name"));
+    else if (nb::hasattr(h, "__name__")) name = nb::cast<std::string>(h.attr("__name__"));
+    else throw std::invalid_argument("the type is a name (\"uint8\", \"float32\", ...) or a numpy dtype");
+    static const std::pair<const char*, pixel_type> names[] = {
+        {"uint8", pixel_type::uint8},   {"uint16", pixel_type::uint16}, {"uint32", pixel_type::uint32},   {"int16", pixel_type::int16},
+        {"int32", pixel_type::int32},   {"float32", pixel_type::float32}, {"float64", pixel_type::float64}};
+    for (const auto& [n, t] : names)
+        if (name == n) return t;
+    throw std::invalid_argument("cannot cast to \"" + name +
+                                "\": use \"uint8\", \"uint16\", \"uint32\", \"int16\", \"int32\", \"float32\" or \"float64\"");
+}
+
+// stb::cast<To>(x) as a cast_value: an Image to uint8 stays an Image, every other result is an array (a mat8u for uint8).
+template <class To, class M>
+cast_value cast_to(const M& x) {
+    auto r = stb::cast<To>(x);
+    if constexpr (std::is_same_v<To, std::uint8_t>) {
+        if constexpr (std::is_same_v<M, stb::image>) return cast_value(std::move(r));
+        else return cast_value(stb::mat8u(std::move(r)));
+    } else {
+        return cast_value(std::move(r));
+    }
+}
+
+template <class M>
+cast_value cast_as(const M& x, pixel_type t) {
+    switch (t) {
+        case pixel_type::uint8: return cast_to<std::uint8_t>(x);
+        case pixel_type::uint16: return cast_to<std::uint16_t>(x);
+        case pixel_type::uint32: return cast_to<std::uint32_t>(x);
+        case pixel_type::int16: return cast_to<std::int16_t>(x);
+        case pixel_type::int32: return cast_to<std::int32_t>(x);
+        case pixel_type::float32: return cast_to<float>(x);
+        case pixel_type::float64: return cast_to<double>(x);
+    }
+    throw std::logic_error("unknown pixel type");
+}
+
+}  // namespace
+
+// An array (with the shape of the argument) or an Image, as the Python object.
+template <>
+struct polybind::nanobind_backend::kind<cast_value> {
+    using new_ret = nb::object;
+    static constexpr auto new_policy = nb::rv_policy::automatic;
+    template <class H>
+    static new_ret wrap(cast_value&& v, const H& like) {
+        return std::visit(
+            [&](auto&& a) -> nb::object {
+                using A = std::decay_t<decltype(a)>;
+                if constexpr (std::is_same_v<A, stb::image>) return nb::cast(std::move(a));
+                else return nb::cast(kind<A>::wrap(std::move(a), like));
+            },
+            std::move(v));
+    }
 };
 
 namespace {
@@ -260,10 +345,10 @@ void bind_tone(nb::module_& m, nb::class_<stb::image>& image_cls) {
         "For a float32 array: `bins` equal bins over [0, 1] (values outside are counted in the first or last bin, NaN not\n"
         "at all) and shape (channels, bins).";
     def_dispatch(m, image_cls, "histogram", byte_kinds,
-                 [](const auto& x) { return stb::histogram(x); },
+                 [](const auto& x) { return hist_value{stb::histogram(x)}; },
                  "src"_a, histogram_doc);
     def_dispatch(m, image_cls, "histogram", float_kinds,
-                 [](const auto& x, int bins) { return stb::histogram(x, bins); },
+                 [](const auto& x, int bins) { return hist_value{stb::histogram(x, bins)}; },
                  "src"_a, "bins"_a = 256, histogram_doc);
 
     // ---- equalize
@@ -815,14 +900,18 @@ void bind_filter(nb::module_& m) {
     auto image_cls = nb::borrow<nb::class_<stb::image>>(m.attr("Image"));
 
     // ---- conversions
-    m.def("to_f32", [](const stb::image& img) { return to_array(stb::to_f32(img), true); }, "src"_a,
-          "The pixels of an Image as a float32 array of shape (H, W, C): every value / 255, so 0 is 0.0 and 255 is 1.0.");
-    image_cls.def("to_f32", [](const stb::image& img) { return to_array(stb::to_f32(img), true); },
-                  "The pixels as a float32 array of shape (H, W, C): every value / 255, so 0 is 0.0 and 255 is 1.0.");
-    def_dispatch(m, image_cls, "to_8u", float_kinds,
-                 [](const auto& x) { return of_kind<stb::mat8u>(stb::to_8u(x)); },
-                 "src"_a, "A float32 array of shape (H, W) or (H, W, C) with 1 to 4 channels as a uint8 array: round(clamp(v, 0, 1) * 255),\n"
-                 "NaN becomes 0. The inverse of to_f32.");
+    def_dispatch(m, image_cls, "cast", cast_kinds,
+                 [](const auto& x, nb::handle to) -> cast_value {
+                     const pixel_type t = with_gil([&] { return pixel_type_of(to); });
+                     return cast_as(x, t);
+                 },
+                 "src"_a, "to"_a,
+                 "The same picture in another pixel type, keeping the range: white stays white. `to` is \"uint8\", \"uint16\", \"uint32\",\n"
+                 "\"int16\", \"int32\", \"float32\" or \"float64\" (or a numpy dtype or type). A value is read as value / max of its type (a float is\n"
+                 "0 to 1, a signed integer -1 to 1) and written as round(clamp(value * max of the new type, lowest, max)); NaN becomes 0. So\n"
+                 "uint8 to float32 divides by 255 (0 is 0.0 and 255 is 1.0), float32 to uint8 is round(clamp(v, 0, 1) * 255), uint8 to uint16\n"
+                 "multiplies by 257. The same type gives a copy. An Image to uint8 is an Image; every other result is a new array of the shape\n"
+                 "of the argument ((H, W, C) for an Image). The argument is an Image or an array of one of those types.");
 
     // ---- kernels
     m.def(

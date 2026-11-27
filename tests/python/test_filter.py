@@ -27,18 +27,18 @@ def brute_correlate(a, k, mode="edge"):
     return out
 
 
-def test_to_f32_and_back_is_exact_for_every_8_bit_value():
+def test_cast_to_float32_and_back_is_exact_for_every_8_bit_value():
     a = np.arange(256, dtype=np.uint8).reshape(16, 16, 1)
-    f = stb.to_f32(stb.Image(a))
+    f = stb.cast(stb.Image(a), "float32")
     assert f.dtype == np.float32 and f.shape == (16, 16, 1)
     assert f.min() == 0.0 and f.max() == 1.0
-    assert np.array_equal(np.asarray(stb.to_8u(f)), a)
-    assert np.array_equal(np.asarray(stb.Image(a).to_f32()), f)
+    assert np.array_equal(np.asarray(stb.cast(f, "uint8")), a)
+    assert np.array_equal(np.asarray(stb.Image(a).cast("float32")), f)
 
 
-def test_to_8u_rounds_clamps_and_turns_nan_into_zero():
+def test_cast_to_uint8_rounds_clamps_and_turns_nan_into_zero():
     f = np.array([[0.0, 1.0, -0.5, 1.5, np.nan, 0.5]], dtype=np.float32)
-    assert np.asarray(stb.to_8u(f)).ravel().tolist() == [0, 255, 0, 255, 0, 128]
+    assert np.asarray(stb.cast(f, "uint8")).ravel().tolist() == [0, 255, 0, 255, 0, 128]
 
 
 def test_gaussian_blur_matches_a_numpy_convolution():
@@ -68,7 +68,7 @@ def test_functions_and_methods_agree():
 
 def test_an_8_bit_filter_is_the_float_filter_rounded_once():
     img = stb.Image(rand8(30, 33, 3))
-    want = stb.to_8u(stb.gaussian_blur(stb.to_f32(img), 2.0))
+    want = stb.cast(stb.gaussian_blur(stb.cast(img, "float32"), 2.0), "uint8")
     assert np.array_equal(np.asarray(stb.gaussian_blur(img, 2.0)), np.asarray(want))
 
 
@@ -130,7 +130,7 @@ def test_bad_arguments_raise_value_error():
                  lambda: stb.box_blur(a, -1), lambda: stb.convolve(a, [[1, 2], [3, 4]]),
                  lambda: stb.convolve(a, [[1, 2, 3], [4, 5, 6], [7, 8, 9]], [1, 2, 1]),
                  lambda: stb.gaussian_blur(np.zeros((0, 3), np.float32), 1.0), lambda: stb.gaussian_blur(randf(2, 2, 2).reshape(2, 2, 2, 1), 1.0),
-                 lambda: stb.to_8u(np.zeros((4, 4, 5), np.float32)), lambda: stb.magnitude(a, randf(8, 9))):
+                 lambda: stb.cast(np.zeros((4, 4, 5), np.float32), "uint8"), lambda: stb.magnitude(a, randf(8, 9))):
         with pytest.raises(ValueError):
             call()
 

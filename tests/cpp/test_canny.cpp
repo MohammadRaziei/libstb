@@ -95,9 +95,9 @@ UTEST(libstb_canny_tests, test_8_bit_values_are_read_as_value_over_255_and_colou
             gray(x, y, 0) = v;
             for (int k = 0; k < 3; ++k) rgb(x, y, k) = v;
         }
-    EXPECT_TRUE(same_bytes(stb::canny(gray), stb::canny(stb::to_f32(gray))));
+    EXPECT_TRUE(same_bytes(stb::canny(gray), stb::canny(stb::cast<float>(gray))));
     EXPECT_TRUE(same_bytes(stb::canny(gray), stb::canny(rgb)));
-    EXPECT_TRUE(same_bytes(stb::canny(gray), stb::canny(stb::to_f32(rgb))));
+    EXPECT_TRUE(same_bytes(stb::canny(gray), stb::canny(stb::cast<float>(rgb))));
     // an RGBA picture is read through its colour: the alpha channel does not count
     image8u rgba(40, 40, stb::pixel_format::rgba);
     for (int y = 0; y < 40; ++y)
