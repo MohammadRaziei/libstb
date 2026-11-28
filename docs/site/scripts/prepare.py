@@ -76,7 +76,7 @@ def cmd_bench():
         (OUT / "benchmark.json").write_text(json.dumps(EMPTY_BENCH) + "\n", encoding="utf-8")
         return
     shutil.copyfile(digest, OUT / "benchmark.json")
-    # the raw files stay downloadable next to the page: /benchmarks/benchmark.json and /benchmarks/results/<step>.json
+    # the raw files stay downloadable next to the pages: /benchmarks/benchmark.json and /benchmarks/results/<step>.json (the Benchmarks chapter links them)
     dst = ROOT / "static" / "benchmarks"
     (dst / "results").mkdir(parents=True, exist_ok=True)
     shutil.copyfile(digest, dst / "benchmark.json")

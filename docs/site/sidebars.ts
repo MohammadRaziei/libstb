@@ -9,6 +9,21 @@ const sidebars: SidebarsConfig = {
       label: 'Image',
       items: ['image/resize'],
     },
+    {
+      type: 'category',
+      label: 'Benchmarks',
+      items: [
+        'benchmarks/overview',
+        'benchmarks/method',
+        'benchmarks/decoding',
+        'benchmarks/encoding',
+        'benchmarks/resizing',
+        'benchmarks/editing',
+        'benchmarks/scaling',
+        'benchmarks/fonts',
+        'benchmarks/install-size',
+      ],
+    },
   ],
 };
 

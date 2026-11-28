@@ -14,7 +14,7 @@ libstb had a Docusaurus home page and guide, a Doxygen (C++) and a Sphinx (Pytho
 - `tests/python/test_examples.py` runs every example in a clean folder, builds the C++ one with the CMake recipe read from the install page, requires the same bytes from both languages, and requires them to be the pictures the page shows (`docs/site/static/img/<topic>/`).
 - The CI job `build-docs` (in `cmake.yml`) runs the check, the examples test, the type check and the build, and uploads the result as `cmake-documentation`. The orchestrator's `deploy-pages` publishes it with the coverage dashboard under `/coverage`. There is no separate `pages.yml` (as httpp has): two workflows deploying to one Pages site would overwrite each other, and the coverage dashboard would be lost.
 - `docs/guide.md`, `docs/adr/` and `docs/images/` stay where they are, because the README, the changelog, the source comments and the tests link to them.
-- The benchmarks page is libstb's own (`src/pages/benchmarks.tsx`, drawing `benchmarks/outputs/benchmark.json`); httpp's `Bench` component draws httpp's result format and was not reused.
+- Benchmarks are a chapter of the docs (`docs/benchmarks/`: overview, method, decoding, encoding, resizing, editing, scaling, fonts, install-size), one page per section of `benchmarks/outputs/benchmark.json`, drawn by libstb's own components (`src/components/benchmarks/Sections.tsx`). httpp's `Bench` component draws httpp's result format and was not reused.
 
 ## Rejected alternatives
 

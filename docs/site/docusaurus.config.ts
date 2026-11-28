@@ -34,7 +34,7 @@ const config: Config = {
       logo: {alt: 'libstb', src: 'img/logo.svg', srcDark: 'img/logo-dark.svg', height: 26},
       items: [
         {type: 'docSidebar', sidebarId: 'main', label: 'Docs', position: 'left'},
-        {to: '/benchmarks', label: 'Benchmarks', position: 'left'},
+        {to: '/docs/benchmarks/overview', label: 'Benchmarks', position: 'left'},
         {type: 'custom-langSwitch', position: 'right'},
         {href: 'https://github.com/mohammadraziei/libstb', label: 'GitHub', position: 'right'},
       ],

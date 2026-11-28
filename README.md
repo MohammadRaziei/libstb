@@ -43,7 +43,7 @@ img.resize(320, 240, "cubic").write("small.png")   # the format comes from the e
 ## Highlights
 
 - **Python and C++, one library.** The same operations in `stb::image` (C++17) and
-  `libstb.Image` (nanobind). The Linux x86-64 wheel is under 1 MB.
+  `libstb.Image` (nanobind). The Linux x86-64 wheel is about 1.5 MB.
 - **Many formats in, four out.** Decodes PNG, JPEG, BMP, TGA, GIF and more; encodes PNG, JPEG,
   BMP and TGA.
 - **Editing, not just I/O.** Crop, pad, flips, rotation, thumbnail, channel conversion, alpha

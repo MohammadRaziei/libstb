@@ -1,0 +1,24 @@
+---
+id: method
+title: Method
+sidebar_label: Method
+---
+
+import { Method } from '@site/src/components/benchmarks/Sections';
+
+How a number on these pages is computed, and how to get the same numbers on your own machine.
+
+<Method />
+
+## Reproduce
+
+From the repository root:
+
+```bash
+cmake -S benchmarks -B benchmarks/build
+cmake --build benchmarks/build --target stb_benchmark
+```
+
+`stb_benchmark` builds the corpus, checks every output (nothing is timed before every library's result has passed), measures speed and memory, and writes `benchmarks/outputs/`. Each step is also its own target (`cmake --build benchmarks/build --target <name>`); [benchmarks/README.md](https://github.com/MohammadRaziei/libstb/blob/master/benchmarks/README.md) lists them, and explains how the corpus was built, why timing is best-of-N, and the memory-measurement problem the suite works around.
+
+The site draws what is committed in `benchmarks/outputs/`, so after a new run commit that folder and build the site again (`python3 scripts/prepare.py bench` copies it).

@@ -38,9 +38,9 @@ One line in `languages.json` and a `<lang>/main.<ext>` file in each topic of `ex
 
 The CI job `build-docs` (`.github/workflows/cmake.yml`) builds the site with `DOCS_URL` and `DOCS_BASE_URL` taken from the repository, and the orchestrator's `deploy-pages` job publishes it, with the coverage dashboard under `/coverage`, at https://mohammadraziei.github.io/libstb/ (ADR-0004). Set Settings, Pages, Source: "GitHub Actions" once, or the address keeps answering 404. Locally the site is at http://localhost:3000/libstb/. There is no separate Pages workflow: two workflows deploying to one site would overwrite each other.
 
-## The Benchmarks page
+## The Benchmarks chapter
 
-`/benchmarks` (`src/pages/benchmarks.tsx`, `src/components/benchmarks/`) draws `benchmarks/outputs/benchmark.json`, which `benchmarks/report/gather.py` writes. The lesson bars (`src/components/Bench.tsx`) read the same digest. Colours come from `src/css/tokens.css`.
+`docs/benchmarks/*.mdx`: overview, method, decoding, encoding, resizing, editing, scaling, fonts, install-size. The text is MDX; the numbers, charts and tables are drawn by `src/components/benchmarks/Sections.tsx` (one component per page) from `benchmarks/outputs/benchmark.json`, which `benchmarks/report/gather.py` writes. The lesson bars (`src/components/Bench.tsx`) read the same file. Colours come from `src/css/tokens.css`. A section the data does not have yet (a new operation) needs a page here and an entry in `sidebars.ts`. The charts are drawn in the browser, so they are not in the static HTML.
 
 ## Not done yet
 

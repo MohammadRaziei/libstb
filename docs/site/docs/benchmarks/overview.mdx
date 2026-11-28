@@ -1,0 +1,11 @@
+---
+id: overview
+title: Benchmarks
+sidebar_label: Overview
+---
+
+import { Overview } from '@site/src/components/benchmarks/Sections';
+
+libstb is measured against Pillow, OpenCV, imageio and scikit-image, one operation at a time: decoding, encoding, resizing, editing, drawing text and installing. Every chart in this chapter is drawn from one file, `benchmarks/outputs/benchmark.json`, which the benchmark suite writes; nothing here is typed by hand.
+
+<Overview />

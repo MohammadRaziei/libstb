@@ -229,6 +229,7 @@
 
 - [x] ساخت سایت با `npm run build` و type check پاس شد؛ `prepare.py all` پاس شد.
 - [ ] `tests/python/test_examples.py` روی CI (ubuntu) اجرا نشده؛ ctest روی Windows و macOS هم این تست رو می‌بینه (بخش C++ با DLL).
+- [ ] داده‌ی بنچمارک قدیمیه (نسخه‌ی libstb توی جدول install هنوز 0.5.0 است، روی ماشین ۱ هسته‌ای، 2026-10-15)؛ قبل از انتشار دوباره اجرا بشه.
 - [ ] فقط یک درس (`resize`) نوشته شده. بقیه‌ی کتابخانه (فیلترها، فونت و shaping، رسم، zlib، EXIF، logging) فقط توی `docs/guide.md` و README هست و درس نداره.
 - [ ] مرجع API (C++ و Python) نداریم و `ApiLink` هم نیست؛ اگر لازم شد، تصمیمش با صاحب پروژه است (httpp هم ندارد).
 - [ ] صفحه‌ی اصلی، رنگ‌ها (`tokens.css` برای صفحه‌ی بنچمارک + `custom.css` از httpp) و موبایل توی مرورگر دیده نشدن.

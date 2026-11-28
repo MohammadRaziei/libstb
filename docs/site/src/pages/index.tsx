@@ -65,10 +65,10 @@ function CodeWindow() {
 }
 
 const facts = [
-  {title: 'No dependencies', text: 'No system libraries and no Python dependencies. The Linux x86-64 wheel is under 1 MB, and the C++ library builds from source with CMake.', to: '/docs/install', cta: 'Install'},
+  {title: 'No dependencies', text: 'No system libraries and no Python dependencies. The Linux x86-64 wheel is about 1.5 MB, and the C++ library builds from source with CMake.', to: '/docs/install', cta: 'Install'},
   {title: 'Python and C++, one library', text: 'The same operations in libstb.Image and stb::image. Decode PNG, JPEG, BMP, TGA and GIF, edit, resize, draw and encode.', to: '/docs/image/resize', cta: 'Resize an image'},
   {title: 'Text that shapes properly', text: 'TrueType and CFF fonts with GSUB shaping, bidi reordering and kerning, so Persian and Arabic come out right.', to: 'https://github.com/mohammadraziei/libstb/blob/master/docs/guide.md', cta: 'Read the guide'},
-  {title: 'Fast where it pays', text: 'SIMD kernels picked at run time with identical results, the GIL released in Python calls, and big resizes split over threads.', to: '/benchmarks', cta: 'See the numbers'},
+  {title: 'Fast where it pays', text: 'SIMD kernels picked at run time with identical results, the GIL released in Python calls, and big resizes split over threads.', to: '/docs/benchmarks/overview', cta: 'See the numbers'},
 ];
 
 export default function Home() {
