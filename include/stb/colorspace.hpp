@@ -52,7 +52,7 @@ STB_API color_space color_space_from_name(std::string_view name);
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> convert_color_inplace_mat(mat<T>& img, color_space from, color_space to);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void convert_color_inplace_mat(mat<T>& img, color_space from, color_space to) {
     via_float_inplace(img, [&](mat32f& f) { convert_color_inplace_mat<float>(f, from, to); });
 }

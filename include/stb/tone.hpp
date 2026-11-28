@@ -90,7 +90,7 @@ STB_API image8u apply_lut(const mat8u& src, const mat8u& lut);
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> equalize_inplace_mat(mat<T>& img, tone_mode mode);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void equalize_inplace_mat(mat<T>& img, tone_mode mode) {
     via_float_inplace(img, [&](mat32f& f) { equalize_inplace_mat<float>(f, mode); });
 }
@@ -118,7 +118,7 @@ traits::if_pixel_t<M> equalize(const M& src, tone_mode mode = tone_mode::luma) {
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> auto_contrast_inplace_mat(mat<T>& img, float cutoff_percent, tone_mode mode);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void auto_contrast_inplace_mat(mat<T>& img, float cutoff_percent, tone_mode mode) {
     via_float_inplace(img, [&](mat32f& f) { auto_contrast_inplace_mat<float>(f, cutoff_percent, mode); });
 }
@@ -149,7 +149,7 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> match_histogram_inplace_mat(mat<T>& img, const mat<T>& reference,
                                                                      tone_mode mode);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void match_histogram_inplace_mat(mat<T>& img, const mat<T>& reference, tone_mode mode) {
     via_float_inplace(img, [&](mat32f& f) { match_histogram_inplace_mat<float>(f, cast<float>(reference), mode); });
 }
@@ -181,7 +181,7 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> clahe_inplace_mat(mat<T>& img, float clip_limit, int tiles_x, int tiles_y,
                                                            tone_mode mode);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void clahe_inplace_mat(mat<T>& img, float clip_limit, int tiles_x, int tiles_y, tone_mode mode) {
     via_float_inplace(img, [&](mat32f& f) { clahe_inplace_mat<float>(f, clip_limit, tiles_x, tiles_y, mode); });
 }
@@ -216,7 +216,7 @@ traits::if_pixel_t<M> clahe(const M& src, float clip_limit = 2.0f, int tiles_x =
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> gamma_inplace_mat(mat<T>& img, float g);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void gamma_inplace_mat(mat<T>& img, float g) {
     via_float_inplace(img, [&](mat32f& f) { gamma_inplace_mat<float>(f, g); });
 }
@@ -244,7 +244,7 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> levels_inplace_mat(mat<T>& img, float in_black, float in_white, float g,
                                                             float out_black, float out_white);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void levels_inplace_mat(mat<T>& img, float in_black, float in_white, float g, float out_black, float out_white) {
     via_float_inplace(img, [&](mat32f& f) { levels_inplace_mat<float>(f, in_black, in_white, g, out_black, out_white); });
 }

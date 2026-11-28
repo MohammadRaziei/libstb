@@ -61,10 +61,10 @@ STB_API mat<T> warp_core(const mat<T>& src, const homography& h, int out_width, 
 }  // namespace detail
 
 namespace detail {
-// warp for any pixel input: a wide image goes through float (the interpolation is done on values 0 to 1)
+// warp for any pixel input: a 16 or 32 bits image goes through float (the interpolation is done on values 0 to 1)
 template <class T>
 mat<T> warp_any(const mat<T>& src, const homography& h, int out_width, int out_height, interpolation_method interpolation, edge_mode edge) {
-    if constexpr (is_wide_v<T>)
+    if constexpr (traits::is_emulated_pixel_v<T>)
         return via_float(src, [&](const mat32f& f) { return warp_core<float>(f, h, out_width, out_height, interpolation, edge); });
     else
         return warp_core<T>(src, h, out_width, out_height, interpolation, edge);

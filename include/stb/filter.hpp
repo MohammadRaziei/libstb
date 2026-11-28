@@ -122,7 +122,7 @@ namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> unsharp_mask_inplace_mat(mat<T>& img, float sigma, float amount,
                                                                   float threshold, edge_mode edge);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void unsharp_mask_inplace_mat(mat<T>& img, float sigma, float amount, float threshold, edge_mode edge) {
     via_float_inplace(img, [&](mat32f& f) { unsharp_mask_inplace_mat<float>(f, sigma, amount, threshold, edge); });
 }
@@ -155,7 +155,7 @@ traits::if_pixel_t<M> unsharp_mask(const M& src, float sigma, float amount = 1.0
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> pixelize_inplace_mat(mat<T>& img, int block_w, int block_h);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void pixelize_inplace_mat(mat<T>& img, int block_w, int block_h) {
     via_float_inplace(img, [&](mat32f& f) { pixelize_inplace_mat<float>(f, block_w, block_h); });
 }
@@ -190,10 +190,10 @@ STB_API mat8u canny_mat(const mat<T>& src, float low, float high, float sigma);
 }  // namespace detail
 
 namespace detail {
-// canny for any pixel input: a wide image goes through float
+// canny for any pixel input: a 16 or 32 bits image goes through float
 template <class T>
 mat8u canny_any(const mat<T>& src, float low, float high, float sigma) {
-    if constexpr (is_wide_v<T>) return canny_mat<float>(cast<float>(src), low, high, sigma);
+    if constexpr (traits::is_emulated_pixel_v<T>) return canny_mat<float>(cast<float>(src), low, high, sigma);
     else return canny_mat<T>(src, low, high, sigma);
 }
 }  // namespace detail

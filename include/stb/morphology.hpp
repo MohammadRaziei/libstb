@@ -45,31 +45,31 @@ STB_API mat8u structuring_element(morph_shape shape, int width, int height = 0);
 namespace detail {
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> erode_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void erode_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     via_float_inplace(img, [&](mat32f& f) { erode_inplace_mat<float>(f, se, edge); });
 }
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> dilate_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void dilate_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     via_float_inplace(img, [&](mat32f& f) { dilate_inplace_mat<float>(f, se, edge); });
 }
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> morph_gradient_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void morph_gradient_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     via_float_inplace(img, [&](mat32f& f) { morph_gradient_inplace_mat<float>(f, se, edge); });
 }
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> top_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void top_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     via_float_inplace(img, [&](mat32f& f) { top_hat_inplace_mat<float>(f, se, edge); });
 }
 template <class T>
 STB_API traits::if_image_t<mat<T>, void> black_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge);
-template <class T, class = std::enable_if_t<is_wide_v<T>>>
+template <class T, class = std::enable_if_t<traits::is_emulated_pixel_v<T>>>
 void black_hat_inplace_mat(mat<T>& img, const mat8u& se, edge_mode edge) {
     via_float_inplace(img, [&](mat32f& f) { black_hat_inplace_mat<float>(f, se, edge); });
 }

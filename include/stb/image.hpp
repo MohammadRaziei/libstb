@@ -689,24 +689,35 @@ using if_image_mutable_t = std::enable_if_t<is_image_input_v<M> && !std::is_cons
 }  // namespace traits
 
 // ---- the pixel types that have no code of their own: they go through float
-// The algorithms are compiled for 8 bits (a mat8u) and for float. Every other unsigned integer type (16 bits, 32 bits) is a "wide"
-// pixel: its value is read as value / max, the algorithm runs on floats and the result is written back with the rounding and
-// clamping of the type (see cast). A wide image is accepted by the same functions: equalize(mat<std::uint16_t>) is a mat<std::uint16_t>.
-// Signed integers are not pictures (a level 0 to max): only cast() takes them.
-namespace detail {
-template <class T>
-inline constexpr bool is_wide_v = std::is_integral_v<T> && std::is_unsigned_v<T> && !std::is_same_v<T, bool> && !std::is_same_v<T, std::uint8_t>;
-}  // namespace detail
-
+// The algorithms are compiled for 8 bits (a mat8u) and for float. The other unsigned integer types (16 bits, 32 bits) are pixels of
+// the same family (a level is read as level / max, so a value from 0 to 1, and only the max differs): the same functions take them
+// and run them on floats, writing the result back with the rounding and clamping of the type (see cast). So equalize(
+// mat<std::uint16_t>) is a mat<std::uint16_t>. Signed integers are not pictures (a level 0 to max): only cast() takes them.
 namespace traits {
+// True for an unsigned integer pixel: 8, 16 and 32 bits. A level is read as level / max (max is numeric_limits<T>::max()), so every
+// one of them is a value from 0 to 1 like a float, and only the max differs. A type that a double cannot hold exactly (64 bits),
+// bool and the signed integers are not pixels.
+template <class T>
+inline constexpr bool is_unsigned_pixel_v = std::is_integral_v<T> && std::is_unsigned_v<T> && !std::is_same_v<T, bool> &&
+                                            std::numeric_limits<T>::digits <= std::numeric_limits<double>::digits;
+
+// The pixel types the algorithms are compiled for (with their SIMD kernels): 8 bits and float.
+template <class T>
+inline constexpr bool is_native_pixel_v = std::is_same_v<T, std::uint8_t> || std::is_same_v<T, float>;
+
+// The unsigned pixels that are not native (16 and 32 bits): the same functions take them, and run them through float (cast<float>,
+// the float algorithm, cast<T>), so no code is written for each width.
+template <class T>
+inline constexpr bool is_emulated_pixel_v = is_unsigned_pixel_v<T> && !is_native_pixel_v<T>;
+
 namespace detail_pixel_input {
 template <class M, class = void>
 struct impl : std::false_type {};
 template <class M>
-struct impl<M, std::enable_if_t<is_mat_v<M>>> : std::bool_constant<is_image_input_v<M> || stb::detail::is_wide_v<mat_value_t<M>>> {};
+struct impl<M, std::enable_if_t<is_mat_v<M>>> : std::bool_constant<is_image_input_v<M> || is_unsigned_pixel_v<mat_value_t<M>>> {};
 }  // namespace detail_pixel_input
 
-// True for what the algorithms take: an image input (mat8u, mat32f) or a mat of a wide unsigned integer type.
+// True for what the algorithms take: an image input (mat8u, mat32f) or a mat of an unsigned pixel type (8, 16 or 32 bits).
 template <class M>
 inline constexpr bool is_pixel_input_v = detail_pixel_input::impl<M>::value;
 
@@ -720,7 +731,7 @@ using if_pixel_mutable_t = std::enable_if_t<is_pixel_input_v<M> && !std::is_cons
 }  // namespace traits
 
 namespace detail {
-// A function of floats applied to a wide image: to float, the function, back to the type (a new image).
+// A function of floats applied to an emulated pixel image: to float, the function, back to the type (a new image).
 template <class T, class Fn>
 mat<T> via_float(const mat<T>& src, Fn&& fn) {
     return cast<T>(fn(cast<float>(src)));

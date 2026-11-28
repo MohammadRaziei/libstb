@@ -38,10 +38,10 @@ STB_API mat8u adaptive_threshold_mat(const mat<T>& src, int radius, float offset
 }  // namespace detail
 
 namespace detail {
-// The entries for any pixel input: a wide image (16 or 32 bits) goes through float. A level of a wide type is read as level / max.
+// The entries for any pixel input: a 16 or 32 bits image goes through float. A level of a wide type is read as level / max.
 template <class T>
 mat8u threshold_any(const mat<T>& src, T t, bool invert) {
-    if constexpr (is_wide_v<T>)
+    if constexpr (traits::is_emulated_pixel_v<T>)
         return threshold_mat<float>(cast<float>(src), float(double(t) * (double(pixel_range<float>::max) / double(pixel_range<T>::max))), invert);  // as cast reads it
     else
         return threshold_mat<T>(src, t, invert);
@@ -49,7 +49,7 @@ mat8u threshold_any(const mat<T>& src, T t, bool invert) {
 
 template <class T>
 T otsu_threshold_any(const mat<T>& src) {
-    if constexpr (is_wide_v<T>)
+    if constexpr (traits::is_emulated_pixel_v<T>)
         return pixel_range<T>::store(double(otsu_threshold_mat<float>(cast<float>(src))) * double(pixel_range<T>::max));
     else
         return otsu_threshold_mat<T>(src);
@@ -57,7 +57,7 @@ T otsu_threshold_any(const mat<T>& src) {
 
 template <class T>
 mat8u adaptive_threshold_any(const mat<T>& src, int radius, float offset, adaptive_method method, bool invert, edge_mode edge) {
-    if constexpr (is_wide_v<T>)
+    if constexpr (traits::is_emulated_pixel_v<T>)
         return adaptive_threshold_mat<float>(cast<float>(src), radius, float(double(offset) / double(pixel_range<T>::max)), method, invert, edge);
     else
         return adaptive_threshold_mat<T>(src, radius, offset, method, invert, edge);

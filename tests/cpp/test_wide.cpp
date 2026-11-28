@@ -56,6 +56,16 @@ int largest_difference(const mat8u& a, const mat8u& b) {
 
 }  // namespace
 
+UTEST(libstb_wide_tests, test_every_unsigned_integer_up_to_32_bits_is_one_family_of_pixels) {
+    using stb::traits::is_unsigned_pixel_v;
+    static_assert(is_unsigned_pixel_v<std::uint8_t> && is_unsigned_pixel_v<std::uint16_t> && is_unsigned_pixel_v<std::uint32_t>);
+    static_assert(!is_unsigned_pixel_v<std::uint64_t> && !is_unsigned_pixel_v<std::int16_t> && !is_unsigned_pixel_v<bool> && !is_unsigned_pixel_v<float>);
+    // only uint8_t has compiled code: the others go through float
+    static_assert(!stb::traits::is_emulated_pixel_v<std::uint8_t> && stb::traits::is_emulated_pixel_v<std::uint16_t> && stb::traits::is_emulated_pixel_v<std::uint32_t>);
+    EXPECT_TRUE(is_unsigned_pixel_v<std::uint16_t>);
+    EXPECT_FALSE(is_unsigned_pixel_v<std::uint64_t>);
+}
+
 UTEST(libstb_wide_tests, test_the_functions_take_a_wide_image_and_give_back_a_wide_image) {
     static_assert(std::is_same_v<decltype(stb::gamma(std::declval<const stb::mat<std::uint16_t>&>(), 2.0f)), stb::mat<std::uint16_t>>);
     static_assert(std::is_same_v<decltype(stb::equalize(std::declval<stb::mat<std::uint32_t>>())), stb::mat<std::uint32_t>>);
