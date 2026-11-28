@@ -16,7 +16,6 @@
 #include <utility>
 #include <vector>
 
-#include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
