@@ -11,6 +11,7 @@ The C++ side is built with the CMake recipe of docs/site/docs/install.mdx (the f
 here too). It needs CMake and the installed package or build tree (`python -m libstb --cmake-dir`), and is skipped when CMake is not there.
 """
 
+import os
 import re
 import shutil
 import struct
@@ -27,6 +28,10 @@ EXAMPLES = REPO / "examples"
 SITE = REPO / "docs" / "site"
 DATA = REPO / "data" / "images" / "astronaut.png"
 
+# The examples and the CMake recipe run `import libstb` in a child process, whose sys.path does not hold the folder that pytest was started in
+# (the coverage and test targets run from the install dir): give them the folder this test imported libstb from
+ENV = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(Path(stb.__file__).resolve().parents[1]), os.environ.get("PYTHONPATH")]))}
+
 # topic -> the files its example writes, with the size each must have (width, height)
 RESIZE = {"tiny.png": (64, 64), **{f"{n}.png": (256, 256) for n in ("nearest", "linear", "cubic", "bspline", "mitchell")}}
 CHECKS = {"resize": RESIZE}
@@ -38,7 +43,7 @@ def topics():
 
 def run_python(topic, work):
     shutil.copy(DATA, work / "astronaut.png")
-    subprocess.run([sys.executable, str(EXAMPLES / topic / "python" / "main.py")], cwd=work, check=True, timeout=120)
+    subprocess.run([sys.executable, str(EXAMPLES / topic / "python" / "main.py")], cwd=work, check=True, timeout=120, env=ENV)
     return work / "out"
 
 
@@ -64,7 +69,7 @@ def run_cpp(topic, work):
     build = work / "build"
     # a Visual Studio generator builds for x64 unless told otherwise, and a 32-bit libstb package does not match it
     arch = ["-A", "Win32"] if sys.platform == "win32" and struct.calcsize("P") == 4 else []
-    subprocess.run(["cmake", "-S", str(src), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release", *arch], check=True, timeout=300)
+    subprocess.run(["cmake", "-S", str(src), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release", *arch], check=True, timeout=300, env=ENV)
     subprocess.run(["cmake", "--build", str(build), "--config", "Release"], check=True, timeout=900)
     exe = next(p for p in [build / "app", build / "app.exe", build / "Release" / "app.exe"] if p.is_file())
     run = work / "run"
