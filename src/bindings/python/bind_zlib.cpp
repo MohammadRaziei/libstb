@@ -1,6 +1,6 @@
-#include <vector>
-
 #include "binding.hpp"
+
+#include <vector>
 
 using namespace nb::literals;
 

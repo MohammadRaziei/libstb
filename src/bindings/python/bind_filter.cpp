@@ -1,3 +1,6 @@
+// Python.h (through nanobind) must come before any standard header (it defines _POSIX_C_SOURCE and _XOPEN_SOURCE)
+#include <nanobind/nanobind.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>

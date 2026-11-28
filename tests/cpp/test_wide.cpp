@@ -54,6 +54,8 @@ int largest_difference(const mat8u& a, const mat8u& b) {
     return worst;
 }
 
+}  // namespace
+
 UTEST(libstb_wide_tests, test_the_functions_take_a_wide_image_and_give_back_a_wide_image) {
     static_assert(std::is_same_v<decltype(stb::gamma(std::declval<const stb::mat<std::uint16_t>&>(), 2.0f)), stb::mat<std::uint16_t>>);
     static_assert(std::is_same_v<decltype(stb::equalize(std::declval<stb::mat<std::uint32_t>>())), stb::mat<std::uint32_t>>);
@@ -155,5 +157,3 @@ UTEST(libstb_wide_tests, test_a_wide_image_is_warped_like_an_8_bit_one) {
     const mat8u smooth16 = narrow(stb::warp_affine(widen<std::uint16_t>(src), stb::matrix::rotation(0.2f), 0, 0, stb::interpolation_method::bilinear));
     EXPECT_LE(largest_difference(smooth, smooth16), 1);
 }
-
-}  // namespace
