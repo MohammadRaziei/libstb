@@ -13,6 +13,7 @@ here too). It needs CMake and the installed package or build tree (`python -m li
 
 import re
 import shutil
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -61,7 +62,9 @@ def run_cpp(topic, work):
     (src / "CMakeLists.txt").write_text(recipe(), encoding="utf-8")
     shutil.copy(EXAMPLES / topic / "cpp" / "main.cpp", src / "main.cpp")
     build = work / "build"
-    subprocess.run(["cmake", "-S", str(src), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release"], check=True, timeout=300)
+    # a Visual Studio generator builds for x64 unless told otherwise, and a 32-bit libstb package does not match it
+    arch = ["-A", "Win32"] if sys.platform == "win32" and struct.calcsize("P") == 4 else []
+    subprocess.run(["cmake", "-S", str(src), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release", *arch], check=True, timeout=300)
     subprocess.run(["cmake", "--build", str(build), "--config", "Release"], check=True, timeout=900)
     exe = next(p for p in [build / "app", build / "app.exe", build / "Release" / "app.exe"] if p.is_file())
     run = work / "run"
